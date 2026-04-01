@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+
+{% block title %}Entrar{% endblock %}
+
+{% block content %}
+<h1>PIBVP Acolhimento</h1>
+<p>Acesse com seu usuario e senha para continuar.</p>
+<form method="post" action="{% url 'login' %}" id="login-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <p class="inline-actions">
+        <button type="submit">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1v6"/><path d="M8 5a9 9 0 1 0 8 0"/></svg>
+            <span class="btn-text">Entrar</span>
+        </button>
+    </p>
+</form>
+
+<script>
+    (function () {
+        const form = document.getElementById('login-form');
+        const senha = document.getElementById('id_password');
+        if (!form || !senha) {
+            return;
+        }
+        senha.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                form.requestSubmit();
+            }
+        });
+    })();
+</script>
+{% endblock %}

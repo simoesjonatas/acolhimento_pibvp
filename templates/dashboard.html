@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+
+{% block title %}Painel{% endblock %}
+
+{% block content %}
+<div class="dashboard-hero">
+    <h1>Painel de acolhimento</h1>
+    <p>Resumo rápido da operação e últimos passos registrados pela equipe.</p>
+    <p class="inline-actions">
+        <a class="btn" href="{% url 'pessoas-lista' %}">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2"/><path d="M14 19a4 4 0 0 1 7 0"/></svg>
+            <span class="btn-text">Ir para cadastro de pessoas</span>
+        </a>
+    </p>
+</div>
+
+<section class="dashboard-cards">
+    <article class="kpi-card">
+        <span class="kpi-label">Total de pessoas</span>
+        <strong class="kpi-value">{{ total_pessoas }}</strong>
+    </article>
+    <article class="kpi-card">
+        <span class="kpi-label">Primeiro contato</span>
+        <strong class="kpi-value">{{ total_primeiro_contato }}</strong>
+    </article>
+    <article class="kpi-card">
+        <span class="kpi-label">Em acompanhamento</span>
+        <strong class="kpi-value">{{ total_acompanhamento }}</strong>
+    </article>
+    <article class="kpi-card">
+        <span class="kpi-label">Membros</span>
+        <strong class="kpi-value">{{ total_membros }}</strong>
+    </article>
+</section>
+
+<section class="dashboard-panel">
+    <div class="panel-header">
+        <h2>Últimos passos</h2>
+        <a class="btn secundario" href="{% url 'pessoas-lista' %}">Ver pessoas</a>
+    </div>
+
+    {% if ultimos_passos %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Pessoa</th>
+                    <th>Passo</th>
+                    <th>Descrição</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for passo in ultimos_passos %}
+                <tr>
+                    <td>{{ passo.data_interacao|date:'d/m/Y' }}</td>
+                    <td><a href="{% url 'pessoas-detalhe' passo.pessoa.pk %}">{{ passo.pessoa.nome }}</a></td>
+                    <td>{{ passo.get_tipo_display }}</td>
+                    <td>{{ passo.descricao|default:'-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">Nenhum passo registrado ainda. Abra uma pessoa e adicione eventos na timeline.</p>
+    {% endif %}
+</section>
+{% endblock %}

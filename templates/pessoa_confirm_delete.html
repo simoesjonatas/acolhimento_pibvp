@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block title %}Excluir contato{% endblock %}
+
+{% block content %}
+<h1>Excluir primeiro contato</h1>
+<p>Tem certeza que deseja excluir <strong>{{ pessoa.nome }}</strong>?</p>
+
+<form method="post">
+    {% csrf_token %}
+    <p class="action-row">
+        <button type="submit" class="danger">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            <span class="btn-text">Confirmar exclusao</span>
+        </button>
+        <a class="btn secundario" href="{% url 'pessoas-lista' %}">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <span class="btn-text">Cancelar</span>
+        </a>
+    </p>
+</form>
+{% endblock %}
