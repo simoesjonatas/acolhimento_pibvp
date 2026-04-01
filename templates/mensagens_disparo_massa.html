@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+
+{% block title %}Disparo em massa{% endblock %}
+
+{% block content %}
+<div class="topo-acoes">
+    <h1>Disparo de mensagens para varias pessoas</h1>
+    <a class="btn secundario" href="{% url 'mensagens-fila' %}">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="btn-text">Voltar para fila</span>
+    </a>
+</div>
+
+<form method="get" class="filters-form">
+    <div>
+        <label for="q">Busca</label>
+        <input id="q" name="q" type="text" value="{{ busca }}" placeholder="Nome, WhatsApp ou email">
+    </div>
+    <div>
+        <label for="status">Status</label>
+        <select id="status" name="status">
+            <option value="">Todos</option>
+            {% for valor, rotulo in status_choices %}
+            <option value="{{ valor }}" {% if status_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="origem">Origem</label>
+        <select id="origem" name="origem">
+            <option value="">Todas</option>
+            {% for valor, rotulo in origem_choices %}
+            <option value="{{ valor }}" {% if origem_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="responsavel">Responsavel</label>
+        <select id="responsavel" name="responsavel">
+            <option value="">Todos</option>
+            <option value="sem_responsavel" {% if responsavel_atual_filtro == 'sem_responsavel' %}selected{% endif %}>Sem responsavel</option>
+            {% for responsavel_id, responsavel_label in responsaveis_choices %}
+            <option value="{{ responsavel_id }}" {% if responsavel_atual_filtro == responsavel_id|stringformat:'s' %}selected{% endif %}>{{ responsavel_label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="sem_pendente">Sem pendente</label>
+        <select id="sem_pendente" name="sem_pendente">
+            <option value="">Todos</option>
+            <option value="sim" {% if sem_pendente_atual == 'sim' %}selected{% endif %}>Somente sem pendente</option>
+        </select>
+    </div>
+    <button type="submit">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="3 4 21 4 14 12 14 19 10 21 10 12 3 4"/></svg>
+        <span class="btn-text">Filtrar</span>
+    </button>
+    <a class="btn secundario" href="{% url 'mensagens-disparo-massa' %}">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.13-3.36L23 10"/><path d="M20.5 15a9 9 0 0 1-14.13 3.36L1 14"/></svg>
+        <span class="btn-text">Limpar</span>
+    </a>
+</form>
+
+<p class="result-count">{{ total_pessoas_filtradas }} pessoa(s) disponivel(is) para disparo.</p>
+
+<form method="post" class="stack-form">
+    {% csrf_token %}
+
+    <div class="filters-form">
+        <div>
+            <label for="id_canal">Canal</label>
+            {{ form.canal }}
+            {% if form.canal.errors %}<p class="empty-state">{{ form.canal.errors|join:', ' }}</p>{% endif %}
+        </div>
+    </div>
+
+    <p>
+        <label for="id_conteudo">Mensagem</label>
+        {{ form.conteudo }}
+        {% if form.conteudo.errors %}<p class="empty-state">{{ form.conteudo.errors|join:', ' }}</p>{% endif %}
+    </p>
+
+    <div class="action-row">
+        <button type="button" id="selecionar-todos" class="btn secundario">Selecionar todos</button>
+        <button type="button" id="limpar-selecao" class="btn secundario">Limpar selecao</button>
+    </div>
+
+    <div class="table-wrap" style="max-height: 420px; overflow-y: auto; margin-top: 10px;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Selecionar</th>
+                    <th>Nome</th>
+                    <th>WhatsApp</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pessoa in form.pessoas.field.queryset %}
+                <tr>
+                    <td>
+                        <input type="checkbox" name="pessoas" value="{{ pessoa.id }}" id="pessoa-{{ pessoa.id }}" {% if pessoa.id in selected_pessoas %}checked{% endif %}>
+                    </td>
+                    <td><label for="pessoa-{{ pessoa.id }}">{{ pessoa.nome }}</label></td>
+                    <td>{{ pessoa.telefone_whatsapp }}</td>
+                    <td>{{ pessoa.get_status_display }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if form.pessoas.errors %}
+    <p class="empty-state">{{ form.pessoas.errors|join:', ' }}</p>
+    {% endif %}
+
+    <p class="action-row">
+        <button type="submit">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <span class="btn-text">Enfileirar para selecionados</span>
+        </button>
+    </p>
+</form>
+
+<script>
+(function () {
+    var selecionarTodos = document.getElementById('selecionar-todos');
+    var limparSelecao = document.getElementById('limpar-selecao');
+    var checkboxes = document.querySelectorAll('input[name="pessoas"]');
+
+    if (selecionarTodos) {
+        selecionarTodos.addEventListener('click', function () {
+            checkboxes.forEach(function (checkbox) {
+                checkbox.checked = true;
+            });
+        });
+    }
+
+    if (limparSelecao) {
+        limparSelecao.addEventListener('click', function () {
+            checkboxes.forEach(function (checkbox) {
+                checkbox.checked = false;
+            });
+        });
+    }
+})();
+</script>
+{% endblock %}

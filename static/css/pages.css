@@ -44,6 +44,22 @@
     margin: 0 0 16px;
 }
 
+.inline-form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.btn-excluir-pendente {
+    background: #fff3f3;
+    color: #8f2d2d;
+    border: 1px solid #e5b8b8;
+}
+
+.btn-excluir-pendente:hover {
+    background: #ffe7e7;
+    border-color: #d99a9a;
+}
+
 .table-wrap {
     overflow-x: auto;
     border-radius: 12px;
@@ -85,6 +101,20 @@
 
 .dashboard-hero {
     padding: 10px 0;
+}
+
+.admin-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid #8cbfd0;
+    background: #e6f5fb;
+    color: #0b5872;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
 }
 
 .dashboard-hero h1 {

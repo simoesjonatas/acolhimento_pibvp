@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+
+{% block title %}Fila de mensagens{% endblock %}
+
+{% block content %}
+<h1>Fila de mensagens</h1>
+<p><strong>Pessoa:</strong> {{ pessoa.nome }} | <strong>Telefone:</strong> {{ pessoa.telefone_whatsapp }}</p>
+
+<h2>Enfileirar mensagem</h2>
+
+<form method="post" action="{% url 'pessoas-enfileirar-mensagem' pessoa.pk %}" class="stack-form">
+    {% csrf_token %}
+    {{ enfileirar_mensagem_form.as_p }}
+    <button type="submit">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        <span class="btn-text">Enfileirar mensagem</span>
+    </button>
+</form>
+
+<h2>Mensagens da pessoa</h2>
+
+{% if mensagens %}
+<div class="table-wrap">
+<table>
+    <thead>
+        <tr>
+            <th>Enfileirada em</th>
+            <th>Status</th>
+            <th>Canal</th>
+            <th>Enviada</th>
+            <th>Conteudo</th>
+            <th>Acoes</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for mensagem in mensagens %}
+        <tr>
+            <td>{{ mensagem.enfileirada_em|date:'d/m/Y H:i' }}</td>
+            <td>{{ mensagem.get_status_fila_display }}</td>
+            <td>{{ mensagem.get_canal_display }}</td>
+            <td>{{ mensagem.enviada_em|date:'d/m/Y H:i'|default:'-' }}</td>
+            <td>{{ mensagem.conteudo|truncatechars:140 }}</td>
+            <td>
+                <button type="button" class="btn secundario btn-ver-mensagem" data-target="mensagem-{{ mensagem.id }}">Ver completa</button>
+                {% if mensagem.status_fila == 'pendente' %}
+                <form method="post" action="{% url 'mensagens-excluir' mensagem.id %}" class="inline-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{% url 'pessoas-mensagens' pessoa.pk %}">
+                    <button type="submit" class="btn secundario btn-excluir-pendente">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                        <span class="btn-text">Remover</span>
+                    </button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        <tr id="mensagem-{{ mensagem.id }}" style="display: none;">
+            <td colspan="6"><strong>Mensagem completa:</strong> {{ mensagem.conteudo|linebreaksbr }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p class="empty-state">Nenhuma mensagem na fila para esta pessoa.</p>
+{% endif %}
+
+<p class="action-row">
+    <a class="btn secundario" href="{% url 'pessoas-detalhe' pessoa.pk %}">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="btn-text">Voltar para detalhes</span>
+    </a>
+</p>
+
+<script>
+document.addEventListener('click', function (event) {
+    var button = event.target.closest('.btn-ver-mensagem');
+    if (!button) {
+        return;
+    }
+
+    var targetId = button.getAttribute('data-target');
+    var target = document.getElementById(targetId);
+    if (!target) {
+        return;
+    }
+
+    if (target.style.display === 'none' || target.style.display === '') {
+        target.style.display = 'table-row';
+        button.textContent = 'Ocultar';
+    } else {
+        target.style.display = 'none';
+        button.textContent = 'Ver completa';
+    }
+});
+</script>
+{% endblock %}

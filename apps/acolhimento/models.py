@@ -11,6 +11,7 @@ class PrimeiroContato(models.Model):
 
 	class StatusAcolhimento(models.TextChoices):
 		PRIMEIRO_CONTATO = 'primeiro_contato', 'Primeiro contato'
+		ROBO = 'robo', 'Robo'
 		EM_ACOMPANHAMENTO = 'em_acompanhamento', 'Em acompanhamento'
 		MEMBRO = 'membro', 'Membro'
 
@@ -62,6 +63,13 @@ class PrimeiroContato(models.Model):
 		blank=True,
 		related_name='cadastros_primeiro_contato',
 	)
+	responsavel_atual = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='primeiros_contatos_responsaveis',
+	)
 	email = models.EmailField(blank=True)
 	genero = models.CharField(max_length=20, choices=GeneroChoices.choices, blank=True)
 	idade = models.PositiveIntegerField(null=True, blank=True)
@@ -85,6 +93,128 @@ class PrimeiroContato(models.Model):
 
 	def __str__(self):
 		return f'{self.nome} ({self.get_status_display()})'
+
+
+class CampanhaComunicacao(models.Model):
+	class StatusCampanhaChoices(models.TextChoices):
+		RASCUNHO = 'rascunho', 'Rascunho'
+		AGENDADA = 'agendada', 'Agendada'
+		EM_EXECUCAO = 'em_execucao', 'Em execução'
+		CONCLUIDA = 'concluida', 'Concluída'
+		CANCELADA = 'cancelada', 'Cancelada'
+
+	class CanalChoices(models.TextChoices):
+		WHATSAPP = 'whatsapp', 'WhatsApp'
+		EMAIL = 'email', 'E-mail'
+
+	titulo = models.CharField(max_length=150)
+	descricao = models.TextField(blank=True)
+	canal = models.CharField(max_length=20, choices=CanalChoices.choices, default=CanalChoices.WHATSAPP)
+	publico_alvo_descricao = models.TextField(blank=True)
+	contatos_alvo = models.ManyToManyField(
+		PrimeiroContato,
+		blank=True,
+		related_name='campanhas_comunicacao',
+	)
+	agendada_para = models.DateTimeField(null=True, blank=True)
+	iniciada_em = models.DateTimeField(null=True, blank=True)
+	finalizada_em = models.DateTimeField(null=True, blank=True)
+	status = models.CharField(
+		max_length=20,
+		choices=StatusCampanhaChoices.choices,
+		default=StatusCampanhaChoices.RASCUNHO,
+	)
+	resultado = models.TextField(blank=True)
+	criado_por = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='campanhas_criadas',
+	)
+	criado_em = models.DateTimeField(auto_now_add=True)
+	atualizado_em = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		ordering = ['-criado_em']
+		verbose_name = 'Campanha de comunicação'
+		verbose_name_plural = 'Campanhas de comunicação'
+
+	def __str__(self):
+		return self.titulo
+
+
+class MensagemContato(models.Model):
+	class CanalChoices(models.TextChoices):
+		WHATSAPP = 'whatsapp', 'WhatsApp'
+		EMAIL = 'email', 'E-mail'
+
+	class DirecaoChoices(models.TextChoices):
+		SAIDA = 'saida', 'Saida'
+		ENTRADA = 'entrada', 'Entrada'
+
+	class StatusFilaChoices(models.TextChoices):
+		PENDENTE = 'pendente', 'Pendente'
+		AGENDADA = 'agendada', 'Agendada'
+		PROCESSANDO = 'processando', 'Processando'
+		ENVIADA = 'enviada', 'Enviada'
+		FALHA = 'falha', 'Falha'
+		CANCELADA = 'cancelada', 'Cancelada'
+
+	pessoa = models.ForeignKey(
+		PrimeiroContato,
+		on_delete=models.CASCADE,
+		related_name='mensagens',
+	)
+	campanha = models.ForeignKey(
+		CampanhaComunicacao,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='mensagens',
+	)
+	criado_por = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='mensagens_criadas',
+	)
+	canal = models.CharField(max_length=20, choices=CanalChoices.choices, default=CanalChoices.WHATSAPP)
+	direcao = models.CharField(max_length=20, choices=DirecaoChoices.choices, default=DirecaoChoices.SAIDA)
+	status_fila = models.CharField(
+		max_length=20,
+		choices=StatusFilaChoices.choices,
+		default=StatusFilaChoices.PENDENTE,
+	)
+	prioridade = models.PositiveSmallIntegerField(default=5)
+	conteudo = models.TextField()
+	referencia_externa = models.CharField(max_length=120, blank=True)
+	tentativas_envio = models.PositiveSmallIntegerField(default=0)
+	erro_ultimo_envio = models.TextField(blank=True)
+	agendada_para = models.DateTimeField(null=True, blank=True)
+	enfileirada_em = models.DateTimeField(auto_now_add=True)
+	enviada_em = models.DateTimeField(null=True, blank=True)
+	entregue_em = models.DateTimeField(null=True, blank=True)
+	lida_em = models.DateTimeField(null=True, blank=True)
+	resposta_recebida_em = models.DateTimeField(null=True, blank=True)
+	resposta_conteudo = models.TextField(blank=True)
+	metadata_envio = models.JSONField(default=dict, blank=True)
+	metadata_resposta = models.JSONField(default=dict, blank=True)
+	atualizado_em = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		ordering = ['status_fila', 'prioridade', 'agendada_para', 'enfileirada_em']
+		verbose_name = 'Mensagem de contato'
+		verbose_name_plural = 'Mensagens de contato'
+		indexes = [
+			models.Index(fields=['status_fila', 'agendada_para']),
+			models.Index(fields=['pessoa', 'enviada_em']),
+			models.Index(fields=['direcao', 'canal']),
+		]
+
+	def __str__(self):
+		return f'{self.pessoa.nome} - {self.get_status_fila_display()}'
 
 
 class InteracaoAcolhimento(models.Model):

@@ -20,7 +20,20 @@
                 <span class="brand-sub">Uma familia para conviver</span>
             </div>
 
-            <nav class="top-nav" aria-label="Menu principal">
+            <button
+                type="button"
+                class="nav-toggle"
+                aria-label="Abrir menu"
+                aria-expanded="false"
+                aria-controls="main-navigation"
+                data-nav-toggle
+            >
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+
+            <nav class="top-nav" id="main-navigation" aria-label="Menu principal" data-nav-menu>
                 <a
                     href="{% url 'dashboard' %}"
                     class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"
@@ -33,15 +46,40 @@
                 >
                     Pessoas
                 </a>
+                {% if user.is_staff or user.is_superuser %}
+                <a
+                    href="{% url 'usuarios-lista' %}"
+                    class="nav-link {% if request.resolver_match.url_name == 'usuarios-lista' or request.resolver_match.url_name == 'usuarios-novo' or request.resolver_match.url_name == 'usuarios-editar' or request.resolver_match.url_name == 'usuarios-excluir' %}active{% endif %}"
+                >
+                    Usuarios
+                </a>
+                <a
+                    href="{% url 'mensagens-fila' %}"
+                    class="nav-link {% if request.resolver_match.url_name == 'mensagens-fila' or request.resolver_match.url_name == 'pessoas-mensagens' or request.resolver_match.url_name == 'mensagens-disparo-massa' %}active{% endif %}"
+                >
+                    Fila de mensagens
+                </a>
+                <a
+                    href="{% url 'mensagens-disparo-massa' %}"
+                    class="nav-link {% if request.resolver_match.url_name == 'mensagens-disparo-massa' %}active{% endif %}"
+                >
+                    Disparo em massa
+                </a>
+                {% endif %}
             </nav>
         </div>
-        <form method="post" action="{% url 'logout' %}" class="logout-form">
-            {% csrf_token %}
-            <button type="submit">
-                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                <span class="btn-text">Sair</span>
-            </button>
-        </form>
+        <div class="header-right">
+            <a href="{% url 'perfil' %}" class="profile-chip {% if request.resolver_match.url_name == 'perfil' %}active{% endif %}">
+                Ola, {{ user.username }}
+            </a>
+            <form method="post" action="{% url 'logout' %}" class="logout-form">
+                {% csrf_token %}
+                <button type="submit">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    <span class="btn-text">Sair</span>
+                </button>
+            </form>
+        </div>
     </header>
     {% endif %}
 
@@ -62,6 +100,27 @@
 
     <script>
         (function () {
+            const navToggle = document.querySelector('[data-nav-toggle]');
+            const navMenu = document.querySelector('[data-nav-menu]');
+
+            if (navToggle && navMenu) {
+                navToggle.addEventListener('click', () => {
+                    const isOpen = navMenu.classList.toggle('open');
+                    navToggle.setAttribute('aria-expanded', String(isOpen));
+                    navToggle.setAttribute('aria-label', isOpen ? 'Fechar menu' : 'Abrir menu');
+                });
+
+                navMenu.querySelectorAll('a').forEach((link) => {
+                    link.addEventListener('click', () => {
+                        if (window.matchMedia('(max-width: 865px)').matches) {
+                            navMenu.classList.remove('open');
+                            navToggle.setAttribute('aria-expanded', 'false');
+                            navToggle.setAttribute('aria-label', 'Abrir menu');
+                        }
+                    });
+                });
+            }
+
             const toasts = document.querySelectorAll('[data-toast]');
             toasts.forEach((toast) => {
                 const closeButton = toast.querySelector('[data-toast-close]');

@@ -5,6 +5,14 @@
 {% block content %}
 <div class="dashboard-hero">
     <h1>Painel de acolhimento</h1>
+    {% if user.is_staff or user.is_superuser %}
+    <p><span class="admin-badge">Area administrativa</span></p>
+    <p class="inline-actions">
+        <a class="btn secundario" href="{% url 'usuarios-lista' %}">Gerenciar usuarios</a>
+        <a class="btn secundario" href="{% url 'mensagens-fila' %}">Abrir fila global</a>
+        <a class="btn secundario" href="{% url 'mensagens-disparo-massa' %}">Disparo em massa</a>
+    </p>
+    {% endif %}
     <p>Resumo rápido da operação e últimos passos registrados pela equipe.</p>
     <p class="inline-actions">
         <a class="btn" href="{% url 'pessoas-lista' %}">
@@ -12,6 +20,16 @@
             <span class="btn-text">Ir para cadastro de pessoas</span>
         </a>
     </p>
+    {% if user.is_staff or user.is_superuser %}
+    <form method="post" class="inline-actions">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="disparar_boas_vindas">
+        <button type="submit">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <span class="btn-text">Disparar boas-vindas para Primeiro contato</span>
+        </button>
+    </form>
+    {% endif %}
 </div>
 
 <section class="dashboard-cards">
@@ -22,6 +40,10 @@
     <article class="kpi-card">
         <span class="kpi-label">Primeiro contato</span>
         <strong class="kpi-value">{{ total_primeiro_contato }}</strong>
+    </article>
+    <article class="kpi-card">
+        <span class="kpi-label">Robo</span>
+        <strong class="kpi-value">{{ total_robo }}</strong>
     </article>
     <article class="kpi-card">
         <span class="kpi-label">Em acompanhamento</span>

@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block title %}Meu perfil{% endblock %}
+
+{% block content %}
+<section class="dashboard-panel">
+    <div class="panel-header">
+        <h1>Meu perfil</h1>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <tbody>
+                <tr>
+                    <th>Usuario</th>
+                    <td>{{ usuario_obj.username }}</td>
+                </tr>
+                <tr>
+                    <th>Perfil administrativo</th>
+                    <td>{% if usuario_obj.is_staff or usuario_obj.is_superuser %}Sim{% else %}Nao{% endif %}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="dashboard-panel">
+    <div class="panel-header">
+        <h2>Atualizar dados</h2>
+    </div>
+
+    <form method="post" class="stack-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="salvar_perfil">
+
+        {% if perfil_form.non_field_errors %}
+        <div class="form-errors">
+            {{ perfil_form.non_field_errors }}
+        </div>
+        {% endif %}
+
+        <p>
+            <label for="{{ perfil_form.first_name.id_for_label }}">Nome</label>
+            {{ perfil_form.first_name }}
+            {{ perfil_form.first_name.errors }}
+        </p>
+        <p>
+            <label for="{{ perfil_form.last_name.id_for_label }}">Sobrenome</label>
+            {{ perfil_form.last_name }}
+            {{ perfil_form.last_name.errors }}
+        </p>
+        <p>
+            <label for="{{ perfil_form.email.id_for_label }}">Email</label>
+            {{ perfil_form.email }}
+            {{ perfil_form.email.errors }}
+        </p>
+
+        <p class="action-row">
+            <button type="submit">Salvar dados</button>
+        </p>
+    </form>
+</section>
+
+<section class="dashboard-panel">
+    <div class="panel-header">
+        <h2>Trocar senha</h2>
+    </div>
+
+    <form method="post" class="stack-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="trocar_senha">
+
+        {% if senha_form.non_field_errors %}
+        <div class="form-errors">
+            {{ senha_form.non_field_errors }}
+        </div>
+        {% endif %}
+
+        <p>
+            <label for="{{ senha_form.old_password.id_for_label }}">Senha atual</label>
+            {{ senha_form.old_password }}
+            {{ senha_form.old_password.errors }}
+        </p>
+        <p>
+            <label for="{{ senha_form.new_password1.id_for_label }}">Nova senha</label>
+            {{ senha_form.new_password1 }}
+            {{ senha_form.new_password1.errors }}
+        </p>
+        <p>
+            <label for="{{ senha_form.new_password2.id_for_label }}">Confirmar nova senha</label>
+            {{ senha_form.new_password2 }}
+            {{ senha_form.new_password2.errors }}
+        </p>
+
+        <p class="action-row">
+            <button type="submit">Atualizar senha</button>
+        </p>
+    </form>
+</section>
+{% endblock %}

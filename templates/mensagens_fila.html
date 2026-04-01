@@ -1,0 +1,191 @@
+{% extends 'base.html' %}
+
+{% block title %}Fila de mensagens{% endblock %}
+
+{% block content %}
+<div class="topo-acoes">
+    <h1>Fila global de mensagens</h1>
+    <a class="btn" href="{% url 'mensagens-disparo-massa' %}">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span class="btn-text">Novo disparo em massa</span>
+    </a>
+</div>
+
+<form method="get" class="filters-form">
+    <div>
+        <label for="q">Busca</label>
+        <input id="q" name="q" type="text" value="{{ busca }}" placeholder="Pessoa, telefone, conteudo">
+    </div>
+    <div>
+        <label for="status">Status</label>
+        <select id="status" name="status">
+            <option value="">Todos</option>
+            {% for valor, rotulo in status_choices %}
+            <option value="{{ valor }}" {% if status_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="canal">Canal</label>
+        <select id="canal" name="canal">
+            <option value="">Todos</option>
+            {% for valor, rotulo in canal_choices %}
+            <option value="{{ valor }}" {% if canal_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="direcao_mensagem">Direcao</label>
+        <select id="direcao_mensagem" name="direcao_mensagem">
+            <option value="">Todas</option>
+            {% for valor, rotulo in direcao_choices %}
+            <option value="{{ valor }}" {% if direcao_mensagem_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="enviado">Enviado</label>
+        <select id="enviado" name="enviado">
+            <option value="">Todos</option>
+            <option value="sim" {% if enviado_atual == 'sim' %}selected{% endif %}>Sim</option>
+            <option value="nao" {% if enviado_atual == 'nao' %}selected{% endif %}>Nao</option>
+        </select>
+    </div>
+    <button type="submit">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="3 4 21 4 14 12 14 19 10 21 10 12 3 4"/></svg>
+        <span class="btn-text">Filtrar</span>
+    </button>
+    <a class="btn secundario" href="{% url 'mensagens-fila' %}">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.13-3.36L23 10"/><path d="M20.5 15a9 9 0 0 1-14.13 3.36L1 14"/></svg>
+        <span class="btn-text">Limpar</span>
+    </a>
+</form>
+
+<p class="result-count">{{ total_filtrado }} mensagem(ns) encontrada(s).</p>
+
+{% if mensagens %}
+<div class="table-wrap">
+<table>
+    <thead>
+        <tr>
+            <th>
+                <a class="sort-link" href="?{{ sort_links.pessoa }}">
+                    Pessoa
+                    {% if sort_coluna_atual == 'pessoa' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                </a>
+            </th>
+            <th>
+                <a class="sort-link" href="?{{ sort_links.status }}">
+                    Status
+                    {% if sort_coluna_atual == 'status' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                </a>
+            </th>
+            <th>
+                <a class="sort-link" href="?{{ sort_links.canal }}">
+                    Canal
+                    {% if sort_coluna_atual == 'canal' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                </a>
+            </th>
+            <th>
+                <a class="sort-link" href="?{{ sort_links.enfileirada }}">
+                    Enfileirada
+                    {% if sort_coluna_atual == 'enfileirada' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                </a>
+            </th>
+            <th>
+                <a class="sort-link" href="?{{ sort_links.enviada }}">
+                    Enviada
+                    {% if sort_coluna_atual == 'enviada' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                </a>
+            </th>
+            <th>Conteudo</th>
+            <th>Acoes</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for mensagem in mensagens %}
+        <tr>
+            <td>
+                <a href="{% url 'pessoas-mensagens' mensagem.pessoa.pk %}">{{ mensagem.pessoa.nome }}</a>
+            </td>
+            <td>{{ mensagem.get_status_fila_display }}</td>
+            <td>{{ mensagem.get_canal_display }}</td>
+            <td>{{ mensagem.enfileirada_em|date:'d/m/Y H:i' }}</td>
+            <td>{{ mensagem.enviada_em|date:'d/m/Y H:i'|default:'-' }}</td>
+            <td>{{ mensagem.conteudo|truncatechars:120 }}</td>
+            <td>
+                    {% if mensagem.status_fila == 'pendente' %}
+                    <form method="post" action="{% url 'mensagens-excluir' mensagem.id %}" class="inline-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{% url 'mensagens-fila' %}?{% if filtro_query %}{{ filtro_query }}{% endif %}">
+                        <button type="submit" class="btn secundario btn-excluir-pendente">
+                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                            <span class="btn-text">Remover</span>
+                        </button>
+                    </form>
+                    {% endif %}
+                <button type="button" class="btn secundario btn-ver-mensagem" data-target="mensagem-{{ mensagem.id }}">Ver completa</button>
+            </td>
+        </tr>
+        <tr id="mensagem-{{ mensagem.id }}" style="display: none;">
+            <td colspan="7"><strong>Mensagem completa:</strong> {{ mensagem.conteudo|linebreaksbr }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% if is_paginated %}
+<div class="pagination">
+    {% if page_obj.has_previous %}
+    <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page=1">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="11 17 6 12 11 7"/><line x1="18" y1="18" x2="18" y2="6"/></svg>
+        <span class="btn-text">Primeira</span>
+    </a>
+    <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ page_obj.previous_page_number }}">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="btn-text">Anterior</span>
+    </a>
+    {% endif %}
+
+    <span>Pagina {{ page_obj.number }} de {{ paginator.num_pages }}</span>
+
+    {% if page_obj.has_next %}
+    <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ page_obj.next_page_number }}">
+        <span class="btn-text">Proxima</span>
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+    </a>
+    <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ paginator.num_pages }}">
+        <span class="btn-text">Ultima</span>
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="13 17 18 12 13 7"/><line x1="6" y1="18" x2="6" y2="6"/></svg>
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+{% else %}
+<p class="empty-state">Nenhuma mensagem encontrada para os filtros atuais.</p>
+{% endif %}
+
+<script>
+document.addEventListener('click', function (event) {
+    var button = event.target.closest('.btn-ver-mensagem');
+    if (!button) {
+        return;
+    }
+
+    var targetId = button.getAttribute('data-target');
+    var target = document.getElementById(targetId);
+    if (!target) {
+        return;
+    }
+
+    if (target.style.display === 'none' || target.style.display === '') {
+        target.style.display = 'table-row';
+        button.textContent = 'Ocultar';
+    } else {
+        target.style.display = 'none';
+        button.textContent = 'Ver completa';
+    }
+});
+</script>
+{% endblock %}
