@@ -1,0 +1,14 @@
+version: '3.9'
+
+services:
+  web:
+    env_file:
+      - .env.prod
+    environment:
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-False}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-acolhimento.simoesti.com.br}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-https://acolhimento.simoesti.com.br}
+      DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-True}
+      SQLITE_PATH: ${SQLITE_PATH:-/app/data/db.sqlite3}
+    ports:
+      - "8000:8000"

@@ -1,6 +1,8 @@
 from django.urls import path
 
 from apps.acolhimento.views import (
+    AutoCadastroCreateView,
+    AutoCadastroSuccessView,
     PrimeiroContatoCreateView,
     PrimeiroContatoDeleteView,
     PrimeiroContatoDetailView,
@@ -10,6 +12,8 @@ from apps.acolhimento.views import (
 )
 
 urlpatterns = [
+    path('auto-cadastro/', AutoCadastroCreateView.as_view(), name='auto-cadastro'),
+    path('auto-cadastro/sucesso/', AutoCadastroSuccessView.as_view(), name='auto-cadastro-sucesso'),
     path('pessoas/', PrimeiroContatoListView.as_view(), name='pessoas-lista'),
     path('pessoas/novo/', PrimeiroContatoCreateView.as_view(), name='pessoas-novo'),
     path('pessoas/<int:pk>/', PrimeiroContatoDetailView.as_view(), name='pessoas-detalhe'),

@@ -1,0 +1,14 @@
+version: '3.9'
+
+services:
+  web:
+    env_file:
+      - .env.local
+    environment:
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-True}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-False}
+      SQLITE_PATH: ${SQLITE_PATH:-/app/data/db.sqlite3}
+    ports:
+      - "8080:8000"

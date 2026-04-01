@@ -4,19 +4,22 @@ from apps.acolhimento.models import InteracaoAcolhimento, PrimeiroContato
 
 
 class PrimeiroContatoForm(forms.ModelForm):
+    primeira_vez = forms.TypedChoiceField(
+        label='Primeira vez?',
+        choices=((True, 'Sim'), (False, 'Nao')),
+        coerce=lambda value: value in (True, 'True', 'true', '1', 1),
+        widget=forms.Select,
+    )
+
     class Meta:
         model = PrimeiroContato
         fields = [
             'nome',
-            'telefone',
-            'email',
-            'cidade',
+            'telefone_whatsapp',
+            'primeira_vez',
             'como_conheceu',
-            'observacoes',
+            'o_que_busca',
         ]
-        widgets = {
-            'observacoes': forms.Textarea(attrs={'rows': 4}),
-        }
 
 
 class InteracaoAcolhimentoForm(forms.ModelForm):

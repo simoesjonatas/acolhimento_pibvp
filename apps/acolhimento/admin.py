@@ -5,9 +5,17 @@ from apps.acolhimento.models import InteracaoAcolhimento, PrimeiroContato
 
 @admin.register(PrimeiroContato)
 class PrimeiroContatoAdmin(admin.ModelAdmin):
-	list_display = ('nome', 'telefone', 'email', 'status', 'data_primeiro_contato')
-	list_filter = ('status', 'data_primeiro_contato')
-	search_fields = ('nome', 'telefone', 'email')
+	list_display = (
+		'nome',
+		'telefone_whatsapp',
+		'primeira_vez',
+		'origem_cadastro',
+		'criado_por',
+		'status',
+		'data_primeiro_contato',
+	)
+	list_filter = ('origem_cadastro', 'status', 'data_primeiro_contato')
+	search_fields = ('nome', 'telefone_whatsapp', 'email')
 
 
 @admin.register(InteracaoAcolhimento)

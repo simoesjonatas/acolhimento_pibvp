@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+
+{% block title %}Cadastro enviado{% endblock %}
+
+{% block content %}
+<section class="forbidden-wrap">
+    <div class="forbidden-card">
+        <p class="forbidden-code">OK</p>
+        <h1>Cadastro enviado com sucesso</h1>
+        <p class="forbidden-text">Obrigado por se cadastrar. Em breve nossa equipe vai falar com voce.</p>
+        <p class="action-row">
+            <a class="btn" href="{% url 'auto-cadastro-publico' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span class="btn-text">Novo auto cadastro</span>
+            </a>
+        </p>
+    </div>
+</section>
+{% endblock %}

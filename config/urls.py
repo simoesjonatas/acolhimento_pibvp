@@ -17,8 +17,15 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from apps.acolhimento.views import AutoCadastroCreateView, AutoCadastroSuccessView
+from apps.core.views import forbidden_view
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('apps.core.urls')),
+    path('auto-cadastro/', AutoCadastroCreateView.as_view(), name='auto-cadastro-publico'),
+    path('auto-cadastro/sucesso/', AutoCadastroSuccessView.as_view(), name='auto-cadastro-publico-sucesso'),
     path('acolhimento/', include('apps.acolhimento.urls')),
 ]
+
+handler403 = forbidden_view

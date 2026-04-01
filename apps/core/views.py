@@ -1,5 +1,6 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import TemplateView
+from django.shortcuts import render
 
 from apps.acolhimento.models import InteracaoAcolhimento, PrimeiroContato
 
@@ -34,3 +35,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 		)
 
 		return context
+
+def forbidden_view(request, exception=None):
+	return render(request, '403.html', status=403)

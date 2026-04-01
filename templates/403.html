@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block title %}Acesso negado{% endblock %}
+
+{% block content %}
+<section class="forbidden-wrap">
+    <div class="forbidden-card">
+        <p class="forbidden-code">403</p>
+        <h1>Acesso negado</h1>
+        <p class="forbidden-text">
+            Voce nao tem permissao para executar esta acao.
+            Se precisar desse acesso, fale com um administrador da equipe.
+        </p>
+        <p class="action-row">
+            <a class="btn" href="{% url 'dashboard' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+                <span class="btn-text">Ir para dashboard</span>
+            </a>
+            <a class="btn secundario" href="{% url 'pessoas-lista' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                <span class="btn-text">Voltar para pessoas</span>
+            </a>
+        </p>
+    </div>
+</section>
+{% endblock %}

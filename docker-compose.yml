@@ -12,7 +12,7 @@ services:
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-acolhimento.simoesti.com.br,localhost,127.0.0.1}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-https://acolhimento.simoesti.com.br,http://localhost:8000,http://127.0.0.1:8000}
       SQLITE_PATH: ${SQLITE_PATH:-/app/data/db.sqlite3}
-      DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-True}
+      DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-False}
     ports:
       - "8000:8000"
     volumes:

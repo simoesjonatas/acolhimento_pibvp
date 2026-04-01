@@ -3,11 +3,12 @@ import csv
 from django.contrib import messages
 from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Q
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views import View
-from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
+from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento.forms import InteracaoAcolhimentoForm, PrimeiroContatoForm
 from apps.acolhimento.models import PrimeiroContato
@@ -16,7 +17,7 @@ from apps.acolhimento.models import PrimeiroContato
 class PrimeiroContatoQuerysetMixin:
 	sort_map = {
 		'nome': 'nome',
-		'telefone': 'telefone',
+		'telefone': 'telefone_whatsapp',
 		'email': 'email',
 		'status': 'status',
 		'data': 'data_primeiro_contato',
@@ -35,19 +36,19 @@ class PrimeiroContatoQuerysetMixin:
 
 	def get_filtered_queryset(self, queryset):
 		busca = self.request.GET.get('q', '').strip()
-		status = self.request.GET.get('status', '').strip()
+		origem = self.request.GET.get('origem', '').strip()
 		sort_coluna, direcao = self.get_sort_state()
 
 		if busca:
 			queryset = queryset.filter(
 				Q(nome__icontains=busca)
-				| Q(telefone__icontains=busca)
+				| Q(telefone_whatsapp__icontains=busca)
 				| Q(email__icontains=busca)
-				| Q(cidade__icontains=busca)
+				| Q(religiao__icontains=busca)
 			)
 
-		if status:
-			queryset = queryset.filter(status=status)
+		if origem:
+			queryset = queryset.filter(origem_cadastro=origem)
 
 		ordering = self.sort_map.get(sort_coluna, 'data_primeiro_contato')
 		if direcao == 'desc':
@@ -92,8 +93,8 @@ class PrimeiroContatoListView(LoginRequiredMixin, PrimeiroContatoQuerysetMixin, 
 			sort_links[coluna] = params.urlencode()
 
 		context['busca'] = self.request.GET.get('q', '').strip()
-		context['status_atual'] = self.request.GET.get('status', '').strip()
-		context['status_choices'] = PrimeiroContato.StatusAcolhimento.choices
+		context['origem_atual'] = self.request.GET.get('origem', '').strip()
+		context['origem_choices'] = PrimeiroContato.OrigemCadastroChoices.choices
 		context['sort_coluna_atual'] = sort_coluna_atual
 		context['sort_direcao_atual'] = sort_direcao_atual
 		context['sort_links'] = sort_links
@@ -108,6 +109,8 @@ class PrimeiroContatoCreateView(LoginRequiredMixin, CreateView):
 	success_url = reverse_lazy('pessoas-lista')
 
 	def form_valid(self, form):
+		form.instance.origem_cadastro = PrimeiroContato.OrigemCadastroChoices.EQUIPE
+		form.instance.criado_por = self.request.user
 		response = super().form_valid(form)
 		messages.success(self.request, 'Pessoa cadastrada com sucesso.')
 		return response
@@ -115,6 +118,21 @@ class PrimeiroContatoCreateView(LoginRequiredMixin, CreateView):
 	def form_invalid(self, form):
 		messages.error(self.request, 'Nao foi possivel salvar. Verifique os campos e tente novamente.')
 		return super().form_invalid(form)
+
+
+class AutoCadastroCreateView(CreateView):
+	template_name = 'auto_cadastro_form.html'
+	form_class = PrimeiroContatoForm
+	success_url = reverse_lazy('auto-cadastro-sucesso')
+
+	def form_valid(self, form):
+		form.instance.origem_cadastro = PrimeiroContato.OrigemCadastroChoices.AUTO_CADASTRO
+		form.instance.criado_por = None
+		return super().form_valid(form)
+
+
+class AutoCadastroSuccessView(TemplateView):
+	template_name = 'auto_cadastro_sucesso.html'
 
 
 class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
@@ -160,11 +178,15 @@ class PrimeiroContatoUpdateView(LoginRequiredMixin, UpdateView):
 		return super().form_invalid(form)
 
 
-class PrimeiroContatoDeleteView(LoginRequiredMixin, DeleteView):
+class PrimeiroContatoDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
 	template_name = 'pessoa_confirm_delete.html'
 	model = PrimeiroContato
 	context_object_name = 'pessoa'
 	success_url = reverse_lazy('pessoas-lista')
+	raise_exception = True
+
+	def test_func(self):
+		return self.request.user.is_staff or self.request.user.is_superuser
 
 	def delete(self, request, *args, **kwargs):
 		messages.success(request, 'Cadastro excluido com sucesso.')
@@ -181,24 +203,36 @@ class PrimeiroContatoExportCsvView(LoginRequiredMixin, PrimeiroContatoQuerysetMi
 		writer = csv.writer(response)
 		writer.writerow([
 			'Nome',
-			'Telefone',
+			'Telefone WhatsApp',
+			'Primeira vez',
+			'Como conheceu',
+			'O que busca',
 			'E-mail',
+			'Genero',
+			'Idade',
+			'Religiao',
+			'Estado civil',
 			'Cidade',
 			'Status',
 			'Data do primeiro contato',
-			'Como conheceu',
 			'Observacoes',
 		])
 
 		for pessoa in queryset:
 			writer.writerow([
 				pessoa.nome,
-				pessoa.telefone,
+				pessoa.telefone_whatsapp,
+				'Sim' if pessoa.primeira_vez else 'Nao',
+				pessoa.get_como_conheceu_display(),
+				pessoa.get_o_que_busca_display(),
 				pessoa.email,
+				pessoa.get_genero_display(),
+				pessoa.idade,
+				pessoa.religiao,
+				pessoa.get_estado_civil_display(),
 				pessoa.cidade,
 				pessoa.get_status_display(),
 				pessoa.data_primeiro_contato.strftime('%d/%m/%Y'),
-				pessoa.como_conheceu,
 				pessoa.observacoes,
 			])
 

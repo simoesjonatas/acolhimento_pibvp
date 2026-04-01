@@ -39,7 +39,7 @@ ALLOWED_HOSTS = _split_env_list(
 
 CSRF_TRUSTED_ORIGINS = _split_env_list(
     'DJANGO_CSRF_TRUSTED_ORIGINS',
-    'https://acolhimento.simoesti.com.br,http://localhost:8000,http://127.0.0.1:8000',
+    'https://acolhimento.simoesti.com.br,http://localhost:8000,http://127.0.0.1:8000,http://localhost:8080,http://127.0.0.1:8080',
 )
 
 

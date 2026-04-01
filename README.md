@@ -57,38 +57,38 @@ Acesse:
 
 ## 2) Rodar com Docker
 
-### Arquivo de ambiente
+### Perfil local (HTTP, porta 8080)
 
-Crie o `.env` a partir do exemplo:
-
-```bash
-cp .env.example .env
-```
-
-Para desenvolvimento local por HTTP, use:
-
-```env
-DJANGO_DEBUG=True
-DJANGO_SECURE_SSL_REDIRECT=False
-```
-
-### Subir aplicação
+Use o arquivo `.env.local` (ja incluido no projeto) e rode:
 
 ```bash
-docker-compose up -d --build
+docker-compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+```
+
+Acesse:
+
+- `http://localhost:8080/login/`
+
+### Perfil produção (HTTPS via proxy)
+
+Crie seu `.env.prod` a partir de `.env.prod.example` e rode:
+
+```bash
+cp .env.prod.example .env.prod
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 ### Ver status e logs
 
 ```bash
-docker-compose ps
-docker-compose logs -f web
+docker-compose -f docker-compose.yml -f docker-compose.local.yml ps
+docker-compose -f docker-compose.yml -f docker-compose.local.yml logs -f web
 ```
 
 ### Parar aplicação
 
 ```bash
-docker-compose down
+docker-compose -f docker-compose.yml -f docker-compose.local.yml down
 ```
 
 ## Variáveis de ambiente
