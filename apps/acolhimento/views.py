@@ -605,14 +605,18 @@ class TwilioStatusWebhookView(View):
 		metadata['twilio_webhook'] = webhook_data
 		mensagem.metadata_envio = metadata
 
-		status_enviada = {'queued', 'accepted', 'sending', 'sent'}
+		status_processando = {'queued', 'accepted', 'sending'}
+		status_enviada = {'sent'}
 		status_entregue = {'delivered'}
 		status_lida = {'read'}
 		status_falha = {'undelivered', 'failed', 'canceled'}
 
 		update_fields = ['metadata_envio', 'atualizado_em']
 
-		if message_status in status_enviada:
+		if message_status in status_processando:
+			mensagem.status_fila = MensagemContato.StatusFilaChoices.PROCESSANDO
+			update_fields.extend(['status_fila'])
+		elif message_status in status_enviada:
 			mensagem.status_fila = MensagemContato.StatusFilaChoices.ENVIADA
 			if not mensagem.enviada_em:
 				mensagem.enviada_em = timezone.now()

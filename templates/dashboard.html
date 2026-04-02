@@ -29,6 +29,14 @@
             <span class="btn-text">Disparar boas-vindas para Primeiro contato</span>
         </button>
     </form>
+    <form method="post" class="inline-actions">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="disparar_template_opt_in">
+        <button type="submit" class="secundario">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span class="btn-text">Disparar template opt-in para Primeiro contato</span>
+        </button>
+    </form>
     {% endif %}
 </div>
 

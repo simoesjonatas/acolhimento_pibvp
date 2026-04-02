@@ -116,7 +116,18 @@ def processar_fila_mensagens(
         mensagem.save(update_fields=['status_fila', 'tentativas_envio', 'atualizado_em'])
 
         try:
-            resultado = send_whatsapp_message(to_phone=destino, body=mensagem.conteudo)
+            template_cfg = dict((mensagem.metadata_envio or {}).get('twilio_template') or {})
+            content_sid = (template_cfg.get('content_sid') or '').strip()
+            content_variables = (template_cfg.get('content_variables') or '').strip() if template_cfg else None
+
+            if content_sid:
+                resultado = send_whatsapp_message(
+                    to_phone=destino,
+                    content_sid=content_sid,
+                    content_variables=content_variables,
+                )
+            else:
+                resultado = send_whatsapp_message(to_phone=destino, body=mensagem.conteudo)
         except TwilioWhatsAppError as exc:
             mensagem.status_fila = MensagemContato.StatusFilaChoices.FALHA
             mensagem.erro_ultimo_envio = str(exc)
@@ -137,8 +148,13 @@ def processar_fila_mensagens(
                 progress_callback(f'[{mensagem.id}] Falha no envio: {exc}')
             continue
 
-        mensagem.status_fila = MensagemContato.StatusFilaChoices.ENVIADA
-        mensagem.enviada_em = timezone.now()
+        twilio_status = (resultado.get('status') or '').lower()
+        if twilio_status in {'queued', 'accepted', 'sending'}:
+            mensagem.status_fila = MensagemContato.StatusFilaChoices.PROCESSANDO
+            mensagem.enviada_em = None
+        else:
+            mensagem.status_fila = MensagemContato.StatusFilaChoices.ENVIADA
+            mensagem.enviada_em = timezone.now()
         mensagem.referencia_externa = resultado.get('sid', '') or ''
         mensagem.erro_ultimo_envio = ''
         metadata = dict(mensagem.metadata_envio or {})
@@ -158,7 +174,9 @@ def processar_fila_mensagens(
         sucesso += 1
         processadas += 1
         if progress_callback:
-            progress_callback(f'[{mensagem.id}] Enviada com SID {mensagem.referencia_externa}')
+            progress_callback(
+                f'[{mensagem.id}] Twilio status={twilio_status or "desconhecido"} SID={mensagem.referencia_externa}'
+            )
 
     resumo = f'Processamento finalizado. sucesso={sucesso} falha={falha} total={len(mensagens)}'
     if progress_callback:

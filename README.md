@@ -106,6 +106,8 @@ Principais variáveis usadas pelo projeto:
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_WHATSAPP_FROM`
 - `TWILIO_STATUS_CALLBACK_URL` (opcional em local; use uma URL pública real para webhooks)
+- `TWILIO_TEMPLATE_OPT_IN_SID` (Content SID do template aprovado)
+- `TWILIO_TEMPLATE_OPT_IN_VARIABLES` (JSON string com variáveis do template)
 
 Exemplo para produção (domínio oficial):
 

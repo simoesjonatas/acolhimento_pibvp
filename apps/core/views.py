@@ -1,4 +1,7 @@
+import json
+
 from django.contrib import messages
+from django.conf import settings
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordChangeForm
@@ -32,7 +35,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 			return redirect('dashboard')
 
 		action = request.POST.get('action', '').strip()
-		if action != 'disparar_boas_vindas':
+		if action not in {'disparar_boas_vindas', 'disparar_template_opt_in'}:
 			messages.error(request, 'Acao invalida para o dashboard.')
 			return redirect('dashboard')
 
@@ -46,34 +49,78 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 			messages.info(request, 'Nao ha pessoas em Primeiro contato para disparo.')
 			return redirect('dashboard')
 
-		mensagem_boas_vindas = (
-			'Olá! Seja muito bem-vindo(a) a PIBVP. '
-			'Estamos felizes com sua presença e queremos caminhar com voce.'
-		)
+		if action == 'disparar_template_opt_in' and not settings.TWILIO_TEMPLATE_OPT_IN_SID:
+			messages.error(request, 'Template SID nao configurado. Defina TWILIO_TEMPLATE_OPT_IN_SID.')
+			return redirect('dashboard')
 
-		mensagens = [
-			MensagemContato(
-				pessoa=pessoa,
-				criado_por=request.user,
-				canal=MensagemContato.CanalChoices.WHATSAPP,
-				direcao=MensagemContato.DirecaoChoices.SAIDA,
-				status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
-				prioridade=5,
-				agendada_para=None,
-				conteudo=mensagem_boas_vindas,
+		mensagens = []
+		if action == 'disparar_boas_vindas':
+			mensagem_boas_vindas = (
+				'Olá! Seja muito bem-vindo(a) a PIBVP. '
+				'Estamos felizes com sua presença e queremos caminhar com voce.'
 			)
-			for pessoa in pessoas_primeiro_contato
-		]
+			mensagens = [
+				MensagemContato(
+					pessoa=pessoa,
+					criado_por=request.user,
+					canal=MensagemContato.CanalChoices.WHATSAPP,
+					direcao=MensagemContato.DirecaoChoices.SAIDA,
+					status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+					prioridade=5,
+					agendada_para=None,
+					conteudo=mensagem_boas_vindas,
+				)
+				for pessoa in pessoas_primeiro_contato
+			]
+		else:
+			template_sid = settings.TWILIO_TEMPLATE_OPT_IN_SID
+			try:
+				template_vars_base = json.loads(settings.TWILIO_TEMPLATE_OPT_IN_VARIABLES or '{}')
+				if not isinstance(template_vars_base, dict):
+					template_vars_base = {}
+			except Exception:
+				template_vars_base = {}
+			mensagens = [
+				MensagemContato(
+					pessoa=pessoa,
+					criado_por=request.user,
+					canal=MensagemContato.CanalChoices.WHATSAPP,
+					direcao=MensagemContato.DirecaoChoices.SAIDA,
+					status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+					prioridade=5,
+					agendada_para=None,
+					conteudo='Template opt-in enfileirado',
+					metadata_envio={
+						'twilio_template': {
+							'content_sid': template_sid,
+							'content_variables': json.dumps(
+								{
+									**template_vars_base,
+									'1': (pessoa.nome or '').strip() or 'amigo(a)',
+								},
+								ensure_ascii=False,
+							),
+						}
+					},
+				)
+				for pessoa in pessoas_primeiro_contato
+			]
 
 		MensagemContato.objects.bulk_create(mensagens)
 		PrimeiroContato.objects.filter(
 			id__in=[pessoa.id for pessoa in pessoas_primeiro_contato]
 		).update(status=PrimeiroContato.StatusAcolhimento.ROBO)
 
-		messages.success(
-			request,
-			f'Disparo criado para {len(mensagens)} pessoa(s) e status atualizado para Robo.',
-		)
+		if action == 'disparar_boas_vindas':
+			messages.success(
+				request,
+				f'Disparo de boas-vindas criado para {len(mensagens)} pessoa(s) e status atualizado para Robo.',
+			)
+		else:
+			messages.success(
+				request,
+				f'Disparo com template Twilio criado para {len(mensagens)} pessoa(s) e status atualizado para Robo.',
+			)
 		return redirect('dashboard')
 
 	def get_context_data(self, **kwargs):
