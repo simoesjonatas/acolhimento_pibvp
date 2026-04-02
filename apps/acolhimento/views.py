@@ -154,6 +154,7 @@ class MensagemFilaQuerysetMixin:
 		canal = self.request.GET.get('canal', '').strip()
 		direcao_mensagem = self.request.GET.get('direcao_mensagem', '').strip()
 		enviado = self.request.GET.get('enviado', '').strip()
+		resposta_status = self.request.GET.get('resposta_status', '').strip()
 		sort_coluna, direcao_ordenacao = self.get_sort_state()
 
 		if busca:
@@ -177,6 +178,13 @@ class MensagemFilaQuerysetMixin:
 			queryset = queryset.filter(enviada_em__isnull=False)
 		elif enviado == 'nao':
 			queryset = queryset.filter(enviada_em__isnull=True)
+
+		if resposta_status == 'respondidas':
+			queryset = queryset.filter(direcao='saida', resposta_recebida_em__isnull=False)
+		elif resposta_status == 'sem_resposta':
+			queryset = queryset.filter(direcao='saida', resposta_recebida_em__isnull=True)
+		elif resposta_status == 'recebidas':
+			queryset = queryset.filter(direcao='entrada')
 
 		ordering = self.sort_map.get(sort_coluna, 'enfileirada_em')
 		if direcao_ordenacao == 'desc':
@@ -222,9 +230,15 @@ class MensagemFilaListView(LoginRequiredMixin, MensagensPermissaoMixin, Mensagem
 		context['canal_atual'] = self.request.GET.get('canal', '').strip()
 		context['direcao_mensagem_atual'] = self.request.GET.get('direcao_mensagem', '').strip()
 		context['enviado_atual'] = self.request.GET.get('enviado', '').strip()
+		context['resposta_status_atual'] = self.request.GET.get('resposta_status', '').strip()
 		context['status_choices'] = MensagemContato.StatusFilaChoices.choices
 		context['canal_choices'] = MensagemContato.CanalChoices.choices
 		context['direcao_choices'] = MensagemContato.DirecaoChoices.choices
+		context['resposta_status_choices'] = [
+			('respondidas', 'Respondidas'),
+			('sem_resposta', 'Sem resposta'),
+			('recebidas', 'Mensagens recebidas'),
+		]
 		context['sort_coluna_atual'] = sort_coluna_atual
 		context['sort_direcao_atual'] = sort_direcao_atual
 		context['sort_links'] = sort_links

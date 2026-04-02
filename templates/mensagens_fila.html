@@ -51,6 +51,15 @@
             <option value="nao" {% if enviado_atual == 'nao' %}selected{% endif %}>Nao</option>
         </select>
     </div>
+    <div>
+        <label for="resposta_status">Status de Resposta</label>
+        <select id="resposta_status" name="resposta_status">
+            <option value="">Todos</option>
+            {% for valor, rotulo in resposta_status_choices %}
+            <option value="{{ valor }}" {% if resposta_status_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+        </select>
+    </div>
     <button type="submit">
         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="3 4 21 4 14 12 14 19 10 21 10 12 3 4"/></svg>
         <span class="btn-text">Filtrar</span>
