@@ -197,6 +197,7 @@ class MensagemContato(models.Model):
 	enviada_em = models.DateTimeField(null=True, blank=True)
 	entregue_em = models.DateTimeField(null=True, blank=True)
 	lida_em = models.DateTimeField(null=True, blank=True)
+	visualizada_equipe_em = models.DateTimeField(null=True, blank=True)
 	resposta_recebida_em = models.DateTimeField(null=True, blank=True)
 	resposta_conteudo = models.TextField(blank=True)
 	metadata_envio = models.JSONField(default=dict, blank=True)

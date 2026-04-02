@@ -58,6 +58,9 @@
                     class="nav-link {% if request.resolver_match.url_name == 'mensagens-fila' or request.resolver_match.url_name == 'pessoas-mensagens' or request.resolver_match.url_name == 'mensagens-disparo-massa' or request.resolver_match.url_name == 'mensagens-processamento' %}active{% endif %}"
                 >
                     Fila de mensagens
+                    {% if menu_retorno_pendente_count > 0 %}
+                    <span class="menu-count-badge">{{ menu_retorno_pendente_count }}</span>
+                    {% endif %}
                 </a>
                 <a
                     href="{% url 'mensagens-processamento' %}"

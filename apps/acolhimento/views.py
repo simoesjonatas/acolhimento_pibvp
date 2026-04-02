@@ -9,7 +9,7 @@ from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db import close_old_connections
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -84,6 +84,12 @@ class PrimeiroContatoListView(LoginRequiredMixin, PrimeiroContatoQuerysetMixin, 
 	def get_queryset(self):
 		queryset = super().get_queryset()
 		queryset = self.get_filtered_queryset(queryset)
+		retorno_pendente_subquery = MensagemContato.objects.filter(
+			pessoa=OuterRef('pk'),
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			visualizada_equipe_em__isnull=True,
+		)
+		queryset = queryset.annotate(has_novo_retorno=Exists(retorno_pendente_subquery))
 
 		return queryset
 
@@ -494,6 +500,10 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		context = super().get_context_data(**kwargs)
 		context['interacoes'] = self.object.interacoes.all()
 		context['interacao_form'] = kwargs.get('interacao_form', InteracaoAcolhimentoForm())
+		context['tem_novo_retorno'] = self.object.mensagens.filter(
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			visualizada_equipe_em__isnull=True,
+		).exists()
 		return context
 
 	def post(self, request, *args, **kwargs):
@@ -519,6 +529,11 @@ class PrimeiroContatoMensagensView(LoginRequiredMixin, MensagensPermissaoMixin, 
 
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
+		agora = timezone.now()
+		self.object.mensagens.filter(
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			visualizada_equipe_em__isnull=True,
+		).update(visualizada_equipe_em=agora)
 		context['mensagens'] = self.object.mensagens.select_related('campanha').order_by('-enfileirada_em')[:50]
 		context['enfileirar_mensagem_form'] = kwargs.get('enfileirar_mensagem_form', EnfileirarMensagemForm())
 		return context
@@ -724,6 +739,7 @@ class TwilioInboundWebhookView(View):
 			referencia_externa=message_sid,
 			enviada_em=agora,
 			entregue_em=agora,
+			visualizada_equipe_em=None,
 			metadata_resposta={'twilio': payload},
 		)
 

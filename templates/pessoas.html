@@ -75,7 +75,12 @@
     <tbody>
         {% for pessoa in pessoas %}
         <tr>
-            <td>{{ pessoa.nome }}</td>
+            <td>
+                {{ pessoa.nome }}
+                {% if pessoa.has_novo_retorno %}
+                <span class="retorno-badge">Novo retorno</span>
+                {% endif %}
+            </td>
             <td>{{ pessoa.telefone_whatsapp }}</td>
             <td>{% if pessoa.primeira_vez %}Sim{% else %}Nao{% endif %}</td>
             <td>{{ pessoa.get_origem_cadastro_display }}</td>

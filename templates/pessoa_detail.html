@@ -4,6 +4,9 @@
 
 {% block content %}
 <h1>Detalhes do primeiro contato</h1>
+{% if tem_novo_retorno %}
+<p><span class="retorno-badge">Novo retorno pendente da pessoa</span></p>
+{% endif %}
 
 <table>
     <tbody>

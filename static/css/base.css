@@ -185,6 +185,22 @@ body::after {
     border-color: rgba(204, 246, 255, 0.9);
 }
 
+.menu-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    margin-left: 6px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #ffe8ad;
+    color: #654100;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
 .app-main {
     max-width: 1120px;
     margin: 16px auto 24px;
