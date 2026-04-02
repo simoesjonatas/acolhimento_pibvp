@@ -417,6 +417,13 @@ class PrimeiroContatoEnfileirarMensagemView(LoginRequiredMixin, MensagensPermiss
 class MensagemContatoExcluirView(LoginRequiredMixin, MensagensPermissaoMixin, View):
 	def post(self, request, pk, *args, **kwargs):
 		mensagem = get_object_or_404(MensagemContato.objects.select_related('pessoa'), pk=pk)
+		pessoa = mensagem.pessoa
+		primeira_mensagem = (
+			MensagemContato.objects.filter(pessoa=pessoa)
+			.order_by('enfileirada_em', 'id')
+			.first()
+		)
+		eh_primeira_mensagem = bool(primeira_mensagem and primeira_mensagem.pk == mensagem.pk)
 		next_url = request.POST.get('next') or request.META.get('HTTP_REFERER') or reverse('mensagens-fila')
 		if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
 			next_url = reverse('mensagens-fila')
@@ -426,6 +433,12 @@ class MensagemContatoExcluirView(LoginRequiredMixin, MensagensPermissaoMixin, Vi
 			return redirect(next_url)
 
 		mensagem.delete()
+		if eh_primeira_mensagem and pessoa.status == PrimeiroContato.StatusAcolhimento.ROBO:
+			pessoa.status = PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO
+			pessoa.save(update_fields=['status', 'atualizado_em'])
+			messages.success(request, 'Mensagem excluida e status da pessoa retornado para Primeiro contato.')
+			return redirect(next_url)
+
 		messages.success(request, 'Mensagem excluida com sucesso.')
 		return redirect(next_url)
 
