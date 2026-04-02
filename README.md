@@ -101,6 +101,11 @@ Principais variáveis usadas pelo projeto:
 - `DJANGO_CSRF_TRUSTED_ORIGINS`
 - `DJANGO_SECURE_SSL_REDIRECT`
 - `SQLITE_PATH`
+- `TWILIO_ENABLED`
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_WHATSAPP_FROM`
+- `TWILIO_STATUS_CALLBACK_URL` (opcional em local; use uma URL pública real para webhooks)
 
 Exemplo para produção (domínio oficial):
 
@@ -126,7 +131,25 @@ python manage.py makemigrations
 
 # aplicar migrações
 python manage.py migrate
+
+# testar processamento da fila sem enviar mensagens reais
+python manage.py processar_fila_mensagens --dry-run --limit 5
+
+# processar fila com envio real
+python manage.py processar_fila_mensagens --limit 5
 ```
+
+## Processamento da fila pela interface web
+
+Usuarios administrativos podem acessar:
+
+- `/acolhimento/mensagens/processamento/`
+
+Nessa tela e possivel:
+
+- iniciar um processamento manual (com limite e dry-run)
+- solicitar parada de uma execucao em andamento
+- visualizar historico e log de cada execucao
 
 ## Problemas comuns
 

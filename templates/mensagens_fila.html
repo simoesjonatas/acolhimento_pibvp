@@ -98,6 +98,7 @@
                     {% if sort_coluna_atual == 'enviada' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
                 </a>
             </th>
+            <th>Resposta</th>
             <th>Conteudo</th>
             <th>Acoes</th>
         </tr>
@@ -112,6 +113,17 @@
             <td>{{ mensagem.get_canal_display }}</td>
             <td>{{ mensagem.enfileirada_em|date:'d/m/Y H:i' }}</td>
             <td>{{ mensagem.enviada_em|date:'d/m/Y H:i'|default:'-' }}</td>
+            <td>
+                {% if mensagem.direcao == 'saida' %}
+                    {% if mensagem.resposta_recebida_em %}
+                        <span class="reply-badge reply-ok">Respondida em {{ mensagem.resposta_recebida_em|date:'d/m/Y H:i' }}</span>
+                    {% else %}
+                        <span class="reply-badge reply-pending">Sem resposta</span>
+                    {% endif %}
+                {% else %}
+                    <span class="reply-badge reply-inbound">Mensagem recebida</span>
+                {% endif %}
+            </td>
             <td>{{ mensagem.conteudo|truncatechars:120 }}</td>
             <td>
                     {% if mensagem.status_fila == 'pendente' %}
@@ -128,7 +140,7 @@
             </td>
         </tr>
         <tr id="mensagem-{{ mensagem.id }}" style="display: none;">
-            <td colspan="7"><strong>Mensagem completa:</strong> {{ mensagem.conteudo|linebreaksbr }}</td>
+            <td colspan="8"><strong>Mensagem completa:</strong> {{ mensagem.conteudo|linebreaksbr }}</td>
         </tr>
         {% endfor %}
     </tbody>

@@ -117,6 +117,35 @@
     letter-spacing: 0.06em;
 }
 
+.reply-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.reply-ok {
+    background: #e8f8ef;
+    color: #1e6a3f;
+    border-color: #9ad3b4;
+}
+
+.reply-pending {
+    background: #fff5e6;
+    color: #8a5a12;
+    border-color: #e2c08a;
+}
+
+.reply-inbound {
+    background: #e8f3fb;
+    color: #1e5c81;
+    border-color: #9bc1db;
+}
+
 .dashboard-hero h1 {
     font-size: clamp(1.5rem, 4vw, 2.35rem);
     color: #0b5872;

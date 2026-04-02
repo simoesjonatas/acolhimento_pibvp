@@ -242,3 +242,44 @@ class InteracaoAcolhimento(models.Model):
 
 	def __str__(self):
 		return f'{self.pessoa.nome} - {self.get_tipo_display()}'
+
+
+class ExecucaoProcessamentoFila(models.Model):
+	class StatusExecucaoChoices(models.TextChoices):
+		EXECUTANDO = 'executando', 'Executando'
+		CONCLUIDA = 'concluida', 'Concluida'
+		INTERROMPIDA = 'interrompida', 'Interrompida'
+		FALHA = 'falha', 'Falha'
+
+	solicitado_por = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='execucoes_fila_mensagens',
+	)
+	status = models.CharField(
+		max_length=20,
+		choices=StatusExecucaoChoices.choices,
+		default=StatusExecucaoChoices.EXECUTANDO,
+	)
+	limite = models.PositiveIntegerField(default=20)
+	dry_run = models.BooleanField(default=False)
+	ids_filtrados = models.JSONField(default=list, blank=True)
+	total_selecionado = models.PositiveIntegerField(default=0)
+	total_processado = models.PositiveIntegerField(default=0)
+	total_sucesso = models.PositiveIntegerField(default=0)
+	total_falha = models.PositiveIntegerField(default=0)
+	solicitar_parada = models.BooleanField(default=False)
+	log_execucao = models.TextField(blank=True)
+	iniciado_em = models.DateTimeField(auto_now_add=True)
+	finalizado_em = models.DateTimeField(null=True, blank=True)
+	atualizado_em = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		ordering = ['-iniciado_em']
+		verbose_name = 'Execucao de processamento da fila'
+		verbose_name_plural = 'Execucoes de processamento da fila'
+
+	def __str__(self):
+		return f'Execucao {self.pk} - {self.get_status_display()}'

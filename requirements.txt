@@ -1,3 +1,4 @@
 Django==4.2.11
 gunicorn==22.0.0
 whitenoise==6.7.0
+twilio==9.2.3

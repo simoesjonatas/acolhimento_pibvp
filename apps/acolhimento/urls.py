@@ -6,6 +6,7 @@ from apps.acolhimento.views import (
     DisparoMensagemMassaView,
     MensagemFilaListView,
     MensagemContatoExcluirView,
+    ProcessamentoFilaControleView,
     PrimeiroContatoEnfileirarMensagemView,
     PrimeiroContatoCreateView,
     PrimeiroContatoDeleteView,
@@ -14,6 +15,8 @@ from apps.acolhimento.views import (
     PrimeiroContatoListView,
     PrimeiroContatoMensagensView,
     PrimeiroContatoUpdateView,
+    TwilioInboundWebhookView,
+    TwilioStatusWebhookView,
 )
 
 urlpatterns = [
@@ -21,7 +24,10 @@ urlpatterns = [
     path('auto-cadastro/sucesso/', AutoCadastroSuccessView.as_view(), name='auto-cadastro-sucesso'),
     path('pessoas/', PrimeiroContatoListView.as_view(), name='pessoas-lista'),
     path('mensagens/fila/', MensagemFilaListView.as_view(), name='mensagens-fila'),
+    path('mensagens/processamento/', ProcessamentoFilaControleView.as_view(), name='mensagens-processamento'),
     path('mensagens/disparo/', DisparoMensagemMassaView.as_view(), name='mensagens-disparo-massa'),
+    path('mensagens/webhook/twilio-status/', TwilioStatusWebhookView.as_view(), name='mensagens-webhook-twilio-status'),
+    path('mensagens/webhook/twilio-inbound/', TwilioInboundWebhookView.as_view(), name='mensagens-webhook-twilio-inbound'),
     path('mensagens/<int:pk>/excluir/', MensagemContatoExcluirView.as_view(), name='mensagens-excluir'),
     path('pessoas/novo/', PrimeiroContatoCreateView.as_view(), name='pessoas-novo'),
     path('pessoas/<int:pk>/', PrimeiroContatoDetailView.as_view(), name='pessoas-detalhe'),

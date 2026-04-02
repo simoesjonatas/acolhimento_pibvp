@@ -55,9 +55,15 @@
                 </a>
                 <a
                     href="{% url 'mensagens-fila' %}"
-                    class="nav-link {% if request.resolver_match.url_name == 'mensagens-fila' or request.resolver_match.url_name == 'pessoas-mensagens' or request.resolver_match.url_name == 'mensagens-disparo-massa' %}active{% endif %}"
+                    class="nav-link {% if request.resolver_match.url_name == 'mensagens-fila' or request.resolver_match.url_name == 'pessoas-mensagens' or request.resolver_match.url_name == 'mensagens-disparo-massa' or request.resolver_match.url_name == 'mensagens-processamento' %}active{% endif %}"
                 >
                     Fila de mensagens
+                </a>
+                <a
+                    href="{% url 'mensagens-processamento' %}"
+                    class="nav-link {% if request.resolver_match.url_name == 'mensagens-processamento' %}active{% endif %}"
+                >
+                    Processar fila
                 </a>
                 <a
                     href="{% url 'mensagens-disparo-massa' %}"

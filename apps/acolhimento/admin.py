@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.acolhimento.models import CampanhaComunicacao, InteracaoAcolhimento, MensagemContato, PrimeiroContato
+from apps.acolhimento.models import CampanhaComunicacao, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato
 
 
 @admin.register(PrimeiroContato)
@@ -55,3 +55,11 @@ class MensagemContatoAdmin(admin.ModelAdmin):
 	list_filter = ('canal', 'direcao', 'status_fila', 'agendada_para', 'enviada_em')
 	search_fields = ('pessoa__nome', 'pessoa__telefone_whatsapp', 'conteudo', 'referencia_externa', 'resposta_conteudo')
 	readonly_fields = ('enfileirada_em', 'atualizado_em')
+
+
+@admin.register(ExecucaoProcessamentoFila)
+class ExecucaoProcessamentoFilaAdmin(admin.ModelAdmin):
+	list_display = ('id', 'status', 'limite', 'dry_run', 'total_selecionado', 'total_sucesso', 'total_falha', 'iniciado_em', 'finalizado_em')
+	list_filter = ('status', 'dry_run', 'iniciado_em')
+	search_fields = ('id', 'solicitado_por__username', 'solicitado_por__first_name', 'solicitado_por__last_name')
+	readonly_fields = ('iniciado_em', 'finalizado_em', 'atualizado_em')

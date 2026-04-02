@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block title %}Processamento da fila{% endblock %}
+
+{% block content %}
+<div class="topo-acoes">
+    <h1>Processamento da fila de mensagens</h1>
+    <a class="btn secundario" href="{% url 'mensagens-fila' %}">Voltar para fila global</a>
+</div>
+
+{% if execucao_ativa %}
+<p class="result-count">Atualizacao automatica ativa: esta pagina recarrega a cada 5 segundos enquanto houver execucao em andamento.</p>
+{% endif %}
+
+<section class="dashboard-panel">
+    <div class="panel-header">
+        <h2>Controle</h2>
+    </div>
+
+    {% if execucao_ativa %}
+    <p>Execucao ativa: <strong>#{{ execucao_ativa.id }}</strong> (iniciada em {{ execucao_ativa.iniciado_em|date:'d/m/Y H:i:s' }})</p>
+    <form method="post" class="inline-actions">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="parar">
+        <input type="hidden" name="execucao_id" value="{{ execucao_ativa.id }}">
+        <button type="submit" class="danger">Parar execucao</button>
+    </form>
+    {% else %}
+    <form method="post" class="filters-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="iniciar">
+        <div>
+            <label for="limit">Limite por execucao</label>
+            <input id="limit" type="number" name="limit" min="1" value="20">
+        </div>
+        <div>
+            <label style="display: inline-flex; align-items: center; gap: 6px; margin: 0;">
+                <input id="dry_run" type="checkbox" name="dry_run" style="width: auto;">
+                Modo dry-run
+            </label>
+        </div>
+        <button type="submit">Iniciar processamento</button>
+    </form>
+    {% endif %}
+</section>
+
+<section class="dashboard-panel" style="margin-top: 14px;">
+    <div class="panel-header">
+        <h2>Historico de execucoes</h2>
+    </div>
+
+    <p class="result-count">{{ total_execucoes }} execucao(oes) registrada(s).</p>
+
+    {% if execucoes %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Status</th>
+                    <th>Solicitado por</th>
+                    <th>Inicio</th>
+                    <th>Fim</th>
+                    <th>Limite</th>
+                    <th>Dry-run</th>
+                    <th>Total</th>
+                    <th>Sucesso</th>
+                    <th>Falha</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for execucao in execucoes %}
+                <tr>
+                    <td>#{{ execucao.id }}</td>
+                    <td>{{ execucao.get_status_display }}</td>
+                    <td>{{ execucao.solicitado_por|default:'-' }}</td>
+                    <td>{{ execucao.iniciado_em|date:'d/m/Y H:i:s' }}</td>
+                    <td>{{ execucao.finalizado_em|date:'d/m/Y H:i:s'|default:'-' }}</td>
+                    <td>{{ execucao.limite }}</td>
+                    <td>{% if execucao.dry_run %}Sim{% else %}Nao{% endif %}</td>
+                    <td>{{ execucao.total_processado }}/{{ execucao.total_selecionado }}</td>
+                    <td>{{ execucao.total_sucesso }}</td>
+                    <td>{{ execucao.total_falha }}</td>
+                </tr>
+                <tr>
+                    <td colspan="10">
+                        <strong>Log:</strong>
+                        {% if execucao.log_execucao %}
+                        <pre style="white-space: pre-wrap; margin: 8px 0 0;">{{ execucao.log_execucao }}</pre>
+                        {% else %}
+                        <span>-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        {% if page_obj.has_previous %}
+        <a class="btn secundario" href="?page=1">Primeira</a>
+        <a class="btn secundario" href="?page={{ page_obj.previous_page_number }}">Anterior</a>
+        {% endif %}
+
+        <span>Pagina {{ page_obj.number }} de {{ paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a class="btn secundario" href="?page={{ page_obj.next_page_number }}">Proxima</a>
+        <a class="btn secundario" href="?page={{ paginator.num_pages }}">Ultima</a>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="empty-state">Nenhuma execucao registrada ainda.</p>
+    {% endif %}
+</section>
+
+{% if execucao_ativa %}
+<script>
+window.setTimeout(function () {
+    window.location.reload();
+}, 5000);
+</script>
+{% endif %}
+{% endblock %}

@@ -1,18 +1,27 @@
 import csv
+import re
+import threading
 
 from django.contrib import messages
+from django.core.paginator import Paginator
+from django.http import JsonResponse
 from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.db import close_old_connections
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
+from apps.acolhimento.fila_processor import processar_fila_mensagens
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PrimeiroContatoForm
-from apps.acolhimento.models import MensagemContato, PrimeiroContato
+from apps.acolhimento.models import ExecucaoProcessamentoFila, MensagemContato, PrimeiroContato
 
 
 class MensagensPermissaoMixin(UserPassesTestMixin):
@@ -215,6 +224,131 @@ class MensagemFilaListView(LoginRequiredMixin, MensagensPermissaoMixin, Mensagem
 		context['sort_links'] = sort_links
 		context['total_filtrado'] = context['paginator'].count
 		context['filtro_query'] = filtro_query
+		return context
+
+
+def _append_execucao_log(execucao: ExecucaoProcessamentoFila, texto: str):
+	linha = f'[{timezone.now().strftime("%d/%m/%Y %H:%M:%S")}] {texto}'
+	execucao.log_execucao = f'{execucao.log_execucao}\n{linha}'.strip()
+	execucao.save(update_fields=['log_execucao', 'atualizado_em'])
+
+
+def _run_execucao_fila(execucao_id: int):
+	close_old_connections()
+	execucao = ExecucaoProcessamentoFila.objects.get(pk=execucao_id)
+
+	def _progress(texto: str):
+		nonlocal execucao
+		execucao.refresh_from_db(fields=['id', 'log_execucao', 'atualizado_em'])
+		_append_execucao_log(execucao, texto)
+
+	def _should_stop() -> bool:
+		execucao.refresh_from_db(fields=['solicitar_parada'])
+		return bool(execucao.solicitar_parada)
+
+	try:
+		resultado = processar_fila_mensagens(
+			limit=execucao.limite,
+			ids=[int(i) for i in execucao.ids_filtrados if str(i).isdigit()],
+			dry_run=execucao.dry_run,
+			progress_callback=_progress,
+			should_stop=_should_stop,
+		)
+
+		execucao.refresh_from_db()
+		execucao.total_selecionado = resultado['total_selecionado']
+		execucao.total_processado = resultado['total_processado']
+		execucao.total_sucesso = resultado['sucesso']
+		execucao.total_falha = resultado['falha']
+		execucao.finalizado_em = timezone.now()
+		execucao.status = (
+			ExecucaoProcessamentoFila.StatusExecucaoChoices.INTERROMPIDA
+			if resultado['interrompido']
+			else ExecucaoProcessamentoFila.StatusExecucaoChoices.CONCLUIDA
+		)
+		execucao.save(
+			update_fields=[
+				'total_selecionado',
+				'total_processado',
+				'total_sucesso',
+				'total_falha',
+				'finalizado_em',
+				'status',
+				'atualizado_em',
+			]
+		)
+	except Exception as exc:  # pragma: no cover
+		execucao.refresh_from_db()
+		_append_execucao_log(execucao, f'Erro inesperado: {exc}')
+		execucao.status = ExecucaoProcessamentoFila.StatusExecucaoChoices.FALHA
+		execucao.finalizado_em = timezone.now()
+		execucao.save(update_fields=['status', 'finalizado_em', 'atualizado_em'])
+	finally:
+		close_old_connections()
+
+
+class ProcessamentoFilaControleView(LoginRequiredMixin, MensagensPermissaoMixin, TemplateView):
+	template_name = 'mensagens_processamento.html'
+
+	def post(self, request, *args, **kwargs):
+		action = (request.POST.get('action') or '').strip()
+
+		if action == 'iniciar':
+			em_execucao = ExecucaoProcessamentoFila.objects.filter(
+				status=ExecucaoProcessamentoFila.StatusExecucaoChoices.EXECUTANDO
+			).exists()
+			if em_execucao:
+				messages.error(request, 'Ja existe um processamento em execucao.')
+				return redirect('mensagens-processamento')
+
+			try:
+				limite = max(int(request.POST.get('limit', '20')), 1)
+			except ValueError:
+				limite = 20
+
+			dry_run = request.POST.get('dry_run') == 'on'
+			execucao = ExecucaoProcessamentoFila.objects.create(
+				solicitado_por=request.user,
+				status=ExecucaoProcessamentoFila.StatusExecucaoChoices.EXECUTANDO,
+				limite=limite,
+				dry_run=dry_run,
+			)
+			threading.Thread(target=_run_execucao_fila, args=(execucao.id,), daemon=True).start()
+			messages.success(request, f'Processamento #{execucao.id} iniciado.')
+			return redirect('mensagens-processamento')
+
+		if action == 'parar':
+			execucao_id = request.POST.get('execucao_id', '').strip()
+			execucao = ExecucaoProcessamentoFila.objects.filter(
+				pk=execucao_id,
+				status=ExecucaoProcessamentoFila.StatusExecucaoChoices.EXECUTANDO,
+			).first()
+			if not execucao:
+				messages.error(request, 'Execucao nao encontrada ou ja finalizada.')
+				return redirect('mensagens-processamento')
+
+			execucao.solicitar_parada = True
+			execucao.save(update_fields=['solicitar_parada', 'atualizado_em'])
+			messages.info(request, f'Parada solicitada para execucao #{execucao.id}.')
+			return redirect('mensagens-processamento')
+
+		messages.error(request, 'Acao invalida.')
+		return redirect('mensagens-processamento')
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		execucoes_queryset = ExecucaoProcessamentoFila.objects.select_related('solicitado_por')
+		paginator = Paginator(execucoes_queryset, 8)
+		page_obj = paginator.get_page(self.request.GET.get('page'))
+
+		context['execucoes'] = page_obj.object_list
+		context['page_obj'] = page_obj
+		context['paginator'] = paginator
+		context['is_paginated'] = paginator.num_pages > 1
+		context['execucao_ativa'] = execucoes_queryset.filter(
+			status=ExecucaoProcessamentoFila.StatusExecucaoChoices.EXECUTANDO
+		).first()
+		context['total_execucoes'] = paginator.count
 		return context
 
 
@@ -441,6 +575,183 @@ class MensagemContatoExcluirView(LoginRequiredMixin, MensagensPermissaoMixin, Vi
 
 		messages.success(request, 'Mensagem excluida com sucesso.')
 		return redirect(next_url)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class TwilioStatusWebhookView(View):
+	def post(self, request, *args, **kwargs):
+		message_sid = (request.POST.get('MessageSid') or '').strip()
+		message_status = (request.POST.get('MessageStatus') or '').strip().lower()
+		error_code = (request.POST.get('ErrorCode') or '').strip()
+		error_message = (request.POST.get('ErrorMessage') or '').strip()
+
+		if not message_sid:
+			return JsonResponse({'detail': 'MessageSid ausente.'}, status=400)
+
+		mensagem = MensagemContato.objects.filter(referencia_externa=message_sid).first()
+		if not mensagem:
+			return JsonResponse({'detail': 'Mensagem nao encontrada.'}, status=404)
+
+		callback_payload = {}
+		for key in request.POST:
+			values = request.POST.getlist(key)
+			callback_payload[key] = values[0] if len(values) == 1 else values
+
+		metadata = dict(mensagem.metadata_envio or {})
+		webhook_data = metadata.get('twilio_webhook', [])
+		if not isinstance(webhook_data, list):
+			webhook_data = [webhook_data]
+		webhook_data.append({'received_at': timezone.now().isoformat(), 'payload': callback_payload})
+		metadata['twilio_webhook'] = webhook_data
+		mensagem.metadata_envio = metadata
+
+		status_enviada = {'queued', 'accepted', 'sending', 'sent'}
+		status_entregue = {'delivered'}
+		status_lida = {'read'}
+		status_falha = {'undelivered', 'failed', 'canceled'}
+
+		update_fields = ['metadata_envio', 'atualizado_em']
+
+		if message_status in status_enviada:
+			mensagem.status_fila = MensagemContato.StatusFilaChoices.ENVIADA
+			if not mensagem.enviada_em:
+				mensagem.enviada_em = timezone.now()
+			update_fields.extend(['status_fila', 'enviada_em'])
+		elif message_status in status_entregue:
+			mensagem.status_fila = MensagemContato.StatusFilaChoices.ENVIADA
+			if not mensagem.enviada_em:
+				mensagem.enviada_em = timezone.now()
+			if not mensagem.entregue_em:
+				mensagem.entregue_em = timezone.now()
+			update_fields.extend(['status_fila', 'enviada_em', 'entregue_em'])
+		elif message_status in status_lida:
+			mensagem.status_fila = MensagemContato.StatusFilaChoices.ENVIADA
+			if not mensagem.enviada_em:
+				mensagem.enviada_em = timezone.now()
+			if not mensagem.entregue_em:
+				mensagem.entregue_em = timezone.now()
+			mensagem.lida_em = timezone.now()
+			update_fields.extend(['status_fila', 'enviada_em', 'entregue_em', 'lida_em'])
+		elif message_status in status_falha:
+			mensagem.status_fila = MensagemContato.StatusFilaChoices.FALHA
+			mensagem.erro_ultimo_envio = ' | '.join([parte for parte in [error_code, error_message, message_status] if parte])
+			update_fields.extend(['status_fila', 'erro_ultimo_envio'])
+
+		mensagem.save(update_fields=list(dict.fromkeys(update_fields)))
+		return JsonResponse({'detail': 'Webhook processado.'}, status=200)
+
+
+def _only_digits(value: str) -> str:
+	return re.sub(r'\D', '', (value or '').strip())
+
+
+def _build_phone_candidates(raw_number: str) -> set[str]:
+	digits = _only_digits(raw_number)
+	if not digits:
+		return set()
+
+	candidates: set[str] = {digits}
+	if digits.startswith('55'):
+		br_local = digits[2:]
+		candidates.add(br_local)
+	else:
+		br_local = digits
+		candidates.add(f'55{digits}')
+
+	if len(br_local) == 11 and br_local[2] == '9':
+		without_ninth = br_local[:2] + br_local[3:]
+		candidates.add(without_ninth)
+		candidates.add(f'55{without_ninth}')
+	elif len(br_local) == 10:
+		with_ninth = br_local[:2] + '9' + br_local[2:]
+		candidates.add(with_ninth)
+		candidates.add(f'55{with_ninth}')
+
+	return {item for item in candidates if item}
+
+
+def _find_pessoa_by_phone(raw_number: str):
+	candidates = _build_phone_candidates(raw_number)
+	if not candidates:
+		return None
+
+	for pessoa in PrimeiroContato.objects.only('id', 'telefone_whatsapp'):
+		pessoa_digits = _only_digits(pessoa.telefone_whatsapp)
+		if not pessoa_digits:
+			continue
+		if pessoa_digits in candidates:
+			return pessoa
+		if pessoa_digits.startswith('55') and pessoa_digits[2:] in candidates:
+			return pessoa
+		if f'55{pessoa_digits}' in candidates:
+			return pessoa
+
+	return None
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class TwilioInboundWebhookView(View):
+	def post(self, request, *args, **kwargs):
+		from_number = (request.POST.get('From') or '').strip()
+		message_sid = (request.POST.get('MessageSid') or '').strip()
+		body = (request.POST.get('Body') or '').strip()
+
+		payload = {}
+		for key in request.POST:
+			values = request.POST.getlist(key)
+			payload[key] = values[0] if len(values) == 1 else values
+
+		if not from_number:
+			return JsonResponse({'detail': 'From ausente no webhook.'}, status=400)
+
+		pessoa = _find_pessoa_by_phone(from_number)
+		if not pessoa:
+			return JsonResponse({'detail': 'Numero nao vinculado a pessoa cadastrada.'}, status=200)
+
+		agora = timezone.now()
+		conteudo = body or '(mensagem sem texto)'
+
+		MensagemContato.objects.create(
+			pessoa=pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+			conteudo=conteudo,
+			referencia_externa=message_sid,
+			enviada_em=agora,
+			entregue_em=agora,
+			metadata_resposta={'twilio': payload},
+		)
+
+		ultima_saida = (
+			MensagemContato.objects.filter(
+				pessoa=pessoa,
+				direcao=MensagemContato.DirecaoChoices.SAIDA,
+			)
+			.order_by('-enviada_em', '-enfileirada_em', '-id')
+			.first()
+		)
+
+		if ultima_saida:
+			ultima_saida.resposta_recebida_em = agora
+			ultima_saida.resposta_conteudo = conteudo
+			metadata_resposta = dict(ultima_saida.metadata_resposta or {})
+			webhook_data = metadata_resposta.get('twilio_webhook', [])
+			if not isinstance(webhook_data, list):
+				webhook_data = [webhook_data]
+			webhook_data.append({'received_at': agora.isoformat(), 'payload': payload})
+			metadata_resposta['twilio_webhook'] = webhook_data
+			ultima_saida.metadata_resposta = metadata_resposta
+			ultima_saida.save(
+				update_fields=[
+					'resposta_recebida_em',
+					'resposta_conteudo',
+					'metadata_resposta',
+					'atualizado_em',
+				]
+			)
+
+		return JsonResponse({'detail': 'Mensagem de entrada processada.'}, status=200)
 
 
 class PrimeiroContatoUpdateView(LoginRequiredMixin, UpdateView):
