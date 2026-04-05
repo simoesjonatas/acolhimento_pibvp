@@ -161,6 +161,21 @@
     letter-spacing: 0.04em;
 }
 
+.iniciou-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #e8f4ff;
+    color: #1f4f7a;
+    border: 1px solid #8db5d8;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
 .dashboard-hero h1 {
     font-size: clamp(1.5rem, 4vw, 2.35rem);
     color: #0b5872;

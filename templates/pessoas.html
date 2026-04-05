@@ -25,6 +25,14 @@
             {% endfor %}
         </select>
     </div>
+    <div>
+        <label for="iniciou_interacao">Iniciou interação</label>
+        <select id="iniciou_interacao" name="iniciou_interacao">
+            <option value="">Todos</option>
+            <option value="sim" {% if iniciou_interacao_atual == 'sim' %}selected{% endif %}>Sim</option>
+            <option value="nao" {% if iniciou_interacao_atual == 'nao' %}selected{% endif %}>Nao</option>
+        </select>
+    </div>
     <button type="submit">
         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="3 4 21 4 14 12 14 19 10 21 10 12 3 4"/></svg>
         <span class="btn-text">Filtrar</span>
@@ -79,6 +87,9 @@
                 {{ pessoa.nome }}
                 {% if pessoa.has_novo_retorno %}
                 <span class="retorno-badge">Novo retorno</span>
+                {% endif %}
+                {% if pessoa.iniciou_interacao %}
+                <span class="iniciou-badge">Iniciou conversa</span>
                 {% endif %}
             </td>
             <td>{{ pessoa.telefone_whatsapp }}</td>

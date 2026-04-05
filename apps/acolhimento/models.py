@@ -56,6 +56,7 @@ class PrimeiroContato(models.Model):
 		choices=OrigemCadastroChoices.choices,
 		default=OrigemCadastroChoices.EQUIPE,
 	)
+	iniciou_interacao = models.BooleanField(default=False)
 	criado_por = models.ForeignKey(
 		settings.AUTH_USER_MODEL,
 		on_delete=models.SET_NULL,

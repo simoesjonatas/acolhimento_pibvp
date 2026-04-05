@@ -7,6 +7,9 @@
 {% if tem_novo_retorno %}
 <p><span class="retorno-badge">Novo retorno pendente da pessoa</span></p>
 {% endif %}
+{% if pessoa.iniciou_interacao %}
+<p><span class="iniciou-badge">Pessoa iniciou a conversa no WhatsApp</span></p>
+{% endif %}
 
 <table>
     <tbody>

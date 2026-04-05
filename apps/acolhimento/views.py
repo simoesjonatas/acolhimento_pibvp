@@ -21,7 +21,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, FormView, L
 
 from apps.acolhimento.fila_processor import processar_fila_mensagens
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PrimeiroContatoForm
-from apps.acolhimento.models import ExecucaoProcessamentoFila, MensagemContato, PrimeiroContato
+from apps.acolhimento.models import ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato
 
 
 class MensagensPermissaoMixin(UserPassesTestMixin):
@@ -54,6 +54,7 @@ class PrimeiroContatoQuerysetMixin:
 	def get_filtered_queryset(self, queryset):
 		busca = self.request.GET.get('q', '').strip()
 		origem = self.request.GET.get('origem', '').strip()
+		iniciou_interacao = self.request.GET.get('iniciou_interacao', '').strip()
 		sort_coluna, direcao = self.get_sort_state()
 
 		if busca:
@@ -66,6 +67,11 @@ class PrimeiroContatoQuerysetMixin:
 
 		if origem:
 			queryset = queryset.filter(origem_cadastro=origem)
+
+		if iniciou_interacao == 'sim':
+			queryset = queryset.filter(iniciou_interacao=True)
+		elif iniciou_interacao == 'nao':
+			queryset = queryset.filter(iniciou_interacao=False)
 
 		ordering = self.sort_map.get(sort_coluna, 'data_primeiro_contato')
 		if direcao == 'desc':
@@ -117,6 +123,7 @@ class PrimeiroContatoListView(LoginRequiredMixin, PrimeiroContatoQuerysetMixin, 
 
 		context['busca'] = self.request.GET.get('q', '').strip()
 		context['origem_atual'] = self.request.GET.get('origem', '').strip()
+		context['iniciou_interacao_atual'] = self.request.GET.get('iniciou_interacao', '').strip()
 		context['origem_choices'] = PrimeiroContato.OrigemCadastroChoices.choices
 		context['sort_coluna_atual'] = sort_coluna_atual
 		context['sort_direcao_atual'] = sort_direcao_atual
@@ -722,6 +729,29 @@ def _find_pessoa_by_phone(raw_number: str):
 	return None
 
 
+def _phone_for_cadastro(raw_number: str) -> str:
+	candidates = sorted(_build_phone_candidates(raw_number), key=lambda item: (len(item), item), reverse=True)
+
+	for candidate in candidates:
+		if len(candidate) in (10, 11) and not candidate.startswith('55'):
+			return candidate
+
+	for candidate in candidates:
+		if len(candidate) in (12, 13) and candidate.startswith('55'):
+			return candidate[2:]
+
+	digits = _only_digits(raw_number)
+	if len(digits) in (12, 13) and digits.startswith('55'):
+		return digits[2:]
+	return digits
+
+
+def _build_auto_nome_from_phone(raw_number: str) -> str:
+	digits = _only_digits(raw_number)
+	suffix = digits[-4:] if len(digits) >= 4 else digits
+	return f'Contato WhatsApp {suffix}'.strip()
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 class TwilioInboundWebhookView(View):
 	def post(self, request, *args, **kwargs):
@@ -738,10 +768,26 @@ class TwilioInboundWebhookView(View):
 			return JsonResponse({'detail': 'From ausente no webhook.'}, status=400)
 
 		pessoa = _find_pessoa_by_phone(from_number)
-		if not pessoa:
-			return JsonResponse({'detail': 'Numero nao vinculado a pessoa cadastrada.'}, status=200)
-
 		agora = timezone.now()
+		if not pessoa:
+			pessoa = PrimeiroContato.objects.create(
+				nome=_build_auto_nome_from_phone(from_number),
+				telefone_whatsapp=_phone_for_cadastro(from_number),
+				primeira_vez=True,
+				como_conheceu=PrimeiroContato.ComoConheceuChoices.OUTRO,
+				o_que_busca=PrimeiroContato.OQueBuscaChoices.PARTICIPAR_DE_ALGO,
+				origem_cadastro=PrimeiroContato.OrigemCadastroChoices.AUTO_CADASTRO,
+				iniciou_interacao=True,
+				status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO,
+				observacoes='Pre-cadastro criado automaticamente via webhook do WhatsApp.',
+			)
+			InteracaoAcolhimento.objects.create(
+				pessoa=pessoa,
+				tipo=InteracaoAcolhimento.TipoInteracao.RESPOSTA_RECEBIDA,
+				descricao='Pessoa iniciou a interacao enviando mensagem no WhatsApp.',
+				data_interacao=agora.date(),
+			)
+
 		conteudo = body or '(mensagem sem texto)'
 
 		MensagemContato.objects.create(
