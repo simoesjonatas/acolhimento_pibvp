@@ -21,20 +21,21 @@
         </a>
     </p>
     {% if user.is_staff or user.is_superuser %}
-    <form method="post" class="inline-actions">
+    {% comment %} <form method="post" class="inline-actions">
         {% csrf_token %}
         <input type="hidden" name="action" value="disparar_boas_vindas">
         <button type="submit">
             <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             <span class="btn-text">Disparar boas-vindas para Primeiro contato</span>
         </button>
-    </form>
+    </form> {% endcomment %}
     <form method="post" class="inline-actions">
         {% csrf_token %}
         <input type="hidden" name="action" value="disparar_template_opt_in">
         <button type="submit" class="secundario">
-            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            <span class="btn-text">Disparar template opt-in para Primeiro contato</span>
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            {% comment %} <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> {% endcomment %}
+            <span class="btn-text">Disparar boas-vindas para Primeiro contato</span>
         </button>
     </form>
     {% endif %}
