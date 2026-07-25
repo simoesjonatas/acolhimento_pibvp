@@ -1,22 +1,51 @@
-version: '3.9'
+name: pibvp-acolhimento
 
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: pibvp-acolhimento-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-acolhimento_pibvp}
+      POSTGRES_USER: ${POSTGRES_USER:-acolhimento}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-troque-esta-senha-no-env}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   web:
-    build: .
+    build:
+      context: .
     container_name: pibvp-acolhimento-web
     restart: unless-stopped
-    env_file:
-      - .env
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-troque-esta-chave-em-producao}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-False}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-acolhimento.simoesti.com.br,localhost,127.0.0.1}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-https://acolhimento.simoesti.com.br,http://localhost:8000,http://127.0.0.1:8000}
-      SQLITE_PATH: ${SQLITE_PATH:-/app/data/db.sqlite3}
       DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-False}
+      POSTGRES_DB: ${POSTGRES_DB:-acolhimento_pibvp}
+      POSTGRES_USER: ${POSTGRES_USER:-acolhimento}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-troque-esta-senha-no-env}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      TWILIO_ENABLED: ${TWILIO_ENABLED:-False}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-whatsapp:+14155238886}
+      TWILIO_STATUS_CALLBACK_URL: ${TWILIO_STATUS_CALLBACK_URL:-}
+      TWILIO_TEMPLATE_OPT_IN_SID: ${TWILIO_TEMPLATE_OPT_IN_SID:-}
+      TWILIO_TEMPLATE_OPT_IN_VARIABLES: ${TWILIO_TEMPLATE_OPT_IN_VARIABLES:-{}}
     ports:
-      - "8000:8000"
-    volumes:
-      - sqlite_data:/app/data
+      - "${APP_PORT:-8000}:8000"
 
 volumes:
-  sqlite_data:
+  postgres_data:

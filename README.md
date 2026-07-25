@@ -57,39 +57,37 @@ Acesse:
 
 ## 2) Rodar com Docker
 
-### Perfil local (HTTP, porta 8080)
+O compose principal agora esta em `docker-compose.yml` e sobe a aplicacao com um banco Postgres dedicado.
 
-Use o arquivo `.env.local` (ja incluido no projeto) e rode:
+Crie seu `.env` a partir do exemplo, ajuste as chaves/senhas e rode:
 
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+cp .env.example .env
+docker compose up -d --build
 ```
 
 Acesse:
 
-- `http://localhost:8080/login/`
-
-### Perfil produção (HTTPS via proxy)
-
-Crie seu `.env.prod` a partir de `.env.prod.example` e rode:
-
-```bash
-cp .env.prod.example .env.prod
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-```
+- `http://localhost:8000/login/`
 
 ### Ver status e logs
 
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.local.yml ps
-docker-compose -f docker-compose.yml -f docker-compose.local.yml logs -f web
+docker compose ps
+docker compose logs -f web
 ```
 
 ### Parar aplicação
 
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.local.yml down
+docker compose down
 ```
+
+O banco fica persistido no volume Docker `pibvp-acolhimento_postgres_data`.
+
+### Compose legado
+
+Os overlays antigos foram movidos para `docker/legacy/` apenas como referencia. O fluxo recomendado e usar o `docker-compose.yml` unico da raiz.
 
 ## Variáveis de ambiente
 
@@ -101,6 +99,12 @@ Principais variáveis usadas pelo projeto:
 - `DJANGO_CSRF_TRUSTED_ORIGINS`
 - `DJANGO_SECURE_SSL_REDIRECT`
 - `SQLITE_PATH`
+- `APP_PORT`
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_HOST`
+- `POSTGRES_PORT`
 - `TWILIO_ENABLED`
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`

@@ -24,9 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-@m(yg_o#4y1@j%4tefjhye7j-qwr0!*+8f9$0it2^@xv)^&rr#')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-# DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() == 'true'
-
-DEBUG = True
+DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() == 'true'
 
 def _split_env_list(var_name: str, default: str) -> list[str]:
     raw = os.getenv(var_name, default)
@@ -94,12 +92,25 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.getenv('SQLITE_PATH', BASE_DIR / 'db.sqlite3'),
+if os.getenv('POSTGRES_DB'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('POSTGRES_DB'),
+            'USER': os.getenv('POSTGRES_USER', 'postgres'),
+            'PASSWORD': os.getenv('POSTGRES_PASSWORD', ''),
+            'HOST': os.getenv('POSTGRES_HOST', 'db'),
+            'PORT': os.getenv('POSTGRES_PORT', '5432'),
+            'CONN_MAX_AGE': int(os.getenv('POSTGRES_CONN_MAX_AGE', '60')),
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': os.getenv('SQLITE_PATH', BASE_DIR / 'db.sqlite3'),
+        }
+    }
 
 
 # Password validation
