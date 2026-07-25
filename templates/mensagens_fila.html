@@ -3,189 +3,283 @@
 {% block title %}Fila de mensagens{% endblock %}
 
 {% block content %}
-<div class="topo-acoes">
-    <h1>Fila global de mensagens</h1>
-    <a class="btn" href="{% url 'mensagens-disparo-massa' %}">
-        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <span class="btn-text">Novo disparo em massa</span>
-    </a>
-</div>
+<section class="message-queue-page">
+    <header class="page-hero queue-hero">
+        <div>
+            <span class="section-eyebrow">Central de mensagens</span>
+            <h1>Fila global de mensagens</h1>
+            <p>Visao operacional dos envios, retornos e mensagens recebidas pela equipe de acolhimento.</p>
 
-<form method="get" class="filters-form">
-    <div>
-        <label for="q">Busca</label>
-        <input id="q" name="q" type="text" value="{{ busca }}" placeholder="Pessoa, telefone, conteudo">
-    </div>
-    <div>
-        <label for="status">Status</label>
-        <select id="status" name="status">
-            <option value="">Todos</option>
-            {% for valor, rotulo in status_choices %}
-            <option value="{{ valor }}" {% if status_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
-            {% endfor %}
-        </select>
-    </div>
-    <div>
-        <label for="canal">Canal</label>
-        <select id="canal" name="canal">
-            <option value="">Todos</option>
-            {% for valor, rotulo in canal_choices %}
-            <option value="{{ valor }}" {% if canal_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
-            {% endfor %}
-        </select>
-    </div>
-    <div>
-        <label for="direcao_mensagem">Direcao</label>
-        <select id="direcao_mensagem" name="direcao_mensagem">
-            <option value="">Todas</option>
-            {% for valor, rotulo in direcao_choices %}
-            <option value="{{ valor }}" {% if direcao_mensagem_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
-            {% endfor %}
-        </select>
-    </div>
-    <div>
-        <label for="enviado">Enviado</label>
-        <select id="enviado" name="enviado">
-            <option value="">Todos</option>
-            <option value="sim" {% if enviado_atual == 'sim' %}selected{% endif %}>Sim</option>
-            <option value="nao" {% if enviado_atual == 'nao' %}selected{% endif %}>Nao</option>
-        </select>
-    </div>
-    <div>
-        <label for="resposta_status">Status de Resposta</label>
-        <select id="resposta_status" name="resposta_status">
-            <option value="">Todos</option>
-            {% for valor, rotulo in resposta_status_choices %}
-            <option value="{{ valor }}" {% if resposta_status_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
-            {% endfor %}
-        </select>
-    </div>
-    <button type="submit">
-        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="3 4 21 4 14 12 14 19 10 21 10 12 3 4"/></svg>
-        <span class="btn-text">Filtrar</span>
-    </button>
-    <a class="btn secundario" href="{% url 'mensagens-fila' %}">
-        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.13-3.36L23 10"/><path d="M20.5 15a9 9 0 0 1-14.13 3.36L1 14"/></svg>
-        <span class="btn-text">Limpar</span>
-    </a>
-</form>
+            <div class="queue-summary-grid" aria-label="Resumo da fila">
+                {% for card in fila_resumo_cards %}
+                <div class="queue-summary-item {{ card.classe }}">
+                    <span>{{ card.rotulo }}</span>
+                    <strong>{{ card.valor }}</strong>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
 
-<p class="result-count">{{ total_filtrado }} mensagem(ns) encontrada(s).</p>
+        <div class="hero-actions queue-hero-actions">
+            <a class="btn" href="{% url 'mensagens-processamento' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6"/><path d="M20 20v-6h-6"/><path d="M20 9a8 8 0 0 0-13.66-4.66L4 6"/><path d="M4 15a8 8 0 0 0 13.66 4.66L20 18"/></svg>
+                <span class="btn-text">Processar fila</span>
+            </a>
+            <a class="btn secundario" href="{% url 'mensagens-disparo-massa' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span class="btn-text">Novo disparo</span>
+            </a>
+        </div>
+    </header>
 
-{% if mensagens %}
-<div class="table-wrap">
-<table>
-    <thead>
-        <tr>
-            <th>
-                <a class="sort-link" href="?{{ sort_links.pessoa }}">
-                    Pessoa
-                    {% if sort_coluna_atual == 'pessoa' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+    <section class="queue-filter-panel">
+        <div class="panel-header">
+            <div>
+                <h2>Filtros</h2>
+                <p>{{ total_filtrado }} mensagem(ns) encontrada(s).</p>
+            </div>
+        </div>
+
+        <form method="get" class="filters-form queue-filter-form">
+            <div class="queue-filter-search">
+                <label for="q">Busca</label>
+                <input id="q" name="q" type="text" value="{{ busca }}" placeholder="Pessoa, telefone, conteudo ou SID">
+            </div>
+            <div>
+                <label for="status">Status</label>
+                <select id="status" name="status">
+                    <option value="">Todos</option>
+                    {% for valor, rotulo in status_choices %}
+                    <option value="{{ valor }}" {% if status_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="canal">Canal</label>
+                <select id="canal" name="canal">
+                    <option value="">Todos</option>
+                    {% for valor, rotulo in canal_choices %}
+                    <option value="{{ valor }}" {% if canal_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="direcao_mensagem">Direcao</label>
+                <select id="direcao_mensagem" name="direcao_mensagem">
+                    <option value="">Todas</option>
+                    {% for valor, rotulo in direcao_choices %}
+                    <option value="{{ valor }}" {% if direcao_mensagem_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="enviado">Enviado</label>
+                <select id="enviado" name="enviado">
+                    <option value="">Todos</option>
+                    <option value="sim" {% if enviado_atual == 'sim' %}selected{% endif %}>Sim</option>
+                    <option value="nao" {% if enviado_atual == 'nao' %}selected{% endif %}>Nao</option>
+                </select>
+            </div>
+            <div>
+                <label for="resposta_status">Resposta</label>
+                <select id="resposta_status" name="resposta_status">
+                    <option value="">Todos</option>
+                    {% for valor, rotulo in resposta_status_choices %}
+                    <option value="{{ valor }}" {% if resposta_status_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="queue-filter-actions">
+                <button type="submit">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="3 4 21 4 14 12 14 19 10 21 10 12 3 4"/></svg>
+                    <span class="btn-text">Filtrar</span>
+                </button>
+                <a class="btn secundario" href="{% url 'mensagens-fila' %}">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.13-3.36L23 10"/><path d="M20.5 15a9 9 0 0 1-14.13 3.36L1 14"/></svg>
+                    <span class="btn-text">Limpar</span>
                 </a>
-            </th>
-            <th>
-                <a class="sort-link" href="?{{ sort_links.status }}">
-                    Status
-                    {% if sort_coluna_atual == 'status' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
-                </a>
-            </th>
-            <th>
-                <a class="sort-link" href="?{{ sort_links.canal }}">
-                    Canal
-                    {% if sort_coluna_atual == 'canal' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
-                </a>
-            </th>
-            <th>
-                <a class="sort-link" href="?{{ sort_links.enfileirada }}">
-                    Enfileirada
-                    {% if sort_coluna_atual == 'enfileirada' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
-                </a>
-            </th>
-            <th>
-                <a class="sort-link" href="?{{ sort_links.enviada }}">
-                    Enviada
-                    {% if sort_coluna_atual == 'enviada' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
-                </a>
-            </th>
-            <th>Resposta</th>
-            <th>Conteudo</th>
-            <th>Acoes</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for mensagem in mensagens %}
-        <tr>
-            <td>
-                <a href="{% url 'pessoas-mensagens' mensagem.pessoa.pk %}">{{ mensagem.pessoa.nome }}</a>
-            </td>
-            <td>{{ mensagem.get_status_fila_display }}</td>
-            <td>{{ mensagem.get_canal_display }}</td>
-            <td>{{ mensagem.enfileirada_em|date:'d/m/Y H:i' }}</td>
-            <td>{{ mensagem.enviada_em|date:'d/m/Y H:i'|default:'-' }}</td>
-            <td>
-                {% if mensagem.direcao == 'saida' %}
-                    {% if mensagem.resposta_recebida_em %}
-                        <span class="reply-badge reply-ok">Respondida em {{ mensagem.resposta_recebida_em|date:'d/m/Y H:i' }}</span>
-                    {% else %}
-                        <span class="reply-badge reply-pending">Sem resposta</span>
-                    {% endif %}
-                {% else %}
-                    <span class="reply-badge reply-inbound">Mensagem recebida</span>
-                {% endif %}
-            </td>
-            <td>{{ mensagem.conteudo|truncatechars:120 }}</td>
-            <td>
-                    {% if mensagem.status_fila == 'pendente' %}
-                    <form method="post" action="{% url 'mensagens-excluir' mensagem.id %}" class="inline-form">
-                        {% csrf_token %}
-                        <input type="hidden" name="next" value="{% url 'mensagens-fila' %}?{% if filtro_query %}{{ filtro_query }}{% endif %}">
-                        <button type="submit" class="btn secundario btn-excluir-pendente">
-                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                            <span class="btn-text">Remover</span>
-                        </button>
-                    </form>
-                    {% endif %}
-                <button type="button" class="btn secundario btn-ver-mensagem" data-target="mensagem-{{ mensagem.id }}">Ver completa</button>
-            </td>
-        </tr>
-        <tr id="mensagem-{{ mensagem.id }}" style="display: none;">
-            <td colspan="8"><strong>Mensagem completa:</strong> {{ mensagem.conteudo|linebreaksbr }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-</div>
+            </div>
+        </form>
+    </section>
 
-{% if is_paginated %}
-<div class="pagination">
-    {% if page_obj.has_previous %}
-    <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page=1">
-        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="11 17 6 12 11 7"/><line x1="18" y1="18" x2="18" y2="6"/></svg>
-        <span class="btn-text">Primeira</span>
-    </a>
-    <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ page_obj.previous_page_number }}">
-        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-        <span class="btn-text">Anterior</span>
-    </a>
-    {% endif %}
+    <section class="queue-table-panel">
+        <div class="panel-header">
+            <div>
+                <h2>Mensagens</h2>
+                <p>Mensagens filtradas na ordem atual da fila.</p>
+            </div>
+        </div>
 
-    <span>Pagina {{ page_obj.number }} de {{ paginator.num_pages }}</span>
+        {% if mensagens %}
+        <div class="table-wrap queue-table-wrap">
+            <table class="queue-table">
+                <colgroup>
+                    <col class="queue-col-person">
+                    <col class="queue-col-status">
+                    <col class="queue-col-channel">
+                    <col class="queue-col-date">
+                    <col class="queue-col-sent">
+                    <col class="queue-col-content">
+                    <col class="queue-col-actions">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>
+                            <a class="sort-link" href="?{{ sort_links.pessoa }}">
+                                Pessoa
+                                {% if sort_coluna_atual == 'pessoa' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a class="sort-link" href="?{{ sort_links.status }}">
+                                Status
+                                {% if sort_coluna_atual == 'status' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a class="sort-link" href="?{{ sort_links.canal }}">
+                                Canal
+                                {% if sort_coluna_atual == 'canal' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a class="sort-link" href="?{{ sort_links.enfileirada }}">
+                                Enfileirada
+                                {% if sort_coluna_atual == 'enfileirada' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a class="sort-link" href="?{{ sort_links.enviada }}">
+                                Enviada
+                                {% if sort_coluna_atual == 'enviada' %}<span class="sort-indicator">{% if sort_direcao_atual == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                            </a>
+                        </th>
+                        <th>Conteudo</th>
+                        <th>Acoes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mensagem in mensagens %}
+                    <tr class="queue-row status-row-{{ mensagem.status_fila }} direction-row-{{ mensagem.direcao }}">
+                        <td>
+                            <a class="queue-person-link" href="{% url 'pessoas-mensagens' mensagem.pessoa.pk %}">
+                                <strong>{{ mensagem.pessoa.nome }}</strong>
+                                <span>{{ mensagem.pessoa.telefone_whatsapp }}</span>
+                            </a>
+                        </td>
+                        <td>
+                            <span class="message-status status-{{ mensagem.status_fila }}">{{ mensagem.get_status_fila_display }}</span>
+                            {% if mensagem.erro_ultimo_envio %}
+                            <span class="queue-error-dot" title="{{ mensagem.erro_ultimo_envio }}">Erro</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="queue-channel-stack">
+                                <span class="message-channel {{ mensagem.canal }}">{{ mensagem.get_canal_display }}</span>
+                                <span class="queue-direction-pill">{{ mensagem.get_direcao_display }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="queue-time-stack">
+                                <strong>{{ mensagem.enfileirada_em|date:'d/m/Y H:i' }}</strong>
+                                {% if mensagem.agendada_para %}<span>Agendada {{ mensagem.agendada_para|date:'d/m/Y H:i' }}</span>{% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="queue-time-stack">
+                                {% if mensagem.enviada_em %}
+                                <strong>{{ mensagem.enviada_em|date:'d/m/Y H:i' }}</strong>
+                                {% else %}
+                                <span class="queue-muted">Aguardando</span>
+                                {% endif %}
+                                {% if mensagem.entregue_em %}<span>Entregue {{ mensagem.entregue_em|date:'d/m H:i' }}</span>{% endif %}
+                                {% if mensagem.lida_em %}<span>Lida {{ mensagem.lida_em|date:'d/m H:i' }}</span>{% endif %}
+                            </div>
+                        </td>
+                        <td class="queue-content-cell">
+                            <div class="queue-message-meta">
+                                {% if mensagem.direcao == 'saida' %}
+                                    {% if mensagem.resposta_recebida_em %}
+                                        <span class="reply-badge reply-ok">Respondida {{ mensagem.resposta_recebida_em|date:'d/m H:i' }}</span>
+                                    {% else %}
+                                        <span class="reply-badge reply-pending">Sem resposta</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="reply-badge reply-inbound">Recebida</span>
+                                {% endif %}
+                            </div>
+                            <p class="queue-content-preview">{{ mensagem.conteudo|truncatechars:180 }}</p>
+                            {% if mensagem.referencia_externa %}
+                            <span class="queue-reference">SID {{ mensagem.referencia_externa }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="row-actions queue-actions">
+                                {% if mensagem.status_fila == 'pendente' %}
+                                <form method="post" action="{% url 'mensagens-excluir' mensagem.id %}" class="inline-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{% url 'mensagens-fila' %}?{% if filtro_query %}{{ filtro_query }}{% endif %}">
+                                    <button type="submit" class="btn secundario btn-excluir-pendente">
+                                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                                        <span class="btn-text">Remover</span>
+                                    </button>
+                                </form>
+                                {% endif %}
+                                <button type="button" class="btn secundario btn-ver-mensagem" data-target="mensagem-{{ mensagem.id }}" aria-controls="mensagem-{{ mensagem.id }}" aria-expanded="false">
+                                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    <span class="btn-text">Ver</span>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr id="mensagem-{{ mensagem.id }}" class="queue-detail-row is-hidden">
+                        <td colspan="7">
+                            <div class="queue-detail-message">
+                                <span>Mensagem completa</span>
+                                <p>{{ mensagem.conteudo|linebreaksbr }}</p>
+                                {% if mensagem.erro_ultimo_envio %}
+                                <p class="message-error">{{ mensagem.erro_ultimo_envio }}</p>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
 
-    {% if page_obj.has_next %}
-    <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ page_obj.next_page_number }}">
-        <span class="btn-text">Proxima</span>
-        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-    </a>
-    <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ paginator.num_pages }}">
-        <span class="btn-text">Ultima</span>
-        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="13 17 18 12 13 7"/><line x1="6" y1="18" x2="6" y2="6"/></svg>
-    </a>
-    {% endif %}
-</div>
-{% endif %}
-{% else %}
-<p class="empty-state">Nenhuma mensagem encontrada para os filtros atuais.</p>
-{% endif %}
+        {% if is_paginated %}
+        <div class="pagination queue-pagination">
+            {% if page_obj.has_previous %}
+            <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page=1">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="11 17 6 12 11 7"/><line x1="18" y1="18" x2="18" y2="6"/></svg>
+                <span class="btn-text">Primeira</span>
+            </a>
+            <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ page_obj.previous_page_number }}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                <span class="btn-text">Anterior</span>
+            </a>
+            {% endif %}
+
+            <span>Pagina {{ page_obj.number }} de {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ page_obj.next_page_number }}">
+                <span class="btn-text">Proxima</span>
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+            </a>
+            <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ paginator.num_pages }}">
+                <span class="btn-text">Ultima</span>
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="13 17 18 12 13 7"/><line x1="6" y1="18" x2="6" y2="6"/></svg>
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="empty-state queue-empty-state">Nenhuma mensagem encontrada para os filtros atuais.</p>
+        {% endif %}
+    </section>
+</section>
 
 <script>
 document.addEventListener('click', function (event) {
@@ -196,16 +290,19 @@ document.addEventListener('click', function (event) {
 
     var targetId = button.getAttribute('data-target');
     var target = document.getElementById(targetId);
+    var label = button.querySelector('.btn-text') || button;
     if (!target) {
         return;
     }
 
-    if (target.style.display === 'none' || target.style.display === '') {
-        target.style.display = 'table-row';
-        button.textContent = 'Ocultar';
+    if (target.classList.contains('is-hidden')) {
+        target.classList.remove('is-hidden');
+        button.setAttribute('aria-expanded', 'true');
+        label.textContent = 'Ocultar';
     } else {
-        target.style.display = 'none';
-        button.textContent = 'Ver completa';
+        target.classList.add('is-hidden');
+        button.setAttribute('aria-expanded', 'false');
+        label.textContent = 'Ver';
     }
 });
 </script>

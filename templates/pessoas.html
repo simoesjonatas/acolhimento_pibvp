@@ -3,8 +3,12 @@
 {% block title %}Pessoas{% endblock %}
 
 {% block content %}
-<div class="topo-acoes">
-    <h1>Primeiros contatos</h1>
+<div class="page-hero">
+    <div>
+        <span class="section-eyebrow">Acolhimento</span>
+        <h1>Primeiros contatos</h1>
+        <p>Visualize cadastros, retornos pendentes e pessoas que ja iniciaram conversa.</p>
+    </div>
     <a class="btn" href="{% url 'pessoas-novo' %}">
         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         <span class="btn-text">Novo cadastro</span>
@@ -84,7 +88,7 @@
         {% for pessoa in pessoas %}
         <tr>
             <td>
-                {{ pessoa.nome }}
+                <strong class="table-primary-text">{{ pessoa.nome }}</strong>
                 {% if pessoa.has_novo_retorno %}
                 <span class="retorno-badge">Novo retorno</span>
                 {% endif %}
@@ -92,7 +96,7 @@
                 <span class="iniciou-badge">Iniciou conversa</span>
                 {% endif %}
             </td>
-            <td>{{ pessoa.telefone_whatsapp }}</td>
+            <td><span class="table-muted-text">{{ pessoa.telefone_whatsapp }}</span></td>
             <td>{% if pessoa.primeira_vez %}Sim{% else %}Nao{% endif %}</td>
             <td>{{ pessoa.get_origem_cadastro_display }}</td>
             <td>{{ pessoa.data_primeiro_contato|date:'d/m/Y' }}</td>

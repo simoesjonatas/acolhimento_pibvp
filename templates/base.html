@@ -4,20 +4,25 @@
     {% load static %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1f513a">
     <title>{% block title %}Acolhimento PIBVP{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{% static 'img/site-icon.svg' %}">
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
     <link rel="stylesheet" href="{% static 'css/pages.css' %}">
 </head>
 <body>
-    <div class="bg-shape bg-shape-1"></div>
-    <div class="bg-shape bg-shape-2"></div>
-
+    <div id="app-loading-bar" aria-hidden="true"></div>
     {% if user.is_authenticated %}
     <header class="app-header">
         <div class="header-left">
             <div class="brand-wrap">
-                <strong class="brand">PIBVP Acolhimento</strong>
-                <span class="brand-sub">Uma familia para conviver</span>
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-6h4v6"/></svg>
+                </span>
+                <span>
+                    <strong class="brand">PIBVP Acolhimento</strong>
+                    <span class="brand-sub">Uma familia para conviver</span>
+                </span>
             </div>
 
             <button
@@ -42,7 +47,7 @@
                 </a>
                 <a
                     href="{% url 'pessoas-lista' %}"
-                    class="nav-link {% if request.resolver_match.url_name == 'pessoas-lista' or request.resolver_match.url_name == 'pessoas-novo' or request.resolver_match.url_name == 'pessoas-detalhe' or request.resolver_match.url_name == 'pessoas-editar' or request.resolver_match.url_name == 'pessoas-excluir' %}active{% endif %}"
+                    class="nav-link {% if request.resolver_match.url_name == 'pessoas-lista' or request.resolver_match.url_name == 'pessoas-novo' or request.resolver_match.url_name == 'pessoas-detalhe' or request.resolver_match.url_name == 'pessoas-mensagens' or request.resolver_match.url_name == 'pessoas-editar' or request.resolver_match.url_name == 'pessoas-excluir' %}active{% endif %}"
                 >
                     Pessoas
                 </a>
@@ -55,7 +60,7 @@
                 </a>
                 <a
                     href="{% url 'mensagens-fila' %}"
-                    class="nav-link {% if request.resolver_match.url_name == 'mensagens-fila' or request.resolver_match.url_name == 'pessoas-mensagens' or request.resolver_match.url_name == 'mensagens-disparo-massa' or request.resolver_match.url_name == 'mensagens-processamento' %}active{% endif %}"
+                    class="nav-link {% if request.resolver_match.url_name == 'mensagens-fila' %}active{% endif %}"
                 >
                     Fila de mensagens
                     {% if menu_retorno_pendente_count > 0 %}
@@ -103,7 +108,7 @@
     </section>
     {% endif %}
 
-    <main class="app-main">
+    <main class="app-main{% if not user.is_authenticated %} app-main-public{% endif %}">
         {% block content %}{% endblock %}
     </main>
 
@@ -141,6 +146,91 @@
                 window.setTimeout(() => {
                     toast.remove();
                 }, 5500);
+            });
+
+            // Loading global: barra de progresso no topo + spinner no botao ao enviar.
+            const loadingBar = document.getElementById('app-loading-bar');
+            let loadingTimer = null;
+            let safetyTimer = null;
+            let progresso = 0;
+
+            function iniciarLoading() {
+                if (!loadingBar) return;
+                window.clearInterval(loadingTimer);
+                window.clearTimeout(safetyTimer);
+                progresso = 8;
+                loadingBar.classList.add('is-active');
+                loadingBar.style.width = progresso + '%';
+                loadingTimer = window.setInterval(() => {
+                    progresso += Math.max(0.5, (90 - progresso) * 0.08);
+                    if (progresso >= 90) {
+                        progresso = 90;
+                        window.clearInterval(loadingTimer);
+                    }
+                    loadingBar.style.width = progresso + '%';
+                }, 220);
+                // Seguranca: se a navegacao nao acontecer, some sozinho.
+                safetyTimer = window.setTimeout(finalizarLoading, 15000);
+            }
+
+            function finalizarLoading() {
+                if (!loadingBar) return;
+                window.clearInterval(loadingTimer);
+                window.clearTimeout(safetyTimer);
+                loadingBar.style.width = '100%';
+                window.setTimeout(() => {
+                    loadingBar.classList.remove('is-active');
+                    loadingBar.style.width = '0';
+                }, 300);
+            }
+
+            function cliqueSimples(event) {
+                return !event.defaultPrevented && event.button === 0
+                    && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+            }
+
+            document.addEventListener('click', (event) => {
+                const link = event.target.closest('a[href]');
+                if (!link || !cliqueSimples(event)) return;
+                const href = link.getAttribute('href') || '';
+                if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
+                if (link.target && link.target !== '_self') return;
+                if (link.hasAttribute('download') || link.hasAttribute('data-no-loading')) return;
+                const url = new URL(link.href, window.location.href);
+                if (url.origin !== window.location.origin) return;
+                if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) return;
+                iniciarLoading();
+            });
+
+            document.addEventListener('submit', (event) => {
+                const form = event.target;
+                if (form.hasAttribute('data-no-loading')) return;
+                if (form.dataset.submitting === 'true') {
+                    event.preventDefault();
+                    return;
+                }
+                form.dataset.submitting = 'true';
+                const submitter = event.submitter
+                    || form.querySelector('button[type="submit"], button:not([type]), input[type="submit"]');
+                if (submitter) {
+                    submitter.classList.add('is-loading');
+                    // Desabilita no proximo tick para o valor do botao ainda ser enviado.
+                    window.setTimeout(() => { submitter.disabled = true; }, 0);
+                }
+                iniciarLoading();
+            });
+
+            // Ao voltar pelo cache (back/forward), reseta o estado de loading.
+            window.addEventListener('pageshow', (event) => {
+                if (!event.persisted) return;
+                finalizarLoading();
+                document.querySelectorAll('.is-loading').forEach((el) => {
+                    el.classList.remove('is-loading');
+                    el.disabled = false;
+                });
+                document.querySelectorAll('form[data-submitting="true"]').forEach((form) => {
+                    form.dataset.submitting = 'false';
+                });
             });
         })();
     </script>

@@ -1,0 +1,77 @@
+{% if mensagem.canal == 'whatsapp' %}
+<article class="chat-message {% if mensagem.direcao == 'entrada' %}chat-inbound{% else %}chat-outbound{% endif %}" data-message-id="{{ mensagem.id }}">
+    <div class="chat-bubble">
+        <div class="message-meta">
+            <strong>
+                {% if mensagem.direcao == 'entrada' %}
+                    {{ pessoa.nome }}
+                {% elif mensagem.criado_por %}
+                    {{ mensagem.criado_por.get_full_name|default:mensagem.criado_por.username }}
+                {% else %}
+                    Equipe
+                {% endif %}
+            </strong>
+            <span>{{ mensagem.enfileirada_em|date:'d/m/Y H:i' }}</span>
+        </div>
+        <p>{{ mensagem.conteudo|linebreaksbr }}</p>
+        <div class="message-footer">
+            <span class="message-channel whatsapp">WhatsApp</span>
+            <span class="message-status status-{{ mensagem.status_fila }}">{{ mensagem.get_status_fila_display }}</span>
+            {% if mensagem.enviada_em %}<span>Enviada {{ mensagem.enviada_em|date:'d/m H:i' }}</span>{% endif %}
+            {% if mensagem.entregue_em %}<span>Entregue {{ mensagem.entregue_em|date:'d/m H:i' }}</span>{% endif %}
+            {% if mensagem.lida_em %}<span>Lida {{ mensagem.lida_em|date:'d/m H:i' }}</span>{% endif %}
+        </div>
+        {% if mensagem.erro_ultimo_envio %}
+        <p class="message-error">{{ mensagem.erro_ultimo_envio }}</p>
+        {% endif %}
+        {% if mensagem.status_fila == 'pendente' %}
+        <form method="post" action="{% url 'mensagens-excluir' mensagem.id %}" class="inline-form message-remove-form">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'pessoas-mensagens' pessoa.pk %}{% if canal_atual != 'todos' %}?canal={{ canal_atual }}{% endif %}">
+            <button type="submit" class="btn secundario btn-excluir-pendente">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                <span class="btn-text">Remover</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</article>
+{% else %}
+<article class="email-message {% if mensagem.direcao == 'entrada' %}email-inbound{% else %}email-outbound{% endif %}" data-message-id="{{ mensagem.id }}">
+    <div class="email-message-header">
+        <div>
+            <span class="message-channel email">E-mail</span>
+            <h3>
+                {% if mensagem.direcao == 'entrada' %}
+                    Recebido de {{ pessoa.nome }}
+                {% elif mensagem.criado_por %}
+                    Enviado por {{ mensagem.criado_por.get_full_name|default:mensagem.criado_por.username }}
+                {% else %}
+                    Enviado pela equipe
+                {% endif %}
+            </h3>
+        </div>
+        <span>{{ mensagem.enfileirada_em|date:'d/m/Y H:i' }}</span>
+    </div>
+    <div class="email-message-body">
+        {{ mensagem.conteudo|linebreaksbr }}
+    </div>
+    <div class="message-footer">
+        <span class="message-status status-{{ mensagem.status_fila }}">{{ mensagem.get_status_fila_display }}</span>
+        {% if mensagem.enviada_em %}<span>Enviada {{ mensagem.enviada_em|date:'d/m/Y H:i' }}</span>{% endif %}
+    </div>
+    {% if mensagem.erro_ultimo_envio %}
+    <p class="message-error">{{ mensagem.erro_ultimo_envio }}</p>
+    {% endif %}
+    {% if mensagem.status_fila == 'pendente' %}
+    <form method="post" action="{% url 'mensagens-excluir' mensagem.id %}" class="inline-form message-remove-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'pessoas-mensagens' pessoa.pk %}{% if canal_atual != 'todos' %}?canal={{ canal_atual }}{% endif %}">
+        <button type="submit" class="btn secundario btn-excluir-pendente">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            <span class="btn-text">Remover</span>
+        </button>
+    </form>
+    {% endif %}
+</article>
+{% endif %}

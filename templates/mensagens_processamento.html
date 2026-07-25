@@ -4,52 +4,105 @@
 
 {% block content %}
 <div class="topo-acoes">
-    <h1>Processamento da fila de mensagens</h1>
-    <a class="btn secundario" href="{% url 'mensagens-fila' %}">Voltar para fila global</a>
+    <div>
+        <h1>Processamento da fila de mensagens</h1>
+        <p class="page-subtitle">Envie as mensagens de saida pendentes e acompanhe cada execucao.</p>
+    </div>
+    <a class="btn secundario" href="{% url 'mensagens-fila' %}">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="btn-text">Voltar para fila global</span>
+    </a>
 </div>
 
-{% if execucao_ativa %}
-<p class="result-count">Atualizacao automatica ativa: esta pagina recarrega a cada 5 segundos enquanto houver execucao em andamento.</p>
-{% endif %}
+<section class="queue-overview">
+    <article class="queue-kpi queue-kpi-pendentes">
+        <span class="queue-kpi-label">Pendentes</span>
+        <span class="queue-kpi-value">{{ fila.pendentes }}</span>
+        <span class="queue-kpi-hint">prontas para processar</span>
+    </article>
+    <article class="queue-kpi queue-kpi-agendadas">
+        <span class="queue-kpi-label">Agendadas</span>
+        <span class="queue-kpi-value">{{ fila.agendadas }}</span>
+        <span class="queue-kpi-hint">aguardando horario</span>
+    </article>
+    <article class="queue-kpi queue-kpi-processando">
+        <span class="queue-kpi-label">Processando</span>
+        <span class="queue-kpi-value">{{ fila.processando }}</span>
+        <span class="queue-kpi-hint">em envio agora</span>
+    </article>
+    <article class="queue-kpi queue-kpi-falhas">
+        <span class="queue-kpi-label">Falhas</span>
+        <span class="queue-kpi-value">{{ fila.falhas }}</span>
+        <span class="queue-kpi-hint">precisam de atencao</span>
+    </article>
+    <article class="queue-kpi queue-kpi-enviadas">
+        <span class="queue-kpi-label">Enviadas hoje</span>
+        <span class="queue-kpi-value">{{ fila.enviadas_hoje }}</span>
+        <span class="queue-kpi-hint">saidas concluidas</span>
+    </article>
+</section>
 
 <section class="dashboard-panel">
     <div class="panel-header">
         <h2>Controle</h2>
+        {% if execucao_ativa %}
+        <span class="exec-status exec-status-executando"><span class="exec-status-dot"></span> Em execucao</span>
+        {% endif %}
     </div>
 
     {% if execucao_ativa %}
-    <p>Execucao ativa: <strong>#{{ execucao_ativa.id }}</strong> (iniciada em {{ execucao_ativa.iniciado_em|date:'d/m/Y H:i:s' }})</p>
-    <form method="post" class="inline-actions">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="parar">
-        <input type="hidden" name="execucao_id" value="{{ execucao_ativa.id }}">
-        <button type="submit" class="danger">Parar execucao</button>
-    </form>
+    <div class="active-exec">
+        <div class="active-exec-head">
+            <strong>Execucao #{{ execucao_ativa.id }}</strong>
+            <span class="table-muted-text">iniciada em {{ execucao_ativa.iniciado_em|date:'d/m/Y H:i:s' }}</span>
+            {% if execucao_ativa.dry_run %}<span class="dry-run-pill">dry-run</span>{% endif %}
+        </div>
+        <div class="exec-progress-track exec-progress-indeterminate"></div>
+        <p class="table-muted-text">Processando ate {{ execucao_ativa.limite }} mensagem(ns). Esta pagina atualiza sozinha a cada 5 segundos.</p>
+
+        {% if execucao_ativa.log_tail %}
+        <pre class="exec-console">{{ execucao_ativa.log_tail }}</pre>
+        {% endif %}
+
+        <form method="post" class="inline-actions">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="parar">
+            <input type="hidden" name="execucao_id" value="{{ execucao_ativa.id }}">
+            <button type="submit" class="danger">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                <span class="btn-text">Parar execucao</span>
+            </button>
+        </form>
+    </div>
     {% else %}
-    <form method="post" class="filters-form">
+    <form method="post" class="processar-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="iniciar">
-        <div>
+        <div class="processar-field">
             <label for="limit">Limite por execucao</label>
             <input id="limit" type="number" name="limit" min="1" value="20">
+            <small>Maximo de mensagens enviadas nesta rodada.</small>
         </div>
-        <div>
-            <label style="display: inline-flex; align-items: center; gap: 6px; margin: 0;">
-                <input id="dry_run" type="checkbox" name="dry_run" style="width: auto;">
-                Modo dry-run
-            </label>
-        </div>
-        <button type="submit">Iniciar processamento</button>
+        <label class="processar-check" for="dry_run">
+            <input id="dry_run" type="checkbox" name="dry_run">
+            Modo dry-run (simula sem enviar)
+        </label>
+        <button type="submit">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span class="btn-text">Iniciar processamento</span>
+        </button>
     </form>
+    {% if fila.pendentes == 0 %}
+    <p class="table-muted-text" style="margin-top: 10px;">Nao ha mensagens pendentes na fila no momento.</p>
+    {% endif %}
     {% endif %}
 </section>
 
-<section class="dashboard-panel" style="margin-top: 14px;">
+<section class="dashboard-panel">
     <div class="panel-header">
         <h2>Historico de execucoes</h2>
+        <span class="result-count">{{ total_execucoes }} no total</span>
     </div>
-
-    <p class="result-count">{{ total_execucoes }} execucao(oes) registrada(s).</p>
 
     {% if execucoes %}
     <div class="table-wrap">
@@ -60,10 +113,9 @@
                     <th>Status</th>
                     <th>Solicitado por</th>
                     <th>Inicio</th>
-                    <th>Fim</th>
+                    <th>Duracao</th>
                     <th>Limite</th>
-                    <th>Dry-run</th>
-                    <th>Total</th>
+                    <th>Processado</th>
                     <th>Sucesso</th>
                     <th>Falha</th>
                 </tr>
@@ -72,26 +124,28 @@
                 {% for execucao in execucoes %}
                 <tr>
                     <td>#{{ execucao.id }}</td>
-                    <td>{{ execucao.get_status_display }}</td>
+                    <td>
+                        <span class="exec-status exec-status-{{ execucao.status }}"><span class="exec-status-dot"></span> {{ execucao.get_status_display }}</span>
+                        {% if execucao.dry_run %}<span class="dry-run-pill">dry-run</span>{% endif %}
+                    </td>
                     <td>{{ execucao.solicitado_por|default:'-' }}</td>
-                    <td>{{ execucao.iniciado_em|date:'d/m/Y H:i:s' }}</td>
-                    <td>{{ execucao.finalizado_em|date:'d/m/Y H:i:s'|default:'-' }}</td>
+                    <td>{{ execucao.iniciado_em|date:'d/m/Y H:i' }}</td>
+                    <td>{{ execucao.duracao_texto|default:'-' }}</td>
                     <td>{{ execucao.limite }}</td>
-                    <td>{% if execucao.dry_run %}Sim{% else %}Nao{% endif %}</td>
                     <td>{{ execucao.total_processado }}/{{ execucao.total_selecionado }}</td>
-                    <td>{{ execucao.total_sucesso }}</td>
-                    <td>{{ execucao.total_falha }}</td>
+                    <td><span class="metric-chip {% if execucao.total_sucesso %}metric-chip-sucesso{% else %}metric-chip-zero{% endif %}">{{ execucao.total_sucesso }}</span></td>
+                    <td><span class="metric-chip {% if execucao.total_falha %}metric-chip-falha{% else %}metric-chip-zero{% endif %}">{{ execucao.total_falha }}</span></td>
                 </tr>
-                <tr>
-                    <td colspan="10">
-                        <strong>Log:</strong>
-                        {% if execucao.log_execucao %}
-                        <pre style="white-space: pre-wrap; margin: 8px 0 0;">{{ execucao.log_execucao }}</pre>
-                        {% else %}
-                        <span>-</span>
-                        {% endif %}
+                {% if execucao.log_execucao %}
+                <tr class="exec-log-row">
+                    <td colspan="9">
+                        <details class="exec-log">
+                            <summary>Ver log ({{ execucao.log_linhas }} linha{{ execucao.log_linhas|pluralize }})</summary>
+                            <pre class="exec-console">{{ execucao.log_execucao }}</pre>
+                        </details>
                     </td>
                 </tr>
+                {% endif %}
                 {% endfor %}
             </tbody>
         </table>

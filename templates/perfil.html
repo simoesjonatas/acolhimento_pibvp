@@ -3,98 +3,167 @@
 {% block title %}Meu perfil{% endblock %}
 
 {% block content %}
-<section class="dashboard-panel">
-    <div class="panel-header">
-        <h1>Meu perfil</h1>
-    </div>
-
-    <div class="table-wrap">
-        <table>
-            <tbody>
-                <tr>
-                    <th>Usuario</th>
-                    <td>{{ usuario_obj.username }}</td>
-                </tr>
-                <tr>
-                    <th>Perfil administrativo</th>
-                    <td>{% if usuario_obj.is_staff or usuario_obj.is_superuser %}Sim{% else %}Nao{% endif %}</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-</section>
-
-<section class="dashboard-panel">
-    <div class="panel-header">
-        <h2>Atualizar dados</h2>
-    </div>
-
-    <form method="post" class="stack-form">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="salvar_perfil">
-
-        {% if perfil_form.non_field_errors %}
-        <div class="form-errors">
-            {{ perfil_form.non_field_errors }}
+<div class="profile-page">
+    <section class="page-hero profile-hero">
+        <div class="profile-identity">
+            <span class="profile-avatar" aria-hidden="true">{{ usuario_obj.username|slice:':1'|upper }}</span>
+            <div>
+                <span class="section-eyebrow">Conta</span>
+                <h1>Meu perfil</h1>
+                <p>{{ usuario_obj.get_full_name|default:usuario_obj.username }}</p>
+            </div>
         </div>
-        {% endif %}
+        <span class="profile-role-badge {% if usuario_obj.is_staff or usuario_obj.is_superuser %}is-admin{% endif %}">
+            {% if usuario_obj.is_staff or usuario_obj.is_superuser %}Perfil administrativo{% else %}Perfil da equipe{% endif %}
+        </span>
+    </section>
 
-        <p>
-            <label for="{{ perfil_form.first_name.id_for_label }}">Nome</label>
-            {{ perfil_form.first_name }}
-            {{ perfil_form.first_name.errors }}
-        </p>
-        <p>
-            <label for="{{ perfil_form.last_name.id_for_label }}">Sobrenome</label>
-            {{ perfil_form.last_name }}
-            {{ perfil_form.last_name.errors }}
-        </p>
-        <p>
-            <label for="{{ perfil_form.email.id_for_label }}">Email</label>
-            {{ perfil_form.email }}
-            {{ perfil_form.email.errors }}
-        </p>
+    <section class="profile-layout">
+        <aside class="profile-summary-card">
+            <h2>Resumo da conta</h2>
+            <dl class="profile-summary-list">
+                <div>
+                    <dt>Usuario</dt>
+                    <dd>{{ usuario_obj.username }}</dd>
+                </div>
+                <div>
+                    <dt>Nome</dt>
+                    <dd>{{ usuario_obj.get_full_name|default:'-' }}</dd>
+                </div>
+                <div>
+                    <dt>Email</dt>
+                    <dd>{{ usuario_obj.email|default:'-' }}</dd>
+                </div>
+                <div>
+                    <dt>Acesso administrativo</dt>
+                    <dd>{% if usuario_obj.is_staff or usuario_obj.is_superuser %}Sim{% else %}Nao{% endif %}</dd>
+                </div>
+            </dl>
+        </aside>
 
-        <p class="action-row">
-            <button type="submit">Salvar dados</button>
-        </p>
-    </form>
-</section>
+        <div class="profile-forms-column">
+            <section class="profile-form-card">
+                <div class="panel-header">
+                    <div>
+                        <h2>Atualizar dados</h2>
+                        <p>Essas informacoes aparecem para a equipe nos registros internos.</p>
+                    </div>
+                </div>
 
-<section class="dashboard-panel">
-    <div class="panel-header">
-        <h2>Trocar senha</h2>
-    </div>
+                <form method="post" class="profile-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="salvar_perfil">
 
-    <form method="post" class="stack-form">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="trocar_senha">
+                    {% if perfil_form.non_field_errors %}
+                    <div class="form-errors">
+                        {{ perfil_form.non_field_errors }}
+                    </div>
+                    {% endif %}
 
-        {% if senha_form.non_field_errors %}
-        <div class="form-errors">
-            {{ senha_form.non_field_errors }}
+                    <div class="profile-form-grid">
+                        <p>
+                            <label for="{{ perfil_form.first_name.id_for_label }}">Nome</label>
+                            {{ perfil_form.first_name }}
+                            {{ perfil_form.first_name.errors }}
+                        </p>
+                        <p>
+                            <label for="{{ perfil_form.last_name.id_for_label }}">Sobrenome</label>
+                            {{ perfil_form.last_name }}
+                            {{ perfil_form.last_name.errors }}
+                        </p>
+                        <p class="profile-form-wide">
+                            <label for="{{ perfil_form.email.id_for_label }}">Email</label>
+                            {{ perfil_form.email }}
+                            {{ perfil_form.email.errors }}
+                        </p>
+                    </div>
+
+                    <p class="action-row">
+                        <button type="submit">
+                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                            <span class="btn-text">Salvar dados</span>
+                        </button>
+                    </p>
+                </form>
+            </section>
+
+            <section class="profile-form-card">
+                <div class="panel-header">
+                    <div>
+                        <h2>Trocar senha</h2>
+                        <p>Use uma senha forte e evite compartilhar sua conta.</p>
+                    </div>
+                </div>
+
+                <form method="post" class="profile-form" data-profile-password-form>
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="trocar_senha">
+
+                    {% if senha_form.non_field_errors %}
+                    <div class="form-errors">
+                        {{ senha_form.non_field_errors }}
+                    </div>
+                    {% endif %}
+
+                    <p>
+                        <label for="{{ senha_form.old_password.id_for_label }}">Senha atual</label>
+                        {{ senha_form.old_password }}
+                        {{ senha_form.old_password.errors }}
+                    </p>
+                    <p>
+                        <label for="{{ senha_form.new_password1.id_for_label }}">Nova senha</label>
+                        {{ senha_form.new_password1 }}
+                        {{ senha_form.new_password1.errors }}
+                    </p>
+                    <p>
+                        <label for="{{ senha_form.new_password2.id_for_label }}">Confirmar nova senha</label>
+                        {{ senha_form.new_password2 }}
+                        {{ senha_form.new_password2.errors }}
+                    </p>
+
+                    <p class="action-row">
+                        <button type="submit">
+                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1v6"/><path d="M8 5a9 9 0 1 0 8 0"/></svg>
+                            <span class="btn-text">Atualizar senha</span>
+                        </button>
+                    </p>
+                </form>
+            </section>
         </div>
-        {% endif %}
+    </section>
+</div>
 
-        <p>
-            <label for="{{ senha_form.old_password.id_for_label }}">Senha atual</label>
-            {{ senha_form.old_password }}
-            {{ senha_form.old_password.errors }}
-        </p>
-        <p>
-            <label for="{{ senha_form.new_password1.id_for_label }}">Nova senha</label>
-            {{ senha_form.new_password1 }}
-            {{ senha_form.new_password1.errors }}
-        </p>
-        <p>
-            <label for="{{ senha_form.new_password2.id_for_label }}">Confirmar nova senha</label>
-            {{ senha_form.new_password2 }}
-            {{ senha_form.new_password2.errors }}
-        </p>
+<script>
+    (function () {
+        var passwordForm = document.querySelector('[data-profile-password-form]');
+        if (!passwordForm) {
+            return;
+        }
 
-        <p class="action-row">
-            <button type="submit">Atualizar senha</button>
-        </p>
-    </form>
-</section>
+        var passwordInputs = passwordForm.querySelectorAll('input[type="password"]');
+        passwordInputs.forEach(function (input) {
+            var wrapper = document.createElement('span');
+            wrapper.className = 'profile-password-control';
+            input.parentNode.insertBefore(wrapper, input);
+            wrapper.appendChild(input);
+
+            var toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'profile-password-toggle';
+            toggle.setAttribute('aria-label', 'Mostrar senha');
+            toggle.setAttribute('aria-pressed', 'false');
+            toggle.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+            wrapper.appendChild(toggle);
+
+            toggle.addEventListener('click', function () {
+                var shouldShow = input.type === 'password';
+                input.type = shouldShow ? 'text' : 'password';
+                toggle.classList.toggle('is-visible', shouldShow);
+                toggle.setAttribute('aria-label', shouldShow ? 'Ocultar senha' : 'Mostrar senha');
+                toggle.setAttribute('aria-pressed', String(shouldShow));
+                input.focus();
+            });
+        });
+    })();
+</script>
 {% endblock %}

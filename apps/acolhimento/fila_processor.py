@@ -5,6 +5,10 @@ from django.utils import timezone
 
 from apps.acolhimento.models import MensagemContato
 from apps.acolhimento.twilio_service import TwilioWhatsAppError, send_whatsapp_message
+from apps.acolhimento.whatsapp_rules import (
+    WHATSAPP_OPTIN_REQUIRED_ERROR,
+    mensagem_pode_ser_enviada_no_whatsapp,
+)
 
 
 ProgressCallback = Callable[[str], None]
@@ -77,6 +81,30 @@ def processar_fila_mensagens(
             if progress_callback:
                 progress_callback('Processamento interrompido por solicitacao do usuario.')
             break
+
+        if not mensagem_pode_ser_enviada_no_whatsapp(mensagem):
+            if not dry_run:
+                mensagem.status_fila = MensagemContato.StatusFilaChoices.CANCELADA
+                mensagem.erro_ultimo_envio = WHATSAPP_OPTIN_REQUIRED_ERROR
+                metadata = dict(mensagem.metadata_envio or {})
+                metadata['bloqueio_envio'] = {
+                    'motivo': 'whatsapp_sem_interacao_previa',
+                    'registrado_em': timezone.now().isoformat(),
+                }
+                mensagem.metadata_envio = metadata
+                mensagem.save(
+                    update_fields=[
+                        'status_fila',
+                        'erro_ultimo_envio',
+                        'metadata_envio',
+                        'atualizado_em',
+                    ]
+                )
+            falha += 1
+            processadas += 1
+            if progress_callback:
+                progress_callback(f'[{mensagem.id}] Bloqueada: {WHATSAPP_OPTIN_REQUIRED_ERROR}')
+            continue
 
         try:
             destino = normalize_phone_br(mensagem.pessoa.telefone_whatsapp)

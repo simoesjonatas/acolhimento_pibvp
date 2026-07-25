@@ -10,9 +10,11 @@ class PrimeiroContato(models.Model):
 		AUTO_CADASTRO = 'auto_cadastro', 'Auto cadastro'
 
 	class StatusAcolhimento(models.TextChoices):
+		# A ordem de declaracao representa a ordem evolutiva do acolhimento.
 		PRIMEIRO_CONTATO = 'primeiro_contato', 'Primeiro contato'
 		ROBO = 'robo', 'Robo'
 		EM_ACOMPANHAMENTO = 'em_acompanhamento', 'Em acompanhamento'
+		PARTICIPANTE = 'participante', 'Participante'
 		MEMBRO = 'membro', 'Membro'
 
 	class GeneroChoices(models.TextChoices):
@@ -91,6 +93,9 @@ class PrimeiroContato(models.Model):
 		ordering = ['-criado_em']
 		verbose_name = 'Primeiro contato'
 		verbose_name_plural = 'Primeiros contatos'
+		permissions = [
+			('pode_conversar_pessoas', 'Pode ver e enviar mensagens das pessoas'),
+		]
 
 	def __str__(self):
 		return f'{self.nome} ({self.get_status_display()})'

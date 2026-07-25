@@ -3,20 +3,174 @@
 {% block title %}{% if object %}Editar usuario{% else %}Novo usuario{% endif %}{% endblock %}
 
 {% block content %}
-<h1>{% if object %}Editar usuario{% else %}Novo usuario{% endif %}</h1>
+<div class="user-admin-page">
+    <section class="page-hero user-admin-hero">
+        <div class="profile-identity">
+            <span class="profile-avatar" aria-hidden="true">
+                {% if object %}{{ object.username|slice:':1'|upper }}{% else %}+{% endif %}
+            </span>
+            <div>
+                <span class="section-eyebrow">Usuarios</span>
+                <h1>{% if object %}Editar usuario{% else %}Novo usuario{% endif %}</h1>
+                <p>
+                    {% if object %}
+                        {{ object.get_full_name|default:object.username }}
+                    {% else %}
+                        Cadastro de acesso da equipe
+                    {% endif %}
+                </p>
+            </div>
+        </div>
 
-<form method="post" class="stack-form">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <p class="action-row">
-        <button type="submit">
-            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            <span class="btn-text">Salvar</span>
-        </button>
         <a class="btn secundario" href="{% url 'usuarios-lista' %}">
             <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-            <span class="btn-text">Cancelar</span>
+            <span class="btn-text">Voltar para usuarios</span>
         </a>
-    </p>
-</form>
+    </section>
+
+    <section class="user-editor-layout">
+        <aside class="profile-summary-card user-account-card">
+            <h2>Resumo da conta</h2>
+            {% if object %}
+            <div class="user-status-row">
+                <span class="profile-role-badge {% if object.is_staff or object.is_superuser %}is-admin{% endif %}">
+                    {% if object.is_staff or object.is_superuser %}Administrativo{% else %}Equipe{% endif %}
+                </span>
+                <span class="profile-role-badge {% if object.is_active %}is-active{% else %}is-inactive{% endif %}">
+                    {% if object.is_active %}Ativo{% else %}Inativo{% endif %}
+                </span>
+                <span class="profile-role-badge {% if object.is_staff or object.is_superuser or form.pode_conversar_pessoas.value %}is-active{% endif %}">
+                    {% if object.is_staff or object.is_superuser or form.pode_conversar_pessoas.value %}Mensagens liberadas{% else %}Sem mensagens{% endif %}
+                </span>
+            </div>
+
+            <dl class="profile-summary-list">
+                <div>
+                    <dt>Usuario</dt>
+                    <dd>{{ object.username }}</dd>
+                </div>
+                <div>
+                    <dt>Nome</dt>
+                    <dd>{{ object.get_full_name|default:'-' }}</dd>
+                </div>
+                <div>
+                    <dt>Email</dt>
+                    <dd>{{ object.email|default:'-' }}</dd>
+                </div>
+                <div>
+                    <dt>Ultimo acesso</dt>
+                    <dd>{{ object.last_login|date:'d/m/Y H:i'|default:'-' }}</dd>
+                </div>
+                <div>
+                    <dt>Criado em</dt>
+                    <dd>{{ object.date_joined|date:'d/m/Y H:i' }}</dd>
+                </div>
+            </dl>
+            {% else %}
+            <p class="empty-state">Preencha os dados para liberar o acesso da equipe.</p>
+            {% endif %}
+        </aside>
+
+        <section class="profile-form-card user-form-card">
+            <div class="panel-header">
+                <div>
+                    <h2>Dados de acesso</h2>
+                    <p>{% if object %}Atualize identificacao e permissoes do usuario.{% else %}Defina identificacao, senha inicial e permissoes.{% endif %}</p>
+                </div>
+            </div>
+
+            <form method="post" class="user-form">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="form-errors">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="user-form-grid">
+                    <p class="user-form-wide">
+                        <label for="{{ form.username.id_for_label }}">Usuario</label>
+                        {{ form.username }}
+                        {{ form.username.errors }}
+                    </p>
+                    <p>
+                        <label for="{{ form.first_name.id_for_label }}">Nome</label>
+                        {{ form.first_name }}
+                        {{ form.first_name.errors }}
+                    </p>
+                    <p>
+                        <label for="{{ form.last_name.id_for_label }}">Sobrenome</label>
+                        {{ form.last_name }}
+                        {{ form.last_name.errors }}
+                    </p>
+                    <p class="user-form-wide">
+                        <label for="{{ form.email.id_for_label }}">Email</label>
+                        {{ form.email }}
+                        {{ form.email.errors }}
+                    </p>
+                </div>
+
+                {% if not object %}
+                <div class="user-form-section">
+                    <h3>Senha inicial</h3>
+                    <div class="user-form-grid">
+                        <p>
+                            <label for="{{ form.password1.id_for_label }}">Senha</label>
+                            {{ form.password1 }}
+                            {{ form.password1.errors }}
+                        </p>
+                        <p>
+                            <label for="{{ form.password2.id_for_label }}">Confirmar senha</label>
+                            {{ form.password2 }}
+                            {{ form.password2.errors }}
+                        </p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="user-form-section">
+                    <h3>Permissoes</h3>
+                    <div class="user-permission-grid">
+                        <label class="permission-toggle" for="{{ form.is_active.id_for_label }}">
+                            {{ form.is_active }}
+                            <span>
+                                <strong>Conta ativa</strong>
+                                <small>Permite login no sistema</small>
+                            </span>
+                        </label>
+                        <label class="permission-toggle" for="{{ form.pode_conversar_pessoas.id_for_label }}">
+                            {{ form.pode_conversar_pessoas }}
+                            <span>
+                                <strong>Mensagens das pessoas</strong>
+                                <small>Permite ver e enviar mensagens individuais</small>
+                            </span>
+                        </label>
+                        <label class="permission-toggle" for="{{ form.is_staff.id_for_label }}">
+                            {{ form.is_staff }}
+                            <span>
+                                <strong>Acesso administrativo</strong>
+                                <small>Libera usuarios, fila, processamento e disparos</small>
+                            </span>
+                        </label>
+                    </div>
+                    {{ form.is_active.errors }}
+                    {{ form.pode_conversar_pessoas.errors }}
+                    {{ form.is_staff.errors }}
+                </div>
+
+                <p class="action-row">
+                    <button type="submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                        <span class="btn-text">Salvar usuario</span>
+                    </button>
+                    <a class="btn secundario" href="{% url 'usuarios-lista' %}">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                        <span class="btn-text">Cancelar</span>
+                    </a>
+                </p>
+            </form>
+        </section>
+    </section>
+</div>
 {% endblock %}

@@ -8,8 +8,9 @@ from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db import close_old_connections
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404, redirect
+from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -22,6 +23,10 @@ from apps.acolhimento.fila_processor import processar_fila_mensagens
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PrimeiroContatoForm
 from apps.acolhimento.models import ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
+from apps.acolhimento.whatsapp_rules import WHATSAPP_OPTIN_REQUIRED_ERROR, pessoa_pode_receber_whatsapp
+
+
+PERMISSAO_CONVERSAR_PESSOAS = 'acolhimento.pode_conversar_pessoas'
 
 
 class MensagensPermissaoMixin(UserPassesTestMixin):
@@ -29,6 +34,14 @@ class MensagensPermissaoMixin(UserPassesTestMixin):
 
 	def test_func(self):
 		return self.request.user.is_staff or self.request.user.is_superuser
+
+
+class ConversasPessoasPermissaoMixin(UserPassesTestMixin):
+	raise_exception = True
+
+	def test_func(self):
+		user = self.request.user
+		return user.is_staff or user.is_superuser or user.has_perm(PERMISSAO_CONVERSAR_PESSOAS)
 
 
 class PrimeiroContatoQuerysetMixin:
@@ -215,6 +228,20 @@ class MensagemFilaListView(LoginRequiredMixin, MensagensPermissaoMixin, Mensagem
 		query_params = self.request.GET.copy()
 		query_params.pop('page', None)
 		filtro_query = query_params.urlencode()
+		fila_queryset = self.get_queryset()
+		resumo_fila = fila_queryset.aggregate(
+			pendentes=Count('id', filter=Q(status_fila=MensagemContato.StatusFilaChoices.PENDENTE)),
+			falhas=Count('id', filter=Q(status_fila=MensagemContato.StatusFilaChoices.FALHA)),
+			canceladas=Count('id', filter=Q(status_fila=MensagemContato.StatusFilaChoices.CANCELADA)),
+			sem_resposta=Count(
+				'id',
+				filter=Q(
+					direcao=MensagemContato.DirecaoChoices.SAIDA,
+					resposta_recebida_em__isnull=True,
+				),
+			),
+			recebidas=Count('id', filter=Q(direcao=MensagemContato.DirecaoChoices.ENTRADA)),
+		)
 
 		sort_coluna_atual, sort_direcao_atual = self.get_sort_state()
 		base_sort_params = self.request.GET.copy()
@@ -251,6 +278,13 @@ class MensagemFilaListView(LoginRequiredMixin, MensagensPermissaoMixin, Mensagem
 		context['sort_links'] = sort_links
 		context['total_filtrado'] = context['paginator'].count
 		context['filtro_query'] = filtro_query
+		context['fila_resumo_cards'] = [
+			{'rotulo': 'Pendentes', 'valor': resumo_fila['pendentes'], 'classe': 'is-pending'},
+			{'rotulo': 'Falhas', 'valor': resumo_fila['falhas'], 'classe': 'is-failed'},
+			{'rotulo': 'Canceladas', 'valor': resumo_fila['canceladas'], 'classe': 'is-canceled'},
+			{'rotulo': 'Sem resposta', 'valor': resumo_fila['sem_resposta'], 'classe': 'is-waiting'},
+			{'rotulo': 'Recebidas', 'valor': resumo_fila['recebidas'], 'classe': 'is-inbound'},
+		]
 		return context
 
 
@@ -362,20 +396,58 @@ class ProcessamentoFilaControleView(LoginRequiredMixin, MensagensPermissaoMixin,
 		messages.error(request, 'Acao invalida.')
 		return redirect('mensagens-processamento')
 
+	@staticmethod
+	def _duracao_texto(execucao):
+		if not (execucao.iniciado_em and execucao.finalizado_em):
+			return None
+		total = int((execucao.finalizado_em - execucao.iniciado_em).total_seconds())
+		if total < 60:
+			return f'{total}s'
+		minutos, segundos = divmod(total, 60)
+		if minutos < 60:
+			return f'{minutos}min {segundos}s'
+		horas, minutos = divmod(minutos, 60)
+		return f'{horas}h {minutos}min'
+
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
 		execucoes_queryset = ExecucaoProcessamentoFila.objects.select_related('solicitado_por')
 		paginator = Paginator(execucoes_queryset, 8)
 		page_obj = paginator.get_page(self.request.GET.get('page'))
 
-		context['execucoes'] = page_obj.object_list
+		execucoes = list(page_obj.object_list)
+		for execucao in execucoes:
+			execucao.duracao_texto = self._duracao_texto(execucao)
+			execucao.log_linhas = len(execucao.log_execucao.strip().splitlines()) if execucao.log_execucao else 0
+
+		execucao_ativa = execucoes_queryset.filter(
+			status=ExecucaoProcessamentoFila.StatusExecucaoChoices.EXECUTANDO
+		).first()
+		if execucao_ativa:
+			linhas = execucao_ativa.log_execucao.strip().splitlines() if execucao_ativa.log_execucao else []
+			execucao_ativa.log_tail = '\n'.join(linhas[-8:])
+
+		status_fila = MensagemContato.StatusFilaChoices
+		fila = MensagemContato.objects.filter(
+			direcao=MensagemContato.DirecaoChoices.SAIDA
+		).aggregate(
+			pendentes=Count('id', filter=Q(status_fila=status_fila.PENDENTE)),
+			agendadas=Count('id', filter=Q(status_fila=status_fila.AGENDADA)),
+			processando=Count('id', filter=Q(status_fila=status_fila.PROCESSANDO)),
+			falhas=Count('id', filter=Q(status_fila=status_fila.FALHA)),
+			enviadas_hoje=Count(
+				'id',
+				filter=Q(status_fila=status_fila.ENVIADA, enviada_em__date=timezone.localdate()),
+			),
+		)
+
+		context['execucoes'] = execucoes
 		context['page_obj'] = page_obj
 		context['paginator'] = paginator
 		context['is_paginated'] = paginator.num_pages > 1
-		context['execucao_ativa'] = execucoes_queryset.filter(
-			status=ExecucaoProcessamentoFila.StatusExecucaoChoices.EXECUTANDO
-		).first()
+		context['execucao_ativa'] = execucao_ativa
 		context['total_execucoes'] = paginator.count
+		context['fila'] = fila
 		return context
 
 
@@ -385,7 +457,9 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 	success_url = reverse_lazy('mensagens-disparo-massa')
 
 	def get_pessoas_queryset(self):
-		queryset = PrimeiroContato.objects.select_related('responsavel_atual').all()
+		queryset = PrimeiroContato.objects.select_related('responsavel_atual').exclude(
+			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO
+		)
 
 		busca = self.request.GET.get('q', '').strip()
 		status = self.request.GET.get('status', '').strip()
@@ -447,7 +521,11 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		context['origem_atual'] = self.request.GET.get('origem', '').strip()
 		context['responsavel_atual_filtro'] = self.request.GET.get('responsavel', '').strip()
 		context['sem_pendente_atual'] = self.request.GET.get('sem_pendente', '').strip()
-		context['status_choices'] = PrimeiroContato.StatusAcolhimento.choices
+		context['status_choices'] = [
+			(valor, rotulo)
+			for valor, rotulo in PrimeiroContato.StatusAcolhimento.choices
+			if valor != PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO
+		]
 		context['origem_choices'] = PrimeiroContato.OrigemCadastroChoices.choices
 		context['responsaveis_choices'] = responsaveis_choices
 		context['total_pessoas_filtradas'] = queryset_filtrado.count()
@@ -455,9 +533,23 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		return context
 
 	def form_valid(self, form):
-		pessoas = form.cleaned_data['pessoas']
+		pessoas = list(form.cleaned_data['pessoas'])
 		canal = form.cleaned_data['canal']
 		conteudo = form.cleaned_data['conteudo']
+
+		if canal == MensagemContato.CanalChoices.WHATSAPP:
+			pessoas_bloqueadas = [pessoa for pessoa in pessoas if not pessoa_pode_receber_whatsapp(pessoa)]
+			pessoas = [pessoa for pessoa in pessoas if pessoa_pode_receber_whatsapp(pessoa)]
+
+			if pessoas_bloqueadas:
+				messages.warning(
+					self.request,
+					f'{len(pessoas_bloqueadas)} pessoa(s) ignorada(s): ainda nao responderam ao template de primeiro contato.',
+				)
+
+			if not pessoas:
+				messages.error(self.request, 'Nenhuma mensagem WhatsApp foi criada. Todos os selecionados ainda aguardam resposta ao template.')
+				return redirect(self.success_url)
 
 		mensagens = [
 			MensagemContato(
@@ -525,6 +617,23 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 			direcao=MensagemContato.DirecaoChoices.ENTRADA,
 			visualizada_equipe_em__isnull=True,
 		).exists()
+
+		# Fluxo evolutivo do acolhimento, na ordem de declaracao do TextChoices.
+		valores = list(PrimeiroContato.StatusAcolhimento.values)
+		atual_index = valores.index(self.object.status) if self.object.status in valores else -1
+		status_fluxo = []
+		for indice, (valor, rotulo) in enumerate(PrimeiroContato.StatusAcolhimento.choices):
+			if indice < atual_index:
+				estado = 'concluido'
+			elif indice == atual_index:
+				estado = 'atual'
+			else:
+				estado = 'futuro'
+			status_fluxo.append({'valor': valor, 'rotulo': rotulo, 'estado': estado})
+
+		context['status_choices'] = PrimeiroContato.StatusAcolhimento.choices
+		context['status_atual'] = self.object.status
+		context['status_fluxo'] = status_fluxo
 		return context
 
 	def post(self, request, *args, **kwargs):
@@ -543,10 +652,51 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		return self.render_to_response(context)
 
 
-class PrimeiroContatoMensagensView(LoginRequiredMixin, MensagensPermissaoMixin, DetailView):
+class PrimeiroContatoStatusUpdateView(LoginRequiredMixin, View):
+	def post(self, request, pk, *args, **kwargs):
+		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		novo_status = (request.POST.get('status') or '').strip()
+
+		if novo_status not in PrimeiroContato.StatusAcolhimento.values:
+			messages.error(request, 'Status invalido.')
+			return redirect('pessoas-detalhe', pk=pessoa.pk)
+
+		if novo_status == pessoa.status:
+			messages.info(request, 'A pessoa ja esta neste status.')
+			return redirect('pessoas-detalhe', pk=pessoa.pk)
+
+		status_anterior_label = pessoa.get_status_display()
+		pessoa.status = novo_status
+		pessoa.save(update_fields=['status', 'atualizado_em'])
+
+		InteracaoAcolhimento.objects.create(
+			pessoa=pessoa,
+			tipo=InteracaoAcolhimento.TipoInteracao.OBSERVACAO,
+			descricao=f'Status alterado de "{status_anterior_label}" para "{pessoa.get_status_display()}".',
+		)
+
+		messages.success(request, f'Status atualizado para "{pessoa.get_status_display()}".')
+		return redirect('pessoas-detalhe', pk=pessoa.pk)
+
+
+class PrimeiroContatoMensagensView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, DetailView):
 	template_name = 'pessoa_mensagens.html'
 	model = PrimeiroContato
 	context_object_name = 'pessoa'
+	page_size = 20
+
+	def get_canal_atual(self):
+		canal_atual = self.request.GET.get('canal', 'todos').strip()
+		canais_validos = {choice[0] for choice in MensagemContato.CanalChoices.choices}
+		if canal_atual not in canais_validos:
+			canal_atual = 'todos'
+		return canal_atual
+
+	def get_mensagens_queryset(self, canal_atual):
+		mensagens_queryset = self.object.mensagens.select_related('campanha', 'criado_por')
+		if canal_atual != 'todos':
+			mensagens_queryset = mensagens_queryset.filter(canal=canal_atual)
+		return mensagens_queryset
 
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
@@ -555,12 +705,85 @@ class PrimeiroContatoMensagensView(LoginRequiredMixin, MensagensPermissaoMixin, 
 			direcao=MensagemContato.DirecaoChoices.ENTRADA,
 			visualizada_equipe_em__isnull=True,
 		).update(visualizada_equipe_em=agora)
-		context['mensagens'] = self.object.mensagens.select_related('campanha').order_by('-enfileirada_em')[:50]
+
+		canal_atual = self.get_canal_atual()
+		mensagens_queryset = self.get_mensagens_queryset(canal_atual)
+
+		total_mensagens = mensagens_queryset.count()
+		mensagens_recentes = list(mensagens_queryset.order_by('-enfileirada_em', '-id')[:self.page_size])
+		abas_canal = [
+			{
+				'valor': 'todos',
+				'rotulo': 'Todos',
+				'total': self.object.mensagens.count(),
+			},
+			{
+				'valor': MensagemContato.CanalChoices.WHATSAPP,
+				'rotulo': 'WhatsApp',
+				'total': self.object.mensagens.filter(canal=MensagemContato.CanalChoices.WHATSAPP).count(),
+			},
+			{
+				'valor': MensagemContato.CanalChoices.EMAIL,
+				'rotulo': 'E-mail',
+				'total': self.object.mensagens.filter(canal=MensagemContato.CanalChoices.EMAIL).count(),
+			},
+		]
+
+		mensagens = list(reversed(mensagens_recentes))
+		context['mensagens'] = mensagens
+		context['abas_canal'] = abas_canal
+		context['canal_atual'] = canal_atual
+		context['has_more_messages'] = total_mensagens > len(mensagens_recentes)
+		context['oldest_message_id'] = mensagens[0].id if mensagens else ''
 		context['enfileirar_mensagem_form'] = kwargs.get('enfileirar_mensagem_form', EnfileirarMensagemForm())
 		return context
 
 
-class PrimeiroContatoEnfileirarMensagemView(LoginRequiredMixin, MensagensPermissaoMixin, View):
+class PrimeiroContatoMensagensMaisView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, View):
+	page_size = 20
+
+	def get(self, request, pk, *args, **kwargs):
+		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		canal_atual = request.GET.get('canal', 'todos').strip()
+		canais_validos = {choice[0] for choice in MensagemContato.CanalChoices.choices}
+		if canal_atual not in canais_validos:
+			canal_atual = 'todos'
+
+		mensagens_queryset = pessoa.mensagens.select_related('campanha', 'criado_por')
+		if canal_atual != 'todos':
+			mensagens_queryset = mensagens_queryset.filter(canal=canal_atual)
+
+		before_id = request.GET.get('before', '').strip()
+		if before_id.isdigit():
+			mensagem_cursor = mensagens_queryset.filter(id=int(before_id)).first()
+			if mensagem_cursor:
+				mensagens_queryset = mensagens_queryset.filter(
+					Q(enfileirada_em__lt=mensagem_cursor.enfileirada_em)
+					| Q(enfileirada_em=mensagem_cursor.enfileirada_em, id__lt=mensagem_cursor.id)
+				)
+
+		mensagens_recentes = list(mensagens_queryset.order_by('-enfileirada_em', '-id')[: self.page_size + 1])
+		has_more = len(mensagens_recentes) > self.page_size
+		mensagens = list(reversed(mensagens_recentes[: self.page_size]))
+		html = ''.join(
+			render_to_string(
+				'partials/mensagem_conversa_item.html',
+				{'mensagem': mensagem, 'pessoa': pessoa, 'canal_atual': canal_atual},
+				request=request,
+			)
+			for mensagem in mensagens
+		)
+
+		return JsonResponse(
+			{
+				'html': html,
+				'has_more': has_more,
+				'next_before': mensagens[0].id if mensagens and has_more else '',
+			}
+		)
+
+
+class PrimeiroContatoEnfileirarMensagemView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, View):
 	def post(self, request, pk, *args, **kwargs):
 		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
 		form = EnfileirarMensagemForm(request.POST)
@@ -573,6 +796,14 @@ class PrimeiroContatoEnfileirarMensagemView(LoginRequiredMixin, MensagensPermiss
 			mensagem.agendada_para = None
 			mensagem.direcao = MensagemContato.DirecaoChoices.SAIDA
 			mensagem.status_fila = MensagemContato.StatusFilaChoices.PENDENTE
+
+			if (
+				mensagem.canal == MensagemContato.CanalChoices.WHATSAPP
+				and not pessoa_pode_receber_whatsapp(pessoa)
+			):
+				messages.error(request, WHATSAPP_OPTIN_REQUIRED_ERROR)
+				return redirect('pessoas-mensagens', pk=pessoa.pk)
+
 			mensagem.save()
 			messages.success(request, 'Mensagem enfileirada com sucesso.')
 			return redirect('pessoas-mensagens', pk=pessoa.pk)
@@ -584,7 +815,7 @@ class PrimeiroContatoEnfileirarMensagemView(LoginRequiredMixin, MensagensPermiss
 		return redirect('pessoas-mensagens', pk=pessoa.pk)
 
 
-class MensagemContatoExcluirView(LoginRequiredMixin, MensagensPermissaoMixin, View):
+class MensagemContatoExcluirView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, View):
 	def post(self, request, pk, *args, **kwargs):
 		mensagem = get_object_or_404(MensagemContato.objects.select_related('pessoa'), pk=pk)
 		pessoa = mensagem.pessoa
@@ -714,6 +945,22 @@ class TwilioInboundWebhookView(View):
 				pessoa=pessoa,
 				tipo=InteracaoAcolhimento.TipoInteracao.RESPOSTA_RECEBIDA,
 				descricao='Pessoa iniciou a interacao enviando mensagem no WhatsApp.',
+				data_interacao=agora.date(),
+			)
+		elif not pessoa.iniciou_interacao:
+			pessoa.iniciou_interacao = True
+			update_fields = ['iniciou_interacao', 'atualizado_em']
+			if pessoa.status in {
+				PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO,
+				PrimeiroContato.StatusAcolhimento.ROBO,
+			}:
+				pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
+				update_fields.append('status')
+			pessoa.save(update_fields=update_fields)
+			InteracaoAcolhimento.objects.create(
+				pessoa=pessoa,
+				tipo=InteracaoAcolhimento.TipoInteracao.RESPOSTA_RECEBIDA,
+				descricao='Pessoa respondeu no WhatsApp e liberou o envio de mensagens.',
 				data_interacao=agora.date(),
 			)
 

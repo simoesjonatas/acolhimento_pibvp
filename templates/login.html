@@ -3,18 +3,27 @@
 {% block title %}Entrar{% endblock %}
 
 {% block content %}
-<h1>PIBVP Acolhimento</h1>
-<p>Acesse com seu usuario e senha para continuar.</p>
-<form method="post" action="{% url 'login' %}" id="login-form">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <p class="inline-actions">
-        <button type="submit">
-            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1v6"/><path d="M8 5a9 9 0 1 0 8 0"/></svg>
-            <span class="btn-text">Entrar</span>
-        </button>
-    </p>
-</form>
+<div class="login-shell">
+    <section class="login-copy">
+        <span class="section-eyebrow">PIBVP Acolhimento</span>
+        <h1>Uma tela simples para cuidar bem de cada chegada.</h1>
+        <p>Acesse com seu usuario ou e-mail e a senha para acompanhar cadastros, retornos e proximos passos da equipe.</p>
+    </section>
+
+    <section class="login-panel">
+        <h2>Entrar</h2>
+        <form method="post" action="{% url 'login' %}" id="login-form">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <p class="inline-actions">
+                <button type="submit">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1v6"/><path d="M8 5a9 9 0 1 0 8 0"/></svg>
+                    <span class="btn-text">Entrar</span>
+                </button>
+            </p>
+        </form>
+    </section>
+</div>
 
 <script>
     (function () {
@@ -23,6 +32,29 @@
         if (!form || !senha) {
             return;
         }
+
+        const wrapper = document.createElement('span');
+        wrapper.className = 'login-password-control';
+        senha.parentNode.insertBefore(wrapper, senha);
+        wrapper.appendChild(senha);
+
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'login-password-toggle';
+        toggle.setAttribute('aria-label', 'Mostrar senha');
+        toggle.setAttribute('aria-pressed', 'false');
+        toggle.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+        wrapper.appendChild(toggle);
+
+        toggle.addEventListener('click', function () {
+            const shouldShow = senha.type === 'password';
+            senha.type = shouldShow ? 'text' : 'password';
+            toggle.classList.toggle('is-visible', shouldShow);
+            toggle.setAttribute('aria-label', shouldShow ? 'Ocultar senha' : 'Mostrar senha');
+            toggle.setAttribute('aria-pressed', String(shouldShow));
+            senha.focus();
+        });
+
         senha.addEventListener('keydown', function (event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
