@@ -1,10 +1,12 @@
 from django.contrib import admin
 
+from apps.acolhimento.forms import PrimeiroContatoAdminForm
 from apps.acolhimento.models import CampanhaComunicacao, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato
 
 
 @admin.register(PrimeiroContato)
 class PrimeiroContatoAdmin(admin.ModelAdmin):
+	form = PrimeiroContatoAdminForm
 	list_display = (
 		'nome',
 		'telefone_whatsapp',

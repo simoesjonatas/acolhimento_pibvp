@@ -1,9 +1,36 @@
 from django import forms
 
 from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato
+from apps.acolhimento.phone_utils import find_pessoa_by_phone
 
 
-class PrimeiroContatoForm(forms.ModelForm):
+class TelefoneWhatsappUnicoMixin:
+    """Impede cadastrar uma pessoa com um numero de WhatsApp ja existente.
+
+    A comparacao considera variacoes de formato do mesmo numero (com/sem
+    DDI 55, com/sem o nono digito, com ou sem mascara).
+    """
+
+    revelar_nome_duplicado = False
+
+    def clean_telefone_whatsapp(self):
+        telefone = self.cleaned_data['telefone_whatsapp']
+        exclude_pk = self.instance.pk if self.instance and self.instance.pk else None
+        pessoa_existente = find_pessoa_by_phone(telefone, exclude_pk=exclude_pk)
+
+        if pessoa_existente is not None:
+            if self.revelar_nome_duplicado:
+                raise forms.ValidationError(
+                    f'Ja existe um cadastro com este numero de WhatsApp ({pessoa_existente.nome}).'
+                )
+            raise forms.ValidationError('Este numero de WhatsApp ja esta cadastrado.')
+
+        return telefone
+
+
+class PrimeiroContatoForm(TelefoneWhatsappUnicoMixin, forms.ModelForm):
+    revelar_nome_duplicado = True
+
     primeira_vez = forms.TypedChoiceField(
         label='Primeira vez?',
         choices=((True, 'Sim'), (False, 'Nao')),
@@ -22,7 +49,7 @@ class PrimeiroContatoForm(forms.ModelForm):
         ]
 
 
-class AutoCadastroPrimeiroContatoForm(forms.ModelForm):
+class AutoCadastroPrimeiroContatoForm(TelefoneWhatsappUnicoMixin, forms.ModelForm):
     primeira_vez = forms.TypedChoiceField(
         label='Primeira vez?',
         choices=((True, 'Sim'), (False, 'Nao')),
@@ -39,6 +66,14 @@ class AutoCadastroPrimeiroContatoForm(forms.ModelForm):
             'como_conheceu',
             'o_que_busca',
         ]
+
+
+class PrimeiroContatoAdminForm(TelefoneWhatsappUnicoMixin, forms.ModelForm):
+    revelar_nome_duplicado = True
+
+    class Meta:
+        model = PrimeiroContato
+        fields = '__all__'
 
 
 class InteracaoAcolhimentoForm(forms.ModelForm):
