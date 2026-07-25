@@ -89,9 +89,15 @@ class InteracaoAcolhimentoForm(forms.ModelForm):
 class EnfileirarMensagemForm(forms.ModelForm):
     class Meta:
         model = MensagemContato
-        fields = ['canal', 'conteudo']
+        # Canal fixo em WhatsApp por enquanto (opcao de e-mail desativada).
+        # Para reativar o e-mail, adicione 'canal' de volta aos fields.
+        fields = ['conteudo']
         widgets = {
-            'conteudo': forms.Textarea(attrs={'rows': 4}),
+            'conteudo': forms.Textarea(attrs={
+                'rows': 2,
+                'placeholder': 'Escreva sua mensagem para o WhatsApp...',
+                'aria-label': 'Mensagem',
+            }),
         }
 
 

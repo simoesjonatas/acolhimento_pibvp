@@ -722,11 +722,12 @@ class PrimeiroContatoMensagensView(LoginRequiredMixin, ConversasPessoasPermissao
 				'rotulo': 'WhatsApp',
 				'total': self.object.mensagens.filter(canal=MensagemContato.CanalChoices.WHATSAPP).count(),
 			},
-			{
-				'valor': MensagemContato.CanalChoices.EMAIL,
-				'rotulo': 'E-mail',
-				'total': self.object.mensagens.filter(canal=MensagemContato.CanalChoices.EMAIL).count(),
-			},
+			# Aba de e-mail desativada por enquanto (reativar quando o canal de e-mail voltar):
+			# {
+			# 	'valor': MensagemContato.CanalChoices.EMAIL,
+			# 	'rotulo': 'E-mail',
+			# 	'total': self.object.mensagens.filter(canal=MensagemContato.CanalChoices.EMAIL).count(),
+			# },
 		]
 
 		mensagens = list(reversed(mensagens_recentes))
@@ -794,6 +795,8 @@ class PrimeiroContatoEnfileirarMensagemView(LoginRequiredMixin, ConversasPessoas
 			mensagem.criado_por = request.user
 			mensagem.prioridade = 5
 			mensagem.agendada_para = None
+			# Canal fixo em WhatsApp por enquanto (envio por e-mail desativado).
+			mensagem.canal = MensagemContato.CanalChoices.WHATSAPP
 			mensagem.direcao = MensagemContato.DirecaoChoices.SAIDA
 			mensagem.status_fila = MensagemContato.StatusFilaChoices.PENDENTE
 

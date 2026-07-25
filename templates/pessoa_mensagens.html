@@ -10,7 +10,8 @@
             <h1>{{ pessoa.nome }}</h1>
             <p>
                 <strong>WhatsApp:</strong> {{ pessoa.telefone_whatsapp }}
-                {% if pessoa.email %} | <strong>E-mail:</strong> {{ pessoa.email }}{% endif %}
+                {# E-mail ocultado por enquanto (somente WhatsApp): #}
+                {% comment %}{% if pessoa.email %} | <strong>E-mail:</strong> {{ pessoa.email }}{% endif %}{% endcomment %}
             </p>
         </div>
         <a class="btn secundario" href="{% url 'pessoas-detalhe' pessoa.pk %}">
@@ -73,8 +74,10 @@
         <footer class="conversation-composer-bar">
             <form method="post" action="{% url 'pessoas-enfileirar-mensagem' pessoa.pk %}" class="message-compose-form">
                 {% csrf_token %}
-                {{ enfileirar_mensagem_form.as_p }}
-                <button type="submit" aria-label="Enfileirar mensagem">
+                <div class="compose-input">
+                    {{ enfileirar_mensagem_form.conteudo }}
+                </div>
+                <button type="submit" class="compose-send" aria-label="Enviar mensagem no WhatsApp">
                     <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                     <span class="btn-text">Enviar</span>
                 </button>

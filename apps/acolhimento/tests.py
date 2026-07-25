@@ -149,7 +149,8 @@ class BloqueioWhatsappOptInTests(TestCase):
 			).exists()
 		)
 
-	def test_permite_email_manual_sem_resposta_ao_template(self):
+	def test_envio_manual_nao_cria_email(self):
+		# E-mail desativado no envio manual: canal=email nao gera mensagem de e-mail.
 		url = reverse('pessoas-enfileirar-mensagem', args=[self.pessoa.pk])
 		resp = self.client.post(
 			url,
@@ -160,10 +161,34 @@ class BloqueioWhatsappOptInTests(TestCase):
 		)
 
 		self.assertEqual(resp.status_code, 302)
-		self.assertTrue(
+		self.assertFalse(
 			MensagemContato.objects.filter(
 				pessoa=self.pessoa,
 				canal=MensagemContato.CanalChoices.EMAIL,
+			).exists()
+		)
+
+	def test_envio_manual_fixa_whatsapp(self):
+		# Mesmo enviando canal=email, o form ignora e usa WhatsApp (canal fixo).
+		self.pessoa.iniciou_interacao = True
+		self.pessoa.save(update_fields=['iniciou_interacao'])
+		url = reverse('pessoas-enfileirar-mensagem', args=[self.pessoa.pk])
+		resp = self.client.post(
+			url,
+			{
+				'canal': MensagemContato.CanalChoices.EMAIL,
+				'conteudo': 'Mensagem manual.',
+			},
+		)
+
+		self.assertEqual(resp.status_code, 302)
+		self.assertFalse(
+			MensagemContato.objects.filter(pessoa=self.pessoa, canal=MensagemContato.CanalChoices.EMAIL).exists()
+		)
+		self.assertTrue(
+			MensagemContato.objects.filter(
+				pessoa=self.pessoa,
+				canal=MensagemContato.CanalChoices.WHATSAPP,
 				direcao=MensagemContato.DirecaoChoices.SAIDA,
 			).exists()
 		)
