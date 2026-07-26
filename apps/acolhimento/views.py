@@ -9,7 +9,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db import close_old_connections
 from django.db.models import Count, Exists, OuterRef, Q
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -20,9 +20,10 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento.fila_processor import processar_fila_mensagens
-from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PrimeiroContatoForm
+from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PrimeiroContatoForm, RelatorioPessoasForm
 from apps.acolhimento.models import ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
+from apps.acolhimento.reports import filtrar_pessoas, gerar_relatorio, resumo_filtros, resumo_pessoas
 from apps.acolhimento.whatsapp_rules import WHATSAPP_OPTIN_REQUIRED_ERROR, pessoa_pode_receber_whatsapp
 
 
@@ -34,6 +35,18 @@ class MensagensPermissaoMixin(UserPassesTestMixin):
 
 	def test_func(self):
 		return self.request.user.is_staff or self.request.user.is_superuser
+
+
+class AdminPermissaoMixin(UserPassesTestMixin):
+	"""Restringe a view a administradores (staff/superuser).
+
+	Sem `raise_exception`: usuario anonimo e redirecionado para o login e
+	usuario logado sem permissao recebe 403.
+	"""
+
+	def test_func(self):
+		user = self.request.user
+		return user.is_staff or user.is_superuser
 
 
 class ConversasPessoasPermissaoMixin(UserPassesTestMixin):
@@ -1095,3 +1108,28 @@ class PrimeiroContatoExportCsvView(LoginRequiredMixin, PrimeiroContatoQuerysetMi
 			])
 
 		return response
+
+
+class RelatorioPessoasView(AdminPermissaoMixin, View):
+	template_name = 'relatorio_pessoas.html'
+
+	def get(self, request, *args, **kwargs):
+		tem_filtros = bool(request.GET)
+		form = RelatorioPessoasForm(request.GET or None)
+		context = {'form': form, 'resumo': None}
+
+		if tem_filtros:
+			if form.is_valid():
+				queryset = filtrar_pessoas(form.cleaned_data)
+				if request.GET.get('acao') == 'gerar':
+					return gerar_relatorio(
+						queryset,
+						form.cleaned_data['colunas'],
+						form.cleaned_data['formato'],
+						resumo_filtros(form.cleaned_data),
+					)
+				context['resumo'] = resumo_pessoas(queryset)
+		else:
+			context['resumo'] = resumo_pessoas(PrimeiroContato.objects.all())
+
+		return render(request, self.template_name, context)

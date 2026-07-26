@@ -17,6 +17,7 @@ from apps.acolhimento.views import (
     PrimeiroContatoMensagensView,
     PrimeiroContatoStatusUpdateView,
     PrimeiroContatoUpdateView,
+    RelatorioPessoasView,
     TwilioInboundWebhookView,
     TwilioStatusWebhookView,
 )
@@ -32,6 +33,7 @@ urlpatterns = [
     path('mensagens/webhook/twilio-inbound/', TwilioInboundWebhookView.as_view(), name='mensagens-webhook-twilio-inbound'),
     path('mensagens/<int:pk>/excluir/', MensagemContatoExcluirView.as_view(), name='mensagens-excluir'),
     path('pessoas/novo/', PrimeiroContatoCreateView.as_view(), name='pessoas-novo'),
+    path('pessoas/relatorios/', RelatorioPessoasView.as_view(), name='pessoas-relatorios'),
     path('pessoas/<int:pk>/', PrimeiroContatoDetailView.as_view(), name='pessoas-detalhe'),
     path('pessoas/<int:pk>/mensagens/', PrimeiroContatoMensagensView.as_view(), name='pessoas-mensagens'),
     path('pessoas/<int:pk>/mensagens/carregar/', PrimeiroContatoMensagensMaisView.as_view(), name='pessoas-mensagens-carregar'),

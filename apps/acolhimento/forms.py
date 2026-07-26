@@ -1,5 +1,6 @@
 from django import forms
 
+from apps.acolhimento import reports
 from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato
 from apps.acolhimento.phone_utils import find_pessoa_by_phone
 
@@ -115,3 +116,71 @@ class DisparoMensagemMassaForm(forms.Form):
         if pessoas_queryset is None:
             pessoas_queryset = PrimeiroContato.objects.order_by('nome')
         self.fields['pessoas'].queryset = pessoas_queryset
+
+
+class RelatorioPessoasForm(forms.Form):
+    FORMATO_CHOICES = [
+        ('pdf', 'PDF'),
+        ('xlsx', 'Excel (.xlsx)'),
+        ('csv', 'CSV'),
+    ]
+
+    q = forms.CharField(
+        required=False,
+        label='Busca',
+        widget=forms.TextInput(attrs={'placeholder': 'Nome, WhatsApp, e-mail ou cidade'}),
+    )
+    status = forms.ChoiceField(
+        required=False,
+        label='Status',
+        choices=[('', 'Todos')] + list(PrimeiroContato.StatusAcolhimento.choices),
+    )
+    origem = forms.ChoiceField(
+        required=False,
+        label='Origem',
+        choices=[('', 'Todas')] + list(PrimeiroContato.OrigemCadastroChoices.choices),
+    )
+    primeira_vez = forms.ChoiceField(required=False, label='Primeira vez', choices=reports.TRIESTADO_CHOICES)
+    iniciou_interacao = forms.ChoiceField(required=False, label='Iniciou interacao', choices=reports.TRIESTADO_CHOICES)
+    data_inicio = forms.DateField(
+        required=False,
+        label='Primeiro contato de',
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+    data_fim = forms.DateField(
+        required=False,
+        label='ate',
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+    responsavel = forms.ChoiceField(required=False, label='Responsavel', choices=[('', 'Todos')])
+    colunas = forms.MultipleChoiceField(
+        label='Colunas para exportar',
+        required=False,
+        choices=reports.colunas_choices(),
+        widget=forms.CheckboxSelectMultiple,
+        initial=reports.COLUNAS_PADRAO,
+    )
+    formato = forms.ChoiceField(
+        label='Formato',
+        choices=FORMATO_CHOICES,
+        initial='xlsx',
+        widget=forms.RadioSelect,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['responsavel'].choices = reports.responsavel_choices()
+
+    def clean_colunas(self):
+        colunas = reports.normalizar_colunas(self.cleaned_data.get('colunas'))
+        if not colunas:
+            raise forms.ValidationError('Selecione ao menos uma coluna para exportar.')
+        return colunas
+
+    def clean(self):
+        cleaned_data = super().clean()
+        inicio = cleaned_data.get('data_inicio')
+        fim = cleaned_data.get('data_fim')
+        if inicio and fim and inicio > fim:
+            self.add_error('data_fim', 'A data final deve ser maior ou igual a data inicial.')
+        return cleaned_data

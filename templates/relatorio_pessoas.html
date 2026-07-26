@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatorios de pessoas{% endblock %}
+
+{% block content %}
+<div class="page-hero">
+    <div>
+        <span class="section-eyebrow">Acolhimento</span>
+        <h1>Relatorios de pessoas</h1>
+        <p>Filtre os cadastros, escolha as colunas e exporte em PDF, Excel ou CSV.</p>
+    </div>
+    <a class="btn secundario" href="{% url 'pessoas-lista' %}">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="btn-text">Voltar para pessoas</span>
+    </a>
+</div>
+
+<form method="get" action="{% url 'pessoas-relatorios' %}" class="report-form" data-no-loading>
+    <div class="report-workspace">
+        <div class="report-main">
+            <section class="dashboard-panel report-section">
+                <div class="panel-header">
+                    <h2>1. Filtros</h2>
+                </div>
+                <div class="report-filters">
+                    <div class="report-field report-field-wide">
+                        <label for="{{ form.q.id_for_label }}">Busca</label>
+                        {{ form.q }}
+                    </div>
+                    <div class="report-field">
+                        <label for="{{ form.status.id_for_label }}">Status</label>
+                        {{ form.status }}
+                    </div>
+                    <div class="report-field">
+                        <label for="{{ form.origem.id_for_label }}">Origem</label>
+                        {{ form.origem }}
+                    </div>
+                    <div class="report-field">
+                        <label for="{{ form.responsavel.id_for_label }}">Responsavel</label>
+                        {{ form.responsavel }}
+                    </div>
+                    <div class="report-field">
+                        <label for="{{ form.primeira_vez.id_for_label }}">Primeira vez</label>
+                        {{ form.primeira_vez }}
+                    </div>
+                    <div class="report-field">
+                        <label for="{{ form.iniciou_interacao.id_for_label }}">Iniciou interacao</label>
+                        {{ form.iniciou_interacao }}
+                    </div>
+                    <div class="report-field">
+                        <label for="{{ form.data_inicio.id_for_label }}">Primeiro contato de</label>
+                        {{ form.data_inicio }}
+                    </div>
+                    <div class="report-field">
+                        <label for="{{ form.data_fim.id_for_label }}">Ate</label>
+                        {{ form.data_fim }}
+                    </div>
+                </div>
+                {% if form.data_fim.errors %}
+                <p class="form-errors">{{ form.data_fim.errors.0 }}</p>
+                {% endif %}
+            </section>
+
+            <section class="dashboard-panel report-section">
+                <div class="panel-header">
+                    <h2>2. Colunas para exportar</h2>
+                    <div class="report-column-actions">
+                        <button type="button" class="btn secundario" data-select-all>Marcar todas</button>
+                        <button type="button" class="btn secundario" data-select-none>Limpar</button>
+                    </div>
+                </div>
+                <div class="report-columns">
+                    {% for checkbox in form.colunas %}
+                    <label class="report-column">{{ checkbox.tag }} <span>{{ checkbox.choice_label }}</span></label>
+                    {% endfor %}
+                </div>
+                {% if form.colunas.errors %}
+                <p class="form-errors">{{ form.colunas.errors.0 }}</p>
+                {% endif %}
+            </section>
+        </div>
+
+        <aside class="report-sidebar">
+            <section class="dashboard-panel report-section">
+                <div class="panel-header">
+                    <h2>Formato</h2>
+                </div>
+                <div class="report-formats">
+                    {% for radio in form.formato %}
+                    <label class="report-format">{{ radio.tag }} <span>{{ radio.choice_label }}</span></label>
+                    {% endfor %}
+                </div>
+            </section>
+
+            {% if resumo %}
+            <section class="dashboard-panel report-section report-summary">
+                <div class="panel-header">
+                    <h2>Resumo</h2>
+                </div>
+                <p class="report-summary-total">
+                    <strong>{{ resumo.total }}</strong>
+                    registro(s) no filtro atual
+                </p>
+                {% if resumo.por_status %}
+                <ul class="report-summary-list">
+                    {% for item in resumo.por_status %}
+                    <li><span>{{ item.rotulo }}</span> <strong>{{ item.total }}</strong></li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </section>
+            {% endif %}
+
+            <div class="report-actions">
+                <button type="submit" name="acao" value="previa" class="btn secundario">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span class="btn-text">Atualizar previa</span>
+                </button>
+                <button type="submit" name="acao" value="gerar">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span class="btn-text">Gerar relatorio</span>
+                </button>
+            </div>
+        </aside>
+    </div>
+</form>
+
+<script>
+(function () {
+    const form = document.querySelector('.report-form');
+    if (!form) {
+        return;
+    }
+    const checkboxes = form.querySelectorAll('.report-columns input[type="checkbox"]');
+    const marcarTodas = form.querySelector('[data-select-all]');
+    const limpar = form.querySelector('[data-select-none]');
+
+    if (marcarTodas) {
+        marcarTodas.addEventListener('click', function () {
+            checkboxes.forEach(function (c) { c.checked = true; });
+        });
+    }
+    if (limpar) {
+        limpar.addEventListener('click', function () {
+            checkboxes.forEach(function (c) { c.checked = false; });
+        });
+    }
+})();
+</script>
+{% endblock %}

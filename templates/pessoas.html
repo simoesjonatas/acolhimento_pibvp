@@ -9,10 +9,18 @@
         <h1>Primeiros contatos</h1>
         <p>Visualize cadastros, retornos pendentes e pessoas que ja iniciaram conversa.</p>
     </div>
-    <a class="btn" href="{% url 'pessoas-novo' %}">
-        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <span class="btn-text">Novo cadastro</span>
-    </a>
+    <div class="hero-actions">
+        {% if request.user.is_staff or request.user.is_superuser %}
+        <a class="btn secundario" href="{% url 'pessoas-relatorios' %}">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+            <span class="btn-text">Relatorios</span>
+        </a>
+        {% endif %}
+        <a class="btn" href="{% url 'pessoas-novo' %}">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span class="btn-text">Novo cadastro</span>
+        </a>
+    </div>
 </div>
 
 <form method="get" class="filters-form">
@@ -49,12 +57,12 @@
 
 <p class="result-count">{{ total_filtrado }} registro(s) encontrado(s).</p>
 
-<p class="inline-actions">
+{% comment %} <p class="inline-actions">
     <a class="btn secundario" href="{% url 'pessoas-exportar-csv' %}?{% if filtro_query %}{{ filtro_query }}{% endif %}">
         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span class="btn-text">Exportar CSV</span>
     </a>
-</p>
+</p> {% endcomment %}
 
 {% if pessoas %}
 <div class="table-wrap">

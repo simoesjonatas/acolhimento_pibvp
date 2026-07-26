@@ -5,7 +5,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from apps.acolhimento.fila_processor import processar_fila_mensagens
-from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, PrimeiroContatoForm
+from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, PrimeiroContatoForm, RelatorioPessoasForm
 from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato
 from apps.acolhimento.views import (
 	PERMISSAO_CONVERSAR_PESSOAS,
@@ -13,6 +13,7 @@ from apps.acolhimento.views import (
 	MensagemFilaListView,
 	PrimeiroContatoMensagensView,
 	ProcessamentoFilaControleView,
+	RelatorioPessoasView,
 )
 from apps.core.views import UsuarioListView
 
@@ -298,3 +299,109 @@ class PermissaoConversasPessoasTests(TestCase):
 
 		with self.assertRaises(PermissionDenied):
 			PrimeiroContatoMensagensView.as_view()(request, pk=self.pessoa.pk)
+
+
+class RelatorioPessoasTests(TestCase):
+	def setUp(self):
+		self.user = get_user_model().objects.create_user(username='equipe', password='x', is_staff=True)
+		for nome, telefone, status in [
+			('Ana', '31999990001', PrimeiroContato.StatusAcolhimento.PARTICIPANTE),
+			('Bruno', '31999990002', PrimeiroContato.StatusAcolhimento.MEMBRO),
+			('Carla', '31999990003', PrimeiroContato.StatusAcolhimento.PARTICIPANTE),
+		]:
+			PrimeiroContato.objects.create(
+				nome=nome,
+				telefone_whatsapp=telefone,
+				primeira_vez=True,
+				como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+				o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+				status=status,
+			)
+		self.url = reverse('pessoas-relatorios')
+		self.client.force_login(self.user)
+
+	def _params(self, **extra):
+		dados = {'acao': 'gerar', 'formato': 'csv', 'colunas': ['nome', 'status']}
+		dados.update(extra)
+		return dados
+
+	def test_login_obrigatorio(self):
+		self.client.logout()
+		resp = self.client.get(self.url)
+		self.assertEqual(resp.status_code, 302)
+		self.assertIn('/login/', resp['Location'])
+
+	def test_gera_csv_com_colunas_escolhidas(self):
+		resp = self.client.get(self.url, self._params(formato='csv'))
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp['Content-Type'], 'text/csv; charset=utf-8')
+		self.assertIn('attachment; filename="relatorio_pessoas_', resp['Content-Disposition'])
+		conteudo = resp.content.decode('utf-8')
+		self.assertIn('Nome', conteudo)
+		self.assertIn('Status', conteudo)
+		self.assertNotIn('WhatsApp', conteudo)
+
+	def test_gera_xlsx(self):
+		resp = self.client.get(self.url, self._params(formato='xlsx'))
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(
+			resp['Content-Type'],
+			'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+		)
+
+	def test_gera_pdf(self):
+		resp = self.client.get(self.url, self._params(formato='pdf'))
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp['Content-Type'], 'application/pdf')
+		self.assertTrue(resp.content.startswith(b'%PDF'))
+
+	def test_filtro_status_reduz_registros(self):
+		resp = self.client.get(self.url, self._params(formato='csv', status='participante'))
+		linhas = [linha for linha in resp.content.decode('utf-8').splitlines() if linha.strip()]
+		self.assertEqual(len(linhas), 3)  # cabecalho + 2 participantes
+
+	def test_form_sem_colunas_invalido(self):
+		form = RelatorioPessoasForm(data={'formato': 'csv'})
+		self.assertFalse(form.is_valid())
+		self.assertIn('colunas', form.errors)
+		self.assertIn('ao menos uma coluna', form.errors['colunas'][0])
+
+	def test_colunas_seguem_ordem_canonica(self):
+		form = RelatorioPessoasForm(data={'formato': 'csv', 'colunas': ['status', 'nome']})
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertEqual(form.cleaned_data['colunas'], ['nome', 'status'])
+
+	def test_filtro_por_responsavel(self):
+		from apps.acolhimento.reports import filtrar_pessoas
+
+		voluntario = get_user_model().objects.create_user(username='voluntario', password='x')
+		ana = PrimeiroContato.objects.get(nome='Ana')
+		ana.responsavel_atual = voluntario
+		ana.save(update_fields=['responsavel_atual'])
+
+		com_resp = filtrar_pessoas({'responsavel': str(voluntario.id)})
+		self.assertEqual(list(com_resp.values_list('nome', flat=True)), ['Ana'])
+
+		sem_resp = filtrar_pessoas({'responsavel': 'sem'})
+		self.assertEqual(sorted(sem_resp.values_list('nome', flat=True)), ['Bruno', 'Carla'])
+
+	def test_resumo_por_status(self):
+		from apps.acolhimento.reports import resumo_pessoas
+
+		resumo = resumo_pessoas(PrimeiroContato.objects.all())
+		self.assertEqual(resumo['total'], 3)
+		por_status = {item['rotulo']: item['total'] for item in resumo['por_status']}
+		self.assertEqual(por_status.get('Participante'), 2)
+		self.assertEqual(por_status.get('Membro'), 1)
+
+	def test_usuario_comum_nao_emite_relatorio(self):
+		comum = get_user_model().objects.create_user(username='comum', password='x')
+		request = RequestFactory().get(self.url)
+		request.user = comum
+		with self.assertRaises(PermissionDenied):
+			RelatorioPessoasView.as_view()(request)
+
+	def test_admin_emite_relatorio(self):
+		# o usuario do setUp e is_staff -> deve conseguir gerar
+		resp = self.client.get(self.url, self._params(formato='csv'))
+		self.assertEqual(resp.status_code, 200)
