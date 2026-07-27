@@ -21,10 +21,12 @@
         </div>
 
         <div class="hero-actions queue-hero-actions">
+            {% if request.user.is_superuser %}
             <a class="btn" href="{% url 'mensagens-processamento' %}">
                 <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6"/><path d="M20 20v-6h-6"/><path d="M20 9a8 8 0 0 0-13.66-4.66L4 6"/><path d="M4 15a8 8 0 0 0 13.66 4.66L20 18"/></svg>
                 <span class="btn-text">Processar fila</span>
             </a>
+            {% endif %}
             <a class="btn secundario" href="{% url 'mensagens-disparo-massa' %}">
                 <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 <span class="btn-text">Novo disparo</span>

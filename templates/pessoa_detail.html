@@ -73,17 +73,62 @@
             </article>
 
             <section class="dashboard-panel person-timeline-panel">
-                <div class="panel-header">
-                    <h2>Timeline de acompanhamento</h2>
+                <div class="panel-header timeline-panel-header">
+                    <div>
+                        <h2>Timeline de acompanhamento</h2>
+                        <p class="page-subtitle">{{ timeline_total_filtrado }} de {{ timeline_total }} evento(s)</p>
+                    </div>
                 </div>
+
+                <form method="get" class="timeline-filter-form">
+                    <div class="timeline-search-field">
+                        <label for="timeline-q">Buscar na timeline</label>
+                        <input
+                            type="search"
+                            name="timeline_q"
+                            id="timeline-q"
+                            value="{{ timeline_filtros.timeline_q }}"
+                            placeholder="Tipo, descricao ou observacao"
+                        >
+                    </div>
+                    <div>
+                        <label for="timeline-tipo">Tipo</label>
+                        <select name="timeline_tipo" id="timeline-tipo">
+                            <option value="">Todos</option>
+                            {% for valor, rotulo in timeline_tipo_choices %}
+                            <option value="{{ valor }}" {% if valor == timeline_filtros.timeline_tipo %}selected{% endif %}>{{ rotulo }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="timeline-ordem">Ordem</label>
+                        <select name="timeline_ordem" id="timeline-ordem">
+                            <option value="desc" {% if timeline_filtros.timeline_ordem == 'desc' %}selected{% endif %}>Mais recentes</option>
+                            <option value="asc" {% if timeline_filtros.timeline_ordem == 'asc' %}selected{% endif %}>Mais antigos</option>
+                        </select>
+                    </div>
+                    <div class="timeline-filter-actions">
+                        <button type="submit">
+                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <span class="btn-text">Filtrar</span>
+                        </button>
+                        <a class="btn secundario" href="{% url 'pessoas-detalhe' pessoa.pk %}">
+                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+                            <span class="btn-text">Limpar</span>
+                        </a>
+                    </div>
+                </form>
 
                 {% if interacoes %}
                 <div class="timeline-list">
                 {% for interacao in interacoes %}
                     <article class="timeline-item">
-                        <time>{{ interacao.data_interacao|date:'d/m/Y' }}</time>
-                        <div>
-                            <strong>{{ interacao.get_tipo_display }}</strong>
+                        <time datetime="{{ interacao.data_interacao|date:'Y-m-d' }}T{{ interacao.hora_interacao|time:'H:i' }}">
+                            <strong>{{ interacao.data_interacao|date:'d/m/Y' }}</strong>
+                            <span>{{ interacao.hora_interacao|time:'H:i' }}</span>
+                        </time>
+                        <div class="timeline-item-content">
+                            <span class="timeline-type timeline-type-{{ interacao.tipo }}">{{ interacao.get_tipo_display }}</span>
                             <p>{{ interacao.descricao|default:'-' }}</p>
                         </div>
                     </article>
@@ -134,7 +179,7 @@
                 </form>
             </article>
 
-            {% if request.user.is_staff or request.user.is_superuser %}
+            {% if request.user.is_superuser %}
             {% if is_participante %}
             <article class="person-summary-card questionario-card">
                 <h2>Questionario de membresia</h2>
@@ -199,7 +244,32 @@
                 <h2>Novo passo</h2>
                 <form method="post" class="timeline-compose-form">
                     {% csrf_token %}
-                    {{ interacao_form.as_p }}
+                    {% if interacao_form.non_field_errors %}
+                    <div class="form-errors">{{ interacao_form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <p>
+                        <label for="{{ interacao_form.tipo.id_for_label }}">Tipo</label>
+                        {{ interacao_form.tipo }}
+                        {% if interacao_form.tipo.errors %}<span class="form-errors">{{ interacao_form.tipo.errors.0 }}</span>{% endif %}
+                    </p>
+                    <div class="timeline-compose-grid">
+                        <p>
+                            <label for="{{ interacao_form.data_interacao.id_for_label }}">Data</label>
+                            {{ interacao_form.data_interacao }}
+                            {% if interacao_form.data_interacao.errors %}<span class="form-errors">{{ interacao_form.data_interacao.errors.0 }}</span>{% endif %}
+                        </p>
+                        <p>
+                            <label for="{{ interacao_form.hora_interacao.id_for_label }}">Hora</label>
+                            {{ interacao_form.hora_interacao }}
+                            {% if interacao_form.hora_interacao.errors %}<span class="form-errors">{{ interacao_form.hora_interacao.errors.0 }}</span>{% endif %}
+                        </p>
+                    </div>
+                    <p>
+                        <label for="{{ interacao_form.descricao.id_for_label }}">Descricao</label>
+                        {{ interacao_form.descricao }}
+                        {% if interacao_form.descricao.errors %}<span class="form-errors">{{ interacao_form.descricao.errors.0 }}</span>{% endif %}
+                    </p>
                     <button type="submit">
                         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                         <span class="btn-text">Adicionar evento</span>

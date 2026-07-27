@@ -49,6 +49,13 @@ class AdminPermissaoMixin(UserPassesTestMixin):
 		return user.is_staff or user.is_superuser
 
 
+class SuperAdminPermissaoMixin(UserPassesTestMixin):
+	"""Restringe a view a administradores superuser."""
+
+	def test_func(self):
+		return self.request.user.is_superuser
+
+
 class ConversasPessoasPermissaoMixin(UserPassesTestMixin):
 	raise_exception = True
 
@@ -361,7 +368,7 @@ def _run_execucao_fila(execucao_id: int):
 		close_old_connections()
 
 
-class ProcessamentoFilaControleView(LoginRequiredMixin, MensagensPermissaoMixin, TemplateView):
+class ProcessamentoFilaControleView(LoginRequiredMixin, SuperAdminPermissaoMixin, TemplateView):
 	template_name = 'mensagens_processamento.html'
 
 	def post(self, request, *args, **kwargs):
@@ -622,9 +629,44 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 	model = PrimeiroContato
 	context_object_name = 'pessoa'
 
+	def get_timeline_queryset(self):
+		queryset = self.object.interacoes.all()
+		busca = self.request.GET.get('timeline_q', '').strip()
+		tipo = self.request.GET.get('timeline_tipo', '').strip()
+		ordem = self.request.GET.get('timeline_ordem', 'desc').strip()
+
+		if busca:
+			queryset = queryset.filter(
+				Q(descricao__icontains=busca)
+				| Q(tipo__icontains=busca)
+			)
+
+		tipos_validos = {choice[0] for choice in InteracaoAcolhimento.TipoInteracao.choices}
+		if tipo in tipos_validos:
+			queryset = queryset.filter(tipo=tipo)
+		else:
+			tipo = ''
+
+		if ordem == 'asc':
+			queryset = queryset.order_by('data_interacao', 'hora_interacao', 'criado_em')
+		else:
+			ordem = 'desc'
+			queryset = queryset.order_by('-data_interacao', '-hora_interacao', '-criado_em')
+
+		return queryset, {
+			'timeline_q': busca,
+			'timeline_tipo': tipo,
+			'timeline_ordem': ordem,
+		}
+
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
-		context['interacoes'] = self.object.interacoes.all()
+		interacoes, timeline_filtros = self.get_timeline_queryset()
+		context['interacoes'] = interacoes
+		context['timeline_total'] = self.object.interacoes.count()
+		context['timeline_total_filtrado'] = interacoes.count()
+		context['timeline_filtros'] = timeline_filtros
+		context['timeline_tipo_choices'] = InteracaoAcolhimento.TipoInteracao.choices
 		context['interacao_form'] = kwargs.get('interacao_form', InteracaoAcolhimentoForm())
 		context['tem_novo_retorno'] = self.object.mensagens.filter(
 			direcao=MensagemContato.DirecaoChoices.ENTRADA,
@@ -648,13 +690,17 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		context['status_atual'] = self.object.status
 		context['status_fluxo'] = status_fluxo
 
-		convites = list(self.object.convites_questionario.select_related('questionario'))
-		for convite in convites:
-			convite.link = self.request.build_absolute_uri(
-				reverse('responder-questionario', kwargs={'token': convite.token})
-			)
-		context['convites_questionario'] = convites
-		context['questionarios_ativos'] = Questionario.objects.filter(ativo=True)
+		if self.request.user.is_superuser:
+			convites = list(self.object.convites_questionario.select_related('questionario'))
+			for convite in convites:
+				convite.link = self.request.build_absolute_uri(
+					reverse('responder-questionario', kwargs={'token': convite.token})
+				)
+			context['convites_questionario'] = convites
+			context['questionarios_ativos'] = Questionario.objects.filter(ativo=True)
+		else:
+			context['convites_questionario'] = []
+			context['questionarios_ativos'] = Questionario.objects.none()
 		context['is_participante'] = self.object.status == PrimeiroContato.StatusAcolhimento.PARTICIPANTE
 		return context
 
@@ -1148,7 +1194,7 @@ class RelatorioPessoasView(AdminPermissaoMixin, View):
 # Questionarios (construtor + convites + resposta publica)
 # ----------------------------------------------------------------------------
 
-class QuestionarioListView(AdminPermissaoMixin, ListView):
+class QuestionarioListView(SuperAdminPermissaoMixin, ListView):
 	template_name = 'questionarios_lista.html'
 	model = Questionario
 	context_object_name = 'questionarios'
@@ -1157,7 +1203,7 @@ class QuestionarioListView(AdminPermissaoMixin, ListView):
 		return Questionario.objects.annotate(total_perguntas=Count('perguntas'))
 
 
-class QuestionarioCreateView(AdminPermissaoMixin, CreateView):
+class QuestionarioCreateView(SuperAdminPermissaoMixin, CreateView):
 	template_name = 'questionario_form.html'
 	form_class = QuestionarioForm
 
@@ -1168,7 +1214,7 @@ class QuestionarioCreateView(AdminPermissaoMixin, CreateView):
 		return redirect('questionario-builder', pk=self.object.pk)
 
 
-class QuestionarioUpdateView(AdminPermissaoMixin, UpdateView):
+class QuestionarioUpdateView(SuperAdminPermissaoMixin, UpdateView):
 	template_name = 'questionario_form.html'
 	model = Questionario
 	form_class = QuestionarioForm
@@ -1177,14 +1223,14 @@ class QuestionarioUpdateView(AdminPermissaoMixin, UpdateView):
 		return reverse('questionario-builder', kwargs={'pk': self.object.pk})
 
 
-class QuestionarioDeleteView(AdminPermissaoMixin, DeleteView):
+class QuestionarioDeleteView(SuperAdminPermissaoMixin, DeleteView):
 	template_name = 'questionario_confirm_delete.html'
 	model = Questionario
 	context_object_name = 'questionario'
 	success_url = reverse_lazy('questionarios-lista')
 
 
-class QuestionarioBuilderView(AdminPermissaoMixin, View):
+class QuestionarioBuilderView(SuperAdminPermissaoMixin, View):
 	template_name = 'questionario_builder.html'
 
 	def _render(self, request, questionario, form):
@@ -1213,7 +1259,7 @@ class QuestionarioBuilderView(AdminPermissaoMixin, View):
 		return self._render(request, questionario, form)
 
 
-class QuestionarioPreviewView(AdminPermissaoMixin, DetailView):
+class QuestionarioPreviewView(SuperAdminPermissaoMixin, DetailView):
 	template_name = 'questionario_preview.html'
 	model = Questionario
 	context_object_name = 'questionario'
@@ -1233,7 +1279,7 @@ class QuestionarioPreviewView(AdminPermissaoMixin, DetailView):
 		return context
 
 
-class PerguntaUpdateView(AdminPermissaoMixin, UpdateView):
+class PerguntaUpdateView(SuperAdminPermissaoMixin, UpdateView):
 	template_name = 'pergunta_form.html'
 	model = PerguntaQuestionario
 	form_class = PerguntaForm
@@ -1244,7 +1290,7 @@ class PerguntaUpdateView(AdminPermissaoMixin, UpdateView):
 		return reverse('questionario-builder', kwargs={'pk': self.object.questionario_id})
 
 
-class PerguntaDeleteView(AdminPermissaoMixin, View):
+class PerguntaDeleteView(SuperAdminPermissaoMixin, View):
 	def post(self, request, pk):
 		pergunta = get_object_or_404(PerguntaQuestionario, pk=pk)
 		questionario_id = pergunta.questionario_id
@@ -1253,7 +1299,7 @@ class PerguntaDeleteView(AdminPermissaoMixin, View):
 		return redirect('questionario-builder', pk=questionario_id)
 
 
-class PerguntaMoverView(AdminPermissaoMixin, View):
+class PerguntaMoverView(SuperAdminPermissaoMixin, View):
 	def post(self, request, pk):
 		pergunta = get_object_or_404(PerguntaQuestionario, pk=pk)
 		direcao = request.POST.get('direcao')
@@ -1270,7 +1316,7 @@ class PerguntaMoverView(AdminPermissaoMixin, View):
 		return redirect('questionario-builder', pk=pergunta.questionario_id)
 
 
-class GerarConviteQuestionarioView(AdminPermissaoMixin, View):
+class GerarConviteQuestionarioView(SuperAdminPermissaoMixin, View):
 	def post(self, request, pk):
 		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
 		if pessoa.status != PrimeiroContato.StatusAcolhimento.PARTICIPANTE:
@@ -1307,7 +1353,7 @@ class GerarConviteQuestionarioView(AdminPermissaoMixin, View):
 		return redirect('pessoas-detalhe', pk=pessoa.pk)
 
 
-class ExcluirConviteQuestionarioView(AdminPermissaoMixin, View):
+class ExcluirConviteQuestionarioView(SuperAdminPermissaoMixin, View):
 	def post(self, request, pk):
 		convite = get_object_or_404(
 			ConviteQuestionario.objects.select_related('pessoa', 'questionario'), pk=pk
@@ -1326,7 +1372,7 @@ class ExcluirConviteQuestionarioView(AdminPermissaoMixin, View):
 		return redirect('pessoas-detalhe', pk=pessoa_id)
 
 
-class EnviarConviteWhatsappView(AdminPermissaoMixin, View):
+class EnviarConviteWhatsappView(SuperAdminPermissaoMixin, View):
 	def post(self, request, pk):
 		convite = get_object_or_404(
 			ConviteQuestionario.objects.select_related('pessoa', 'questionario'), pk=pk
@@ -1365,7 +1411,7 @@ class EnviarConviteWhatsappView(AdminPermissaoMixin, View):
 		return redirect('pessoas-detalhe', pk=pessoa.pk)
 
 
-class RespostaConviteDetailView(AdminPermissaoMixin, DetailView):
+class RespostaConviteDetailView(SuperAdminPermissaoMixin, DetailView):
 	template_name = 'resposta_detail.html'
 	model = ConviteQuestionario
 	context_object_name = 'convite'

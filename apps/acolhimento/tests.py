@@ -1,3 +1,5 @@
+from datetime import time
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import PermissionDenied
@@ -134,6 +136,51 @@ class StatusEvolutivoTests(TestCase):
 		self.client.post(url, {'status': 'inexistente'})
 		self.pessoa.refresh_from_db()
 		self.assertEqual(self.pessoa.status, PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO)
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_timeline_renderiza_hora_e_filtra_eventos(self):
+		InteracaoAcolhimento.objects.create(
+			pessoa=self.pessoa,
+			tipo=InteracaoAcolhimento.TipoInteracao.VISITA_AGENDADA,
+			descricao='Cafe agendado',
+			data_interacao='2026-07-24',
+			hora_interacao=time(15, 45),
+		)
+		InteracaoAcolhimento.objects.create(
+			pessoa=self.pessoa,
+			tipo=InteracaoAcolhimento.TipoInteracao.TENTATIVA_CONTATO,
+			descricao='Mensagem inicial',
+			data_interacao='2026-07-23',
+			hora_interacao=time(9, 10),
+		)
+
+		resp = self.client.get(
+			reverse('pessoas-detalhe', args=[self.pessoa.pk]),
+			{
+				'timeline_q': 'Cafe',
+				'timeline_tipo': InteracaoAcolhimento.TipoInteracao.VISITA_AGENDADA,
+			},
+		)
+
+		self.assertEqual(resp.status_code, 200)
+		self.assertContains(resp, '15:45')
+		self.assertContains(resp, 'Cafe agendado')
+		self.assertNotContains(resp, 'Mensagem inicial')
+
+	def test_novo_evento_timeline_salva_data_e_hora(self):
+		resp = self.client.post(
+			reverse('pessoas-detalhe', args=[self.pessoa.pk]),
+			{
+				'tipo': InteracaoAcolhimento.TipoInteracao.OBSERVACAO,
+				'data_interacao': '2026-07-24',
+				'hora_interacao': '16:20',
+				'descricao': 'Conversa registrada com horario.',
+			},
+		)
+
+		self.assertEqual(resp.status_code, 302)
+		interacao = self.pessoa.interacoes.get(descricao='Conversa registrada com horario.')
+		self.assertEqual(interacao.hora_interacao, time(16, 20))
 
 
 class BloqueioWhatsappOptInTests(TestCase):
@@ -312,6 +359,20 @@ class PermissaoConversasPessoasTests(TestCase):
 				with self.assertRaises(PermissionDenied):
 					view(request)
 
+	def test_staff_nao_acessa_telas_da_engrenagem(self):
+		staff = get_user_model().objects.create_user(username='staff', password='x', is_staff=True)
+		request = self.factory.get(reverse('mensagens-processamento'))
+		request.user = staff
+
+		with self.assertRaises(PermissionDenied):
+			ProcessamentoFilaControleView.as_view()(request)
+
+		request = self.factory.get(reverse('usuarios-lista'))
+		request.user = staff
+
+		with self.assertRaises(PermissionDenied):
+			UsuarioListView.as_view()(request)
+
 	def test_usuario_sem_permissao_nao_acessa_conversa_individual(self):
 		request = self.factory.get(reverse('pessoas-mensagens', args=[self.pessoa.pk]))
 		request.user = self.user
@@ -428,7 +489,10 @@ class RelatorioPessoasTests(TestCase):
 
 class QuestionarioTests(TestCase):
 	def setUp(self):
-		self.admin = get_user_model().objects.create_user('admin', password='x', is_staff=True)
+		self.admin = get_user_model().objects.create_user(
+			'admin', password='x', is_staff=True, is_superuser=True,
+		)
+		self.staff_admin = get_user_model().objects.create_user('staff_admin', password='x', is_staff=True)
 		self.comum = get_user_model().objects.create_user('comum', password='x')
 		self.pessoa = PrimeiroContato.objects.create(
 			nome='Ana',
@@ -518,6 +582,44 @@ class QuestionarioTests(TestCase):
 		request.user = self.comum
 		with self.assertRaises(PermissionDenied):
 			QuestionarioListView.as_view()(request)
+
+		request = RequestFactory().get(reverse('questionarios-lista'))
+		request.user = self.staff_admin
+		with self.assertRaises(PermissionDenied):
+			QuestionarioListView.as_view()(request)
+
+		request = RequestFactory().get(reverse('questionarios-lista'))
+		request.user = self.admin
+		resp = QuestionarioListView.as_view()(request)
+		self.assertEqual(resp.status_code, 200)
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_menu_configuracoes_aparece_somente_para_superuser(self):
+		self.client.force_login(self.staff_admin)
+		resp = self.client.get(reverse('dashboard'))
+		self.assertEqual(resp.status_code, 200)
+		self.assertNotContains(resp, 'settings-navigation')
+		self.assertNotContains(resp, 'Usuarios')
+		self.assertNotContains(resp, 'Processar fila')
+		self.assertNotContains(resp, 'Questionarios')
+
+		self.client.force_login(self.admin)
+		resp = self.client.get(reverse('dashboard'))
+		self.assertEqual(resp.status_code, 200)
+		self.assertContains(resp, 'settings-navigation')
+		self.assertContains(resp, 'Usuarios')
+		self.assertContains(resp, 'Processar fila')
+		self.assertContains(resp, 'Questionarios')
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_staff_nao_gera_convite_questionario(self):
+		self.client.force_login(self.staff_admin)
+		resp = self.client.post(
+			reverse('pessoas-gerar-convite', args=[self.pessoa.pk]),
+			{'questionario': self.questionario.pk},
+		)
+		self.assertEqual(resp.status_code, 403)
+		self.assertEqual(ConviteQuestionario.objects.filter(pessoa=self.pessoa).count(), 0)
 
 	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
 	def test_novo_questionario_renderiza_form_para_admin(self):

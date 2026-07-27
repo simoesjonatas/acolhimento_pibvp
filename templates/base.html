@@ -53,12 +53,6 @@
                 </a>
                 {% if user.is_staff or user.is_superuser %}
                 <a
-                    href="{% url 'usuarios-lista' %}"
-                    class="nav-link {% if request.resolver_match.url_name == 'usuarios-lista' or request.resolver_match.url_name == 'usuarios-novo' or request.resolver_match.url_name == 'usuarios-editar' or request.resolver_match.url_name == 'usuarios-excluir' %}active{% endif %}"
-                >
-                    Usuarios
-                </a>
-                <a
                     href="{% url 'mensagens-fila' %}"
                     class="nav-link {% if request.resolver_match.url_name == 'mensagens-fila' %}active{% endif %}"
                 >
@@ -68,30 +62,53 @@
                     {% endif %}
                 </a>
                 <a
-                    href="{% url 'mensagens-processamento' %}"
-                    class="nav-link {% if request.resolver_match.url_name == 'mensagens-processamento' %}active{% endif %}"
-                >
-                    Processar fila
-                </a>
-                <a
                     href="{% url 'mensagens-disparo-massa' %}"
                     class="nav-link {% if request.resolver_match.url_name == 'mensagens-disparo-massa' %}active{% endif %}"
                 >
                     Disparo em massa
                 </a>
-                <a
-                    href="{% url 'questionarios-lista' %}"
-                    class="nav-link {% if request.resolver_match.url_name == 'questionarios-lista' or request.resolver_match.url_name == 'questionarios-novo' or request.resolver_match.url_name == 'questionario-builder' or request.resolver_match.url_name == 'questionario-visualizar' or request.resolver_match.url_name == 'questionario-editar' or request.resolver_match.url_name == 'pergunta-editar' %}active{% endif %}"
-                >
-                    Questionarios
-                </a>
                 {% endif %}
             </nav>
         </div>
-        <div class="header-right">
+        <div class="header-right{% if user.is_superuser %} has-settings{% endif %}">
             <a href="{% url 'perfil' %}" class="profile-chip {% if request.resolver_match.url_name == 'perfil' %}active{% endif %}">
                 Ola, {{ user.username }}
             </a>
+            {% if user.is_superuser %}
+            <div class="nav-dropdown header-settings" data-nav-dropdown>
+                <button
+                    type="button"
+                    class="nav-link nav-dropdown-toggle nav-settings-button {% if request.resolver_match.url_name == 'usuarios-lista' or request.resolver_match.url_name == 'usuarios-novo' or request.resolver_match.url_name == 'usuarios-editar' or request.resolver_match.url_name == 'usuarios-excluir' or request.resolver_match.url_name == 'mensagens-processamento' or request.resolver_match.url_name == 'questionarios-lista' or request.resolver_match.url_name == 'questionarios-novo' or request.resolver_match.url_name == 'questionario-builder' or request.resolver_match.url_name == 'questionario-visualizar' or request.resolver_match.url_name == 'questionario-editar' or request.resolver_match.url_name == 'pergunta-editar' %}active{% endif %}"
+                    aria-label="Configuracoes"
+                    aria-expanded="false"
+                    aria-controls="settings-navigation"
+                    title="Configuracoes"
+                    data-nav-submenu-toggle
+                >
+                    <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 8.6 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6A1.65 1.65 0 0 0 10.4 3V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15.4 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.35.58.92.99 1.6 1H21a2 2 0 1 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15Z"/></svg>
+                </button>
+                <div class="nav-dropdown-panel" id="settings-navigation" data-nav-submenu>
+                    <a
+                        href="{% url 'usuarios-lista' %}"
+                        class="nav-dropdown-link {% if request.resolver_match.url_name == 'usuarios-lista' or request.resolver_match.url_name == 'usuarios-novo' or request.resolver_match.url_name == 'usuarios-editar' or request.resolver_match.url_name == 'usuarios-excluir' %}active{% endif %}"
+                    >
+                        Usuarios
+                    </a>
+                    <a
+                        href="{% url 'mensagens-processamento' %}"
+                        class="nav-dropdown-link {% if request.resolver_match.url_name == 'mensagens-processamento' %}active{% endif %}"
+                    >
+                        Processar fila
+                    </a>
+                    <a
+                        href="{% url 'questionarios-lista' %}"
+                        class="nav-dropdown-link {% if request.resolver_match.url_name == 'questionarios-lista' or request.resolver_match.url_name == 'questionarios-novo' or request.resolver_match.url_name == 'questionario-builder' or request.resolver_match.url_name == 'questionario-visualizar' or request.resolver_match.url_name == 'questionario-editar' or request.resolver_match.url_name == 'pergunta-editar' %}active{% endif %}"
+                    >
+                        Questionarios
+                    </a>
+                </div>
+            </div>
+            {% endif %}
             <form method="post" action="{% url 'logout' %}" class="logout-form">
                 {% csrf_token %}
                 <button type="submit">
@@ -122,24 +139,81 @@
         (function () {
             const navToggle = document.querySelector('[data-nav-toggle]');
             const navMenu = document.querySelector('[data-nav-menu]');
+            const navDropdowns = document.querySelectorAll('[data-nav-dropdown]');
 
-            if (navToggle && navMenu) {
-                navToggle.addEventListener('click', () => {
-                    const isOpen = navMenu.classList.toggle('open');
-                    navToggle.setAttribute('aria-expanded', String(isOpen));
-                    navToggle.setAttribute('aria-label', isOpen ? 'Fechar menu' : 'Abrir menu');
+            function closeNavDropdown(dropdown) {
+                const toggle = dropdown.querySelector('[data-nav-submenu-toggle]');
+                dropdown.classList.remove('open');
+                if (toggle) {
+                    toggle.setAttribute('aria-expanded', 'false');
+                }
+            }
+
+            function closeNavDropdowns(exceptDropdown) {
+                navDropdowns.forEach((dropdown) => {
+                    if (dropdown !== exceptDropdown) {
+                        closeNavDropdown(dropdown);
+                    }
+                });
+            }
+
+            navDropdowns.forEach((dropdown) => {
+                const toggle = dropdown.querySelector('[data-nav-submenu-toggle]');
+                if (!toggle) return;
+
+                toggle.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    const isOpen = !dropdown.classList.contains('open');
+                    closeNavDropdowns(dropdown);
+                    dropdown.classList.toggle('open', isOpen);
+                    toggle.setAttribute('aria-expanded', String(isOpen));
                 });
 
-                navMenu.querySelectorAll('a').forEach((link) => {
+                dropdown.querySelectorAll('a').forEach((link) => {
                     link.addEventListener('click', () => {
-                        if (window.matchMedia('(max-width: 865px)').matches) {
+                        closeNavDropdown(dropdown);
+                        if (navToggle && navMenu && window.matchMedia('(max-width: 1280px)').matches) {
                             navMenu.classList.remove('open');
                             navToggle.setAttribute('aria-expanded', 'false');
                             navToggle.setAttribute('aria-label', 'Abrir menu');
                         }
                     });
                 });
+            });
+
+            if (navToggle && navMenu) {
+                navToggle.addEventListener('click', () => {
+                    const isOpen = navMenu.classList.toggle('open');
+                    navToggle.setAttribute('aria-expanded', String(isOpen));
+                    navToggle.setAttribute('aria-label', isOpen ? 'Fechar menu' : 'Abrir menu');
+                    if (!isOpen) {
+                        closeNavDropdowns();
+                    }
+                });
+
+                navMenu.querySelectorAll('a').forEach((link) => {
+                    link.addEventListener('click', () => {
+                        if (window.matchMedia('(max-width: 1280px)').matches) {
+                            navMenu.classList.remove('open');
+                            navToggle.setAttribute('aria-expanded', 'false');
+                            navToggle.setAttribute('aria-label', 'Abrir menu');
+                            closeNavDropdowns();
+                        }
+                    });
+                });
             }
+
+            document.addEventListener('click', (event) => {
+                if (!event.target.closest('[data-nav-dropdown]')) {
+                    closeNavDropdowns();
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    closeNavDropdowns();
+                }
+            });
 
             const toasts = document.querySelectorAll('[data-toast]');
             toasts.forEach((toast) => {

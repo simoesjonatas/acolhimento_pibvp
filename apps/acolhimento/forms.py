@@ -1,4 +1,5 @@
 from django import forms
+from django.utils import timezone
 
 from apps.acolhimento import reports
 from apps.acolhimento.models import (
@@ -10,6 +11,7 @@ from apps.acolhimento.models import (
     PrimeiroContato,
     Questionario,
     RespostaPergunta,
+    hora_local_atual,
 )
 from apps.acolhimento.phone_utils import find_pessoa_by_phone
 
@@ -87,11 +89,18 @@ class PrimeiroContatoAdminForm(TelefoneWhatsappUnicoMixin, forms.ModelForm):
 
 
 class InteracaoAcolhimentoForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound and not self.instance.pk:
+            self.fields['data_interacao'].initial = timezone.localdate
+            self.fields['hora_interacao'].initial = hora_local_atual
+
     class Meta:
         model = InteracaoAcolhimento
-        fields = ['tipo', 'data_interacao', 'descricao']
+        fields = ['tipo', 'data_interacao', 'hora_interacao', 'descricao']
         widgets = {
             'data_interacao': forms.DateInput(attrs={'type': 'date'}),
+            'hora_interacao': forms.TimeInput(attrs={'type': 'time'}),
             'descricao': forms.Textarea(attrs={'rows': 3}),
         }
 

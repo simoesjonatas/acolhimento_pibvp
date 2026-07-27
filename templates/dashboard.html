@@ -20,7 +20,9 @@
             <span class="btn-text">Cadastro de pessoas</span>
         </a>
         {% if user.is_staff or user.is_superuser %}
+        {% if user.is_superuser %}
         <a class="btn secundario" href="{% url 'usuarios-lista' %}">Gerenciar usuarios</a>
+        {% endif %}
         <a class="btn secundario" href="{% url 'mensagens-fila' %}">Abrir fila global</a>
         <a class="btn secundario" href="{% url 'mensagens-disparo-massa' %}">Disparo em massa</a>
         <form method="post">

@@ -6,6 +6,10 @@ from django.conf import settings
 from django.utils import timezone
 
 
+def hora_local_atual():
+	return timezone.localtime().time().replace(microsecond=0)
+
+
 class PrimeiroContato(models.Model):
 	class OrigemCadastroChoices(models.TextChoices):
 		EQUIPE = 'equipe', 'Equipe'
@@ -242,10 +246,11 @@ class InteracaoAcolhimento(models.Model):
 	tipo = models.CharField(max_length=30, choices=TipoInteracao.choices)
 	descricao = models.TextField(blank=True)
 	data_interacao = models.DateField(default=timezone.localdate)
+	hora_interacao = models.TimeField(default=hora_local_atual)
 	criado_em = models.DateTimeField(auto_now_add=True)
 
 	class Meta:
-		ordering = ['-data_interacao', '-criado_em']
+		ordering = ['-data_interacao', '-hora_interacao', '-criado_em']
 		verbose_name = 'Interação de acolhimento'
 		verbose_name_plural = 'Interações de acolhimento'
 
