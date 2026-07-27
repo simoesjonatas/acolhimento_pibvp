@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if object %}Editar questionario{% else %}Novo questionario{% endif %}{% endblock %}
+
+{% block content %}
+<div class="questionario-form-page">
+    <section class="page-hero questionario-form-hero">
+        <div class="profile-identity">
+            <span class="profile-avatar questionario-avatar" aria-hidden="true">
+                {% if object %}{{ object.titulo|slice:':1'|upper }}{% else %}+{% endif %}
+            </span>
+            <div>
+                <span class="section-eyebrow">Questionarios</span>
+                <h1>{% if object %}Editar questionario{% else %}Novo questionario{% endif %}</h1>
+                <p>{% if object %}{{ object.titulo }}{% else %}Formulario para acolhimento e membresia{% endif %}</p>
+            </div>
+        </div>
+
+        <a class="btn secundario" href="{% url 'questionarios-lista' %}">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+            <span class="btn-text">Voltar</span>
+        </a>
+    </section>
+
+    <section class="questionario-editor-layout">
+        <aside class="profile-summary-card questionario-summary-card">
+            <h2>Resumo</h2>
+            <div class="questionario-status-row">
+                {% if object and object.ativo or not object %}
+                <span class="profile-role-badge is-active">Ativo</span>
+                {% else %}
+                <span class="profile-role-badge is-inactive">Inativo</span>
+                {% endif %}
+                {% if object %}
+                <span class="profile-role-badge">{{ object.perguntas.count }} pergunta(s)</span>
+                {% else %}
+                <span class="profile-role-badge">Sem perguntas</span>
+                {% endif %}
+            </div>
+
+            <dl class="profile-summary-list">
+                <div>
+                    <dt>Titulo</dt>
+                    <dd>{% if object %}{{ object.titulo }}{% else %}-{% endif %}</dd>
+                </div>
+                <div>
+                    <dt>Status</dt>
+                    <dd>{% if object and not object.ativo %}Inativo{% else %}Ativo{% endif %}</dd>
+                </div>
+                {% if object %}
+                <div>
+                    <dt>Atualizado em</dt>
+                    <dd>{{ object.atualizado_em|date:'d/m/Y H:i' }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </aside>
+
+        <section class="profile-form-card questionario-form-card">
+            <div class="panel-header">
+                <div>
+                    <h2>Dados do questionario</h2>
+                    <p>{% if object %}Atualize nome, descricao e disponibilidade.{% else %}Defina a base do formulario antes de adicionar perguntas.{% endif %}</p>
+                </div>
+            </div>
+
+            <form method="post" class="questionario-form">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="form-errors">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="questionario-form-grid">
+                    <p class="questionario-form-wide">
+                        <label for="{{ form.titulo.id_for_label }}">Titulo</label>
+                        {{ form.titulo }}
+                        {% if form.titulo.errors %}<span class="form-errors">{{ form.titulo.errors.0 }}</span>{% endif %}
+                    </p>
+
+                    <p class="questionario-form-wide">
+                        <label for="{{ form.descricao.id_for_label }}">Descricao</label>
+                        {{ form.descricao }}
+                        {% if form.descricao.errors %}<span class="form-errors">{{ form.descricao.errors.0 }}</span>{% endif %}
+                    </p>
+                </div>
+
+                <div class="questionario-form-section">
+                    <h3>Disponibilidade</h3>
+                    <label class="permission-toggle questionario-active-toggle" for="{{ form.ativo.id_for_label }}">
+                        {{ form.ativo }}
+                        <span>
+                            <strong>Questionario ativo</strong>
+                            <small>Aparece na geracao de novos links</small>
+                        </span>
+                    </label>
+                    {% if form.ativo.errors %}<span class="form-errors">{{ form.ativo.errors.0 }}</span>{% endif %}
+                </div>
+
+                <p class="action-row">
+                    <button type="submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                        <span class="btn-text">Salvar questionario</span>
+                    </button>
+                    <a class="btn secundario" href="{% url 'questionarios-lista' %}">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        <span class="btn-text">Cancelar</span>
+                    </a>
+                </p>
+            </form>
+        </section>
+    </section>
+</div>
+{% endblock %}

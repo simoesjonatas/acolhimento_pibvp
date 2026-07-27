@@ -1,7 +1,16 @@
 from django import forms
 
 from apps.acolhimento import reports
-from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato
+from apps.acolhimento.models import (
+    ConviteQuestionario,
+    InteracaoAcolhimento,
+    MensagemContato,
+    OpcaoPergunta,
+    PerguntaQuestionario,
+    PrimeiroContato,
+    Questionario,
+    RespostaPergunta,
+)
 from apps.acolhimento.phone_utils import find_pessoa_by_phone
 
 
@@ -184,3 +193,104 @@ class RelatorioPessoasForm(forms.Form):
         if inicio and fim and inicio > fim:
             self.add_error('data_fim', 'A data final deve ser maior ou igual a data inicial.')
         return cleaned_data
+
+
+class QuestionarioForm(forms.ModelForm):
+    class Meta:
+        model = Questionario
+        fields = ['titulo', 'descricao', 'ativo']
+        widgets = {
+            'descricao': forms.Textarea(attrs={'rows': 3}),
+        }
+
+
+class PerguntaForm(forms.ModelForm):
+    opcoes_texto = forms.CharField(
+        required=False,
+        label='Opcoes (uma por linha)',
+        widget=forms.Textarea(attrs={
+            'rows': 4,
+            'placeholder': 'Uma opcao por linha. So usado quando o tipo e "Escolha unica".',
+        }),
+    )
+
+    class Meta:
+        model = PerguntaQuestionario
+        fields = ['texto', 'ajuda', 'tipo', 'obrigatoria']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['opcoes_texto'].initial = '\n'.join(
+                self.instance.opcoes.values_list('texto', flat=True)
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        opcoes = [linha.strip() for linha in (cleaned_data.get('opcoes_texto') or '').splitlines() if linha.strip()]
+        if cleaned_data.get('tipo') == PerguntaQuestionario.TipoPergunta.ESCOLHA_UNICA and not opcoes:
+            self.add_error('opcoes_texto', 'Informe ao menos uma opcao para perguntas de escolha unica.')
+        cleaned_data['opcoes_lista'] = opcoes
+        return cleaned_data
+
+    def save(self, commit=True):
+        pergunta = super().save(commit=commit)
+        if commit:
+            self.salvar_opcoes(pergunta)
+        return pergunta
+
+    def salvar_opcoes(self, pergunta):
+        pergunta.opcoes.all().delete()
+        if pergunta.tipo == PerguntaQuestionario.TipoPergunta.ESCOLHA_UNICA:
+            OpcaoPergunta.objects.bulk_create([
+                OpcaoPergunta(pergunta=pergunta, texto=texto, ordem=indice)
+                for indice, texto in enumerate(self.cleaned_data.get('opcoes_lista', []))
+            ])
+
+
+class ResponderQuestionarioForm(forms.Form):
+    respondente_nome = forms.CharField(
+        label='Quem esta preenchendo?',
+        max_length=150,
+        widget=forms.TextInput(attrs={'placeholder': 'Seu nome (ou de quem preenche)'}),
+    )
+
+    def __init__(self, *args, questionario=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.perguntas = list(questionario.perguntas.prefetch_related('opcoes')) if questionario else []
+        for pergunta in self.perguntas:
+            self.fields[f'pergunta_{pergunta.id}'] = self._construir_campo(pergunta)
+
+    def _construir_campo(self, pergunta):
+        Tipo = PerguntaQuestionario.TipoPergunta
+        comum = {'label': pergunta.texto, 'help_text': pergunta.ajuda, 'required': pergunta.obrigatoria}
+
+        if pergunta.tipo == Tipo.TEXTO_LONGO:
+            return forms.CharField(widget=forms.Textarea(attrs={'rows': 3}), **comum)
+        if pergunta.tipo == Tipo.DATA:
+            return forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}), **comum)
+        if pergunta.tipo == Tipo.SIM_NAO:
+            return forms.ChoiceField(choices=[('Sim', 'Sim'), ('Nao', 'Nao')], widget=forms.RadioSelect, **comum)
+        if pergunta.tipo == Tipo.ESCOLHA_UNICA:
+            choices = [(str(opcao.id), opcao.texto) for opcao in pergunta.opcoes.all()]
+            return forms.ChoiceField(choices=choices, widget=forms.RadioSelect, **comum)
+        return forms.CharField(**comum)
+
+    def campos_perguntas(self):
+        for pergunta in self.perguntas:
+            yield pergunta, self[f'pergunta_{pergunta.id}']
+
+    def salvar_respostas(self, convite):
+        Tipo = PerguntaQuestionario.TipoPergunta
+        for pergunta in self.perguntas:
+            valor = self.cleaned_data.get(f'pergunta_{pergunta.id}')
+            if valor in (None, ''):
+                continue
+            resposta = RespostaPergunta(convite=convite, pergunta=pergunta)
+            if pergunta.tipo == Tipo.ESCOLHA_UNICA:
+                resposta.opcao_id = int(valor)
+            elif pergunta.tipo == Tipo.DATA:
+                resposta.valor_texto = valor.strftime('%d/%m/%Y') if hasattr(valor, 'strftime') else str(valor)
+            else:
+                resposta.valor_texto = str(valor)
+            resposta.save()

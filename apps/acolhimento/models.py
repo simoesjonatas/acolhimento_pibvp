@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 from django.core.validators import RegexValidator
 from django.conf import settings
@@ -290,3 +292,163 @@ class ExecucaoProcessamentoFila(models.Model):
 
 	def __str__(self):
 		return f'Execucao {self.pk} - {self.get_status_display()}'
+
+
+class Questionario(models.Model):
+	titulo = models.CharField(max_length=150)
+	descricao = models.TextField(blank=True)
+	ativo = models.BooleanField(default=True)
+	criado_por = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='questionarios_criados',
+	)
+	criado_em = models.DateTimeField(auto_now_add=True)
+	atualizado_em = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		ordering = ['-criado_em']
+		verbose_name = 'Questionario'
+		verbose_name_plural = 'Questionarios'
+
+	def __str__(self):
+		return self.titulo
+
+
+class PerguntaQuestionario(models.Model):
+	class TipoPergunta(models.TextChoices):
+		TEXTO_CURTO = 'texto_curto', 'Texto curto'
+		TEXTO_LONGO = 'texto_longo', 'Texto longo'
+		ESCOLHA_UNICA = 'escolha_unica', 'Escolha unica'
+		DATA = 'data', 'Data'
+		SIM_NAO = 'sim_nao', 'Sim / Nao'
+
+	questionario = models.ForeignKey(
+		Questionario,
+		on_delete=models.CASCADE,
+		related_name='perguntas',
+	)
+	texto = models.CharField(max_length=300)
+	ajuda = models.CharField(max_length=300, blank=True)
+	tipo = models.CharField(max_length=20, choices=TipoPergunta.choices, default=TipoPergunta.TEXTO_CURTO)
+	obrigatoria = models.BooleanField(default=False)
+	ordem = models.PositiveIntegerField(default=0)
+
+	class Meta:
+		ordering = ['ordem', 'id']
+		verbose_name = 'Pergunta'
+		verbose_name_plural = 'Perguntas'
+
+	def __str__(self):
+		return self.texto
+
+	@property
+	def tem_opcoes(self):
+		return self.tipo == self.TipoPergunta.ESCOLHA_UNICA
+
+
+class OpcaoPergunta(models.Model):
+	pergunta = models.ForeignKey(
+		PerguntaQuestionario,
+		on_delete=models.CASCADE,
+		related_name='opcoes',
+	)
+	texto = models.CharField(max_length=200)
+	ordem = models.PositiveIntegerField(default=0)
+
+	class Meta:
+		ordering = ['ordem', 'id']
+		verbose_name = 'Opcao de pergunta'
+		verbose_name_plural = 'Opcoes de pergunta'
+
+	def __str__(self):
+		return self.texto
+
+
+class ConviteQuestionario(models.Model):
+	class StatusConvite(models.TextChoices):
+		PENDENTE = 'pendente', 'Pendente'
+		RESPONDIDO = 'respondido', 'Respondido'
+
+	questionario = models.ForeignKey(
+		Questionario,
+		on_delete=models.CASCADE,
+		related_name='convites',
+	)
+	pessoa = models.ForeignKey(
+		PrimeiroContato,
+		on_delete=models.CASCADE,
+		related_name='convites_questionario',
+	)
+	token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+	status = models.CharField(
+		max_length=20,
+		choices=StatusConvite.choices,
+		default=StatusConvite.PENDENTE,
+	)
+	criado_por = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='convites_questionario_criados',
+	)
+	respondido_por = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='convites_questionario_respondidos',
+	)
+	respondente_nome = models.CharField(max_length=150, blank=True)
+	criado_em = models.DateTimeField(auto_now_add=True)
+	respondido_em = models.DateTimeField(null=True, blank=True)
+
+	class Meta:
+		ordering = ['-criado_em']
+		verbose_name = 'Convite de questionario'
+		verbose_name_plural = 'Convites de questionario'
+
+	def __str__(self):
+		return f'{self.pessoa.nome} - {self.questionario.titulo} ({self.get_status_display()})'
+
+	@property
+	def respondido(self):
+		return self.status == self.StatusConvite.RESPONDIDO
+
+
+class RespostaPergunta(models.Model):
+	convite = models.ForeignKey(
+		ConviteQuestionario,
+		on_delete=models.CASCADE,
+		related_name='respostas',
+	)
+	pergunta = models.ForeignKey(
+		PerguntaQuestionario,
+		on_delete=models.CASCADE,
+		related_name='respostas',
+	)
+	valor_texto = models.TextField(blank=True)
+	opcao = models.ForeignKey(
+		OpcaoPergunta,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='respostas',
+	)
+
+	class Meta:
+		unique_together = ('convite', 'pergunta')
+		verbose_name = 'Resposta de pergunta'
+		verbose_name_plural = 'Respostas de pergunta'
+
+	def __str__(self):
+		return f'{self.pergunta.texto}: {self.valor_exibicao}'
+
+	@property
+	def valor_exibicao(self):
+		if self.opcao_id:
+			return self.opcao.texto
+		return self.valor_texto

@@ -79,6 +79,12 @@
                 >
                     Disparo em massa
                 </a>
+                <a
+                    href="{% url 'questionarios-lista' %}"
+                    class="nav-link {% if request.resolver_match.url_name == 'questionarios-lista' or request.resolver_match.url_name == 'questionarios-novo' or request.resolver_match.url_name == 'questionario-builder' or request.resolver_match.url_name == 'questionario-visualizar' or request.resolver_match.url_name == 'questionario-editar' or request.resolver_match.url_name == 'pergunta-editar' %}active{% endif %}"
+                >
+                    Questionarios
+                </a>
                 {% endif %}
             </nav>
         </div>

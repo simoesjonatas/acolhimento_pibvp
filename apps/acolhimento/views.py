@@ -7,8 +7,8 @@ from django.http import JsonResponse
 from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.db import close_old_connections
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db import close_old_connections, transaction
+from django.db.models import Count, Exists, Max, OuterRef, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
@@ -20,8 +20,8 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento.fila_processor import processar_fila_mensagens
-from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PrimeiroContatoForm, RelatorioPessoasForm
-from apps.acolhimento.models import ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato
+from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RelatorioPessoasForm, ResponderQuestionarioForm
+from apps.acolhimento.models import ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
 from apps.acolhimento.reports import filtrar_pessoas, gerar_relatorio, resumo_filtros, resumo_pessoas
 from apps.acolhimento.whatsapp_rules import WHATSAPP_OPTIN_REQUIRED_ERROR, pessoa_pode_receber_whatsapp
@@ -647,6 +647,15 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		context['status_choices'] = PrimeiroContato.StatusAcolhimento.choices
 		context['status_atual'] = self.object.status
 		context['status_fluxo'] = status_fluxo
+
+		convites = list(self.object.convites_questionario.select_related('questionario'))
+		for convite in convites:
+			convite.link = self.request.build_absolute_uri(
+				reverse('responder-questionario', kwargs={'token': convite.token})
+			)
+		context['convites_questionario'] = convites
+		context['questionarios_ativos'] = Questionario.objects.filter(ativo=True)
+		context['is_participante'] = self.object.status == PrimeiroContato.StatusAcolhimento.PARTICIPANTE
 		return context
 
 	def post(self, request, *args, **kwargs):
@@ -1133,3 +1142,293 @@ class RelatorioPessoasView(AdminPermissaoMixin, View):
 			context['resumo'] = resumo_pessoas(PrimeiroContato.objects.all())
 
 		return render(request, self.template_name, context)
+
+
+# ----------------------------------------------------------------------------
+# Questionarios (construtor + convites + resposta publica)
+# ----------------------------------------------------------------------------
+
+class QuestionarioListView(AdminPermissaoMixin, ListView):
+	template_name = 'questionarios_lista.html'
+	model = Questionario
+	context_object_name = 'questionarios'
+
+	def get_queryset(self):
+		return Questionario.objects.annotate(total_perguntas=Count('perguntas'))
+
+
+class QuestionarioCreateView(AdminPermissaoMixin, CreateView):
+	template_name = 'questionario_form.html'
+	form_class = QuestionarioForm
+
+	def form_valid(self, form):
+		form.instance.criado_por = self.request.user
+		self.object = form.save()
+		messages.success(self.request, 'Questionario criado. Adicione as perguntas.')
+		return redirect('questionario-builder', pk=self.object.pk)
+
+
+class QuestionarioUpdateView(AdminPermissaoMixin, UpdateView):
+	template_name = 'questionario_form.html'
+	model = Questionario
+	form_class = QuestionarioForm
+
+	def get_success_url(self):
+		return reverse('questionario-builder', kwargs={'pk': self.object.pk})
+
+
+class QuestionarioDeleteView(AdminPermissaoMixin, DeleteView):
+	template_name = 'questionario_confirm_delete.html'
+	model = Questionario
+	context_object_name = 'questionario'
+	success_url = reverse_lazy('questionarios-lista')
+
+
+class QuestionarioBuilderView(AdminPermissaoMixin, View):
+	template_name = 'questionario_builder.html'
+
+	def _render(self, request, questionario, form):
+		return render(request, self.template_name, {
+			'questionario': questionario,
+			'perguntas': questionario.perguntas.prefetch_related('opcoes'),
+			'form': form,
+		})
+
+	def get(self, request, pk):
+		questionario = get_object_or_404(Questionario, pk=pk)
+		return self._render(request, questionario, PerguntaForm())
+
+	def post(self, request, pk):
+		questionario = get_object_or_404(Questionario, pk=pk)
+		form = PerguntaForm(request.POST)
+		if form.is_valid():
+			pergunta = form.save(commit=False)
+			pergunta.questionario = questionario
+			pergunta.ordem = (questionario.perguntas.aggregate(m=Max('ordem'))['m'] or 0) + 1
+			pergunta.save()
+			form.salvar_opcoes(pergunta)
+			messages.success(request, 'Pergunta adicionada.')
+			return redirect('questionario-builder', pk=questionario.pk)
+		messages.error(request, 'Nao foi possivel adicionar a pergunta. Verifique os campos.')
+		return self._render(request, questionario, form)
+
+
+class QuestionarioPreviewView(AdminPermissaoMixin, DetailView):
+	template_name = 'questionario_preview.html'
+	model = Questionario
+	context_object_name = 'questionario'
+
+	def get_queryset(self):
+		return Questionario.objects.prefetch_related('perguntas__opcoes')
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		form = ResponderQuestionarioForm(
+			questionario=self.object,
+			initial={'respondente_nome': 'Nome do respondente'},
+		)
+		for field in form.fields.values():
+			field.disabled = True
+		context['form'] = form
+		return context
+
+
+class PerguntaUpdateView(AdminPermissaoMixin, UpdateView):
+	template_name = 'pergunta_form.html'
+	model = PerguntaQuestionario
+	form_class = PerguntaForm
+	context_object_name = 'pergunta'
+
+	def get_success_url(self):
+		messages.success(self.request, 'Pergunta atualizada.')
+		return reverse('questionario-builder', kwargs={'pk': self.object.questionario_id})
+
+
+class PerguntaDeleteView(AdminPermissaoMixin, View):
+	def post(self, request, pk):
+		pergunta = get_object_or_404(PerguntaQuestionario, pk=pk)
+		questionario_id = pergunta.questionario_id
+		pergunta.delete()
+		messages.success(request, 'Pergunta removida.')
+		return redirect('questionario-builder', pk=questionario_id)
+
+
+class PerguntaMoverView(AdminPermissaoMixin, View):
+	def post(self, request, pk):
+		pergunta = get_object_or_404(PerguntaQuestionario, pk=pk)
+		direcao = request.POST.get('direcao')
+		perguntas = list(pergunta.questionario.perguntas.all())
+		ids = [p.id for p in perguntas]
+		indice = ids.index(pergunta.id)
+		alvo = indice - 1 if direcao == 'subir' else indice + 1
+		if 0 <= alvo < len(perguntas):
+			perguntas[indice], perguntas[alvo] = perguntas[alvo], perguntas[indice]
+			for nova_ordem, item in enumerate(perguntas):
+				if item.ordem != nova_ordem:
+					item.ordem = nova_ordem
+					item.save(update_fields=['ordem'])
+		return redirect('questionario-builder', pk=pergunta.questionario_id)
+
+
+class GerarConviteQuestionarioView(AdminPermissaoMixin, View):
+	def post(self, request, pk):
+		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		if pessoa.status != PrimeiroContato.StatusAcolhimento.PARTICIPANTE:
+			messages.error(request, 'O questionario so pode ser gerado quando a pessoa esta no status Participante.')
+			return redirect('pessoas-detalhe', pk=pessoa.pk)
+
+		questionario = get_object_or_404(Questionario, pk=request.POST.get('questionario'), ativo=True)
+		if not questionario.perguntas.exists():
+			messages.error(request, 'Este questionario ainda nao tem perguntas.')
+			return redirect('pessoas-detalhe', pk=pessoa.pk)
+
+		# Evita duplicar link ao clicar mais de uma vez: reaproveita o pendente existente.
+		ja_pendente = ConviteQuestionario.objects.filter(
+			pessoa=pessoa,
+			questionario=questionario,
+			status=ConviteQuestionario.StatusConvite.PENDENTE,
+		).exists()
+		if ja_pendente:
+			messages.info(request, 'Ja existe um link pendente para este questionario.')
+			return redirect('pessoas-detalhe', pk=pessoa.pk)
+
+		with transaction.atomic():
+			ConviteQuestionario.objects.create(
+				questionario=questionario,
+				pessoa=pessoa,
+				criado_por=request.user,
+			)
+			InteracaoAcolhimento.objects.create(
+				pessoa=pessoa,
+				tipo=InteracaoAcolhimento.TipoInteracao.OBSERVACAO,
+				descricao=f'Link do questionario "{questionario.titulo}" gerado para preenchimento.',
+			)
+		messages.success(request, 'Link do questionario gerado.')
+		return redirect('pessoas-detalhe', pk=pessoa.pk)
+
+
+class ExcluirConviteQuestionarioView(AdminPermissaoMixin, View):
+	def post(self, request, pk):
+		convite = get_object_or_404(
+			ConviteQuestionario.objects.select_related('pessoa', 'questionario'), pk=pk
+		)
+		pessoa = convite.pessoa
+		pessoa_id = convite.pessoa_id
+		questionario_titulo = convite.questionario.titulo
+		with transaction.atomic():
+			InteracaoAcolhimento.objects.create(
+				pessoa=pessoa,
+				tipo=InteracaoAcolhimento.TipoInteracao.OBSERVACAO,
+				descricao=f'Link do questionario "{questionario_titulo}" apagado.',
+			)
+			convite.delete()
+		messages.success(request, 'Link do questionario removido.')
+		return redirect('pessoas-detalhe', pk=pessoa_id)
+
+
+class EnviarConviteWhatsappView(AdminPermissaoMixin, View):
+	def post(self, request, pk):
+		convite = get_object_or_404(
+			ConviteQuestionario.objects.select_related('pessoa', 'questionario'), pk=pk
+		)
+		pessoa = convite.pessoa
+		if not pessoa_pode_receber_whatsapp(pessoa):
+			messages.error(request, WHATSAPP_OPTIN_REQUIRED_ERROR)
+			return redirect('pessoas-detalhe', pk=pessoa.pk)
+
+		link = request.build_absolute_uri(
+			reverse('responder-questionario', kwargs={'token': convite.token})
+		)
+		conteudo = (
+			f'Ola, {pessoa.nome}! Segue o link para responder o questionario '
+			f'"{convite.questionario.titulo}": {link}'
+		)
+		with transaction.atomic():
+			MensagemContato.objects.create(
+				pessoa=pessoa,
+				criado_por=request.user,
+				canal=MensagemContato.CanalChoices.WHATSAPP,
+				direcao=MensagemContato.DirecaoChoices.SAIDA,
+				status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+				prioridade=5,
+				conteudo=conteudo,
+			)
+			InteracaoAcolhimento.objects.create(
+				pessoa=pessoa,
+				tipo=InteracaoAcolhimento.TipoInteracao.TENTATIVA_CONTATO,
+				descricao=(
+					f'Mensagem com link do questionario "{convite.questionario.titulo}" '
+					'enfileirada para envio pelo WhatsApp.'
+				),
+			)
+		messages.success(request, 'Mensagem com o link enfileirada no WhatsApp.')
+		return redirect('pessoas-detalhe', pk=pessoa.pk)
+
+
+class RespostaConviteDetailView(AdminPermissaoMixin, DetailView):
+	template_name = 'resposta_detail.html'
+	model = ConviteQuestionario
+	context_object_name = 'convite'
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		respostas = {r.pergunta_id: r for r in self.object.respostas.select_related('opcao', 'pergunta')}
+		context['itens'] = [
+			{'pergunta': pergunta, 'resposta': respostas.get(pergunta.id)}
+			for pergunta in self.object.questionario.perguntas.all()
+		]
+		return context
+
+
+class ResponderQuestionarioView(View):
+	"""Pagina publica (sem login) para responder um questionario via token."""
+
+	template_name = 'responder_questionario.html'
+
+	def get_convite(self, token):
+		return get_object_or_404(
+			ConviteQuestionario.objects.select_related('pessoa', 'questionario'), token=token
+		)
+
+	def get(self, request, token):
+		convite = self.get_convite(token)
+		if convite.respondido:
+			return render(request, self.template_name, {'convite': convite, 'ja_respondido': True})
+		nome_inicial = request.user.get_full_name() if request.user.is_authenticated else ''
+		form = ResponderQuestionarioForm(
+			questionario=convite.questionario,
+			initial={'respondente_nome': nome_inicial},
+		)
+		return render(request, self.template_name, {'convite': convite, 'form': form})
+
+	def post(self, request, token):
+		convite = self.get_convite(token)
+		if convite.respondido:
+			return render(request, self.template_name, {'convite': convite, 'ja_respondido': True})
+
+		form = ResponderQuestionarioForm(request.POST, questionario=convite.questionario)
+		if form.is_valid():
+			with transaction.atomic():
+				form.salvar_respostas(convite)
+				convite.status = ConviteQuestionario.StatusConvite.RESPONDIDO
+				convite.respondido_em = timezone.now()
+				convite.respondente_nome = form.cleaned_data['respondente_nome']
+				if request.user.is_authenticated:
+					convite.respondido_por = request.user
+				convite.save(update_fields=['status', 'respondido_em', 'respondente_nome', 'respondido_por'])
+				InteracaoAcolhimento.objects.create(
+					pessoa=convite.pessoa,
+					tipo=InteracaoAcolhimento.TipoInteracao.RESPOSTA_RECEBIDA,
+					descricao=(
+						f'Questionario "{convite.questionario.titulo}" respondido por '
+						f'{convite.respondente_nome}.'
+					),
+				)
+			return redirect('responder-questionario-sucesso')
+
+		messages.error(request, 'Verifique os campos obrigatorios e tente novamente.')
+		return render(request, self.template_name, {'convite': convite, 'form': form})
+
+
+class ResponderSucessoView(TemplateView):
+	template_name = 'responder_sucesso.html'

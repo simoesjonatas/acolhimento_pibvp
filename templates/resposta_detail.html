@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block title %}Resposta do questionario{% endblock %}
+
+{% block content %}
+<div class="page-hero">
+    <div>
+        <span class="section-eyebrow">Questionario</span>
+        <h1>{{ convite.questionario.titulo }}</h1>
+        <p>
+            {{ convite.pessoa.nome }} —
+            {% if convite.respondido %}Respondido em {{ convite.respondido_em|date:'d/m/Y H:i' }}{% else %}Pendente{% endif %}
+        </p>
+    </div>
+    <a class="btn secundario" href="{% url 'pessoas-detalhe' convite.pessoa.pk %}">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="btn-text">Voltar</span>
+    </a>
+</div>
+
+{% if convite.respondente_nome %}
+<p class="result-count">Preenchido por: {{ convite.respondente_nome }}</p>
+{% endif %}
+
+<section class="dashboard-panel">
+    <div class="panel-header">
+        <h2>Respostas</h2>
+    </div>
+    <div class="detail-grid">
+        {% for item in itens %}
+        <div class="detail-item">
+            <span>{{ item.pergunta.texto }}</span>
+            <strong>{% if item.resposta and item.resposta.valor_exibicao %}{{ item.resposta.valor_exibicao }}{% else %}-{% endif %}</strong>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

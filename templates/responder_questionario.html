@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ convite.questionario.titulo }}{% endblock %}
+
+{% block content %}
+<section class="public-form-wrap">
+    <div class="public-form-card">
+        <span class="section-eyebrow">PIBVP Acolhimento</span>
+        <h1>{{ convite.questionario.titulo }}</h1>
+        {% if convite.questionario.descricao %}<p>{{ convite.questionario.descricao }}</p>{% endif %}
+        <p class="public-form-para">Questionario para <strong>{{ convite.pessoa.nome }}</strong>.</p>
+
+        {% if ja_respondido %}
+        <p class="empty-state">Este questionario ja foi respondido. Obrigado!</p>
+        {% else %}
+        <form method="post" class="questionario-responder-form">
+            {% csrf_token %}
+            <div class="report-field">
+                <label for="{{ form.respondente_nome.id_for_label }}">{{ form.respondente_nome.label }}</label>
+                {{ form.respondente_nome }}
+                {% if form.respondente_nome.errors %}<span class="form-errors">{{ form.respondente_nome.errors.0 }}</span>{% endif %}
+            </div>
+
+            {% for pergunta, campo in form.campos_perguntas %}
+            <div class="report-field">
+                <label for="{{ campo.id_for_label }}">{{ pergunta.texto }}{% if pergunta.obrigatoria %} <span class="obrigatoria-marca">*</span>{% endif %}</label>
+                {% if pergunta.ajuda %}<small class="table-muted-text">{{ pergunta.ajuda }}</small>{% endif %}
+                {{ campo }}
+                {% if campo.errors %}<span class="form-errors">{{ campo.errors.0 }}</span>{% endif %}
+            </div>
+            {% endfor %}
+
+            <button type="submit">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                <span class="btn-text">Enviar respostas</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

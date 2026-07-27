@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}Questionarios{% endblock %}
+
+{% block content %}
+<div class="page-hero">
+    <div>
+        <span class="section-eyebrow">Acolhimento</span>
+        <h1>Questionarios</h1>
+        <p>Crie e edite os questionarios usados no acolhimento e na membresia.</p>
+    </div>
+    <a class="btn" href="{% url 'questionarios-novo' %}">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span class="btn-text">Novo questionario</span>
+    </a>
+</div>
+
+{% if questionarios %}
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Titulo</th>
+                <th>Perguntas</th>
+                <th>Status</th>
+                <th>Acoes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for questionario in questionarios %}
+            <tr>
+                <td><strong class="table-primary-text">{{ questionario.titulo }}</strong></td>
+                <td>{{ questionario.total_perguntas }}</td>
+                <td>
+                    {% if questionario.ativo %}
+                    <span class="exec-status exec-status-concluida"><span class="exec-status-dot"></span> Ativo</span>
+                    {% else %}
+                    <span class="exec-status exec-status-interrompida"><span class="exec-status-dot"></span> Inativo</span>
+                    {% endif %}
+                </td>
+                <td class="row-actions">
+                    <a class="btn secundario" href="{% url 'questionario-builder' questionario.pk %}">Perguntas</a>
+                    <a class="btn secundario" href="{% url 'questionario-visualizar' questionario.pk %}">Visualizar</a>
+                    <a class="btn secundario" href="{% url 'questionario-editar' questionario.pk %}">Config</a>
+                    <a class="btn danger" href="{% url 'questionario-excluir' questionario.pk %}">Excluir</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="empty-state">Nenhum questionario criado ainda.</p>
+{% endif %}
+{% endblock %}

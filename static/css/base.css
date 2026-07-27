@@ -81,16 +81,18 @@ body::before {
 .header-left {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: 12px;
+    flex: 1 1 auto;
     min-width: 0;
 }
 
 .brand-wrap {
     display: grid;
-    grid-template-columns: 38px minmax(150px, max-content);
+    grid-template-columns: 38px minmax(132px, max-content);
     align-items: center;
     gap: 10px;
     color: #f6fff9;
+    flex: 0 0 auto;
 }
 
 .brand-mark {
@@ -119,7 +121,7 @@ body::before {
 .brand {
     display: block;
     color: #fbfff9;
-    font-size: 0.98rem;
+    font-size: 0.94rem;
     font-weight: 800;
     letter-spacing: 0;
 }
@@ -136,8 +138,9 @@ body::before {
     display: flex;
     align-items: center;
     gap: 4px;
+    flex: 0 1 auto;
     min-width: 0;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .nav-toggle {
@@ -187,9 +190,10 @@ body::before {
     padding: 8px 10px;
     border: 1px solid transparent;
     border-radius: var(--radius);
-    font-size: 0.9rem;
+    font-size: 0.84rem;
     font-weight: 700;
     line-height: 1;
+    white-space: nowrap;
     transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
@@ -205,6 +209,16 @@ body::before {
     background: #f8fbf5;
     border-color: rgba(255, 255, 255, 0.28);
     color: var(--primary-strong);
+}
+
+.nav-link {
+    flex: 0 0 auto;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.profile-chip {
+    flex: 0 0 auto;
 }
 
 .menu-count-badge {
@@ -228,6 +242,7 @@ body::before {
     align-items: center;
     gap: 8px;
     flex: 0 0 auto;
+    margin-left: auto;
 }
 
 .logout-form {
@@ -629,7 +644,7 @@ tbody tr:hover td {
 }
 
 /* Responsive shell */
-@media (max-width: 1060px) {
+@media (max-width: 1180px) {
     .app-header {
         align-items: stretch;
         flex-direction: column;
@@ -642,6 +657,10 @@ tbody tr:hover td {
 
     .header-right {
         justify-content: flex-end;
+    }
+
+    .top-nav {
+        flex-wrap: wrap;
     }
 }
 
@@ -733,7 +752,7 @@ tbody tr:hover td {
     /* Botoes de acao ocupam a largura toda no mobile, exceto os utilitarios
        flutuantes/inline (scroll ate o fim e envio da conversa). */
     .app-main a.btn,
-    .app-main button:not(.toast-close):not(.conversation-scroll-bottom):not(.compose-send),
+    .app-main button:not(.toast-close):not(.conversation-scroll-bottom):not(.compose-send):not(.convite-excluir-btn),
     .app-main input[type="submit"] {
         width: 100%;
     }

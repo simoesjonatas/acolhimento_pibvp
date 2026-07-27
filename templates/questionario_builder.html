@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ questionario.titulo }}{% endblock %}
+
+{% block content %}
+<div class="questionario-builder-page">
+    <section class="page-hero questionario-builder-hero">
+        <div class="profile-identity">
+            <span class="profile-avatar questionario-avatar" aria-hidden="true">{{ questionario.titulo|slice:':1'|upper }}</span>
+            <div>
+                <span class="section-eyebrow">Questionario</span>
+                <h1>{{ questionario.titulo }}</h1>
+                {% if questionario.descricao %}<p>{{ questionario.descricao }}</p>{% endif %}
+                <div class="hero-badges">
+                    {% if questionario.ativo %}
+                    <span class="profile-role-badge is-active">Ativo</span>
+                    {% else %}
+                    <span class="profile-role-badge is-inactive">Inativo</span>
+                    {% endif %}
+                    <span class="profile-role-badge">{{ perguntas|length }} pergunta(s)</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="hero-actions">
+            <a class="btn secundario" href="{% url 'questionario-visualizar' questionario.pk %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span class="btn-text">Visualizar</span>
+            </a>
+            <a class="btn secundario" href="{% url 'questionario-editar' questionario.pk %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                <span class="btn-text">Config</span>
+            </a>
+            <a class="btn secundario" href="{% url 'questionarios-lista' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                <span class="btn-text">Voltar</span>
+            </a>
+        </div>
+    </section>
+
+    <section class="questionario-builder-layout">
+        <section class="dashboard-panel questionario-builder-main">
+            <div class="panel-header builder-panel-header">
+                <div>
+                    <h2>Estrutura</h2>
+                    <p class="page-subtitle">Perguntas do formulario</p>
+                </div>
+                <span class="result-count">{{ perguntas|length }} pergunta(s)</span>
+            </div>
+
+            {% if perguntas %}
+            <ol class="builder-list builder-list-rich">
+                {% for pergunta in perguntas %}
+                <li class="builder-item">
+                    <span class="builder-order" aria-hidden="true">{{ forloop.counter }}</span>
+                    <div class="builder-item-main">
+                        <div class="builder-question-title">
+                            <strong>{{ pergunta.texto }}</strong>
+                            {% if pergunta.obrigatoria %}<span class="builder-req">obrigatoria</span>{% endif %}
+                        </div>
+                        <div class="builder-meta-row">
+                            <span class="builder-type-badge">{{ pergunta.get_tipo_display }}</span>
+                            {% if pergunta.ajuda %}<span class="table-muted-text">{{ pergunta.ajuda }}</span>{% endif %}
+                        </div>
+                        {% if pergunta.tem_opcoes %}
+                        <span class="builder-opcoes">
+                            {% for opcao in pergunta.opcoes.all %}<span class="builder-opcao">{{ opcao.texto }}</span>{% endfor %}
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="builder-item-actions">
+                        <form method="post" action="{% url 'pergunta-mover' pergunta.pk %}" class="inline-form">
+                            {% csrf_token %}<input type="hidden" name="direcao" value="subir">
+                            <button type="submit" class="btn secundario builder-icon-btn" aria-label="Mover para cima" title="Mover para cima">
+                                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'pergunta-mover' pergunta.pk %}" class="inline-form">
+                            {% csrf_token %}<input type="hidden" name="direcao" value="descer">
+                            <button type="submit" class="btn secundario builder-icon-btn" aria-label="Mover para baixo" title="Mover para baixo">
+                                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                        </form>
+                        <a class="btn secundario builder-icon-btn" href="{% url 'pergunta-editar' pergunta.pk %}" aria-label="Editar pergunta" title="Editar pergunta">
+                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                        </a>
+                        <form method="post" action="{% url 'pergunta-excluir' pergunta.pk %}" class="inline-form">
+                            {% csrf_token %}
+                            <button type="submit" class="btn danger builder-icon-btn" aria-label="Excluir pergunta" title="Excluir pergunta">
+                                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                            </button>
+                        </form>
+                    </div>
+                </li>
+                {% endfor %}
+            </ol>
+            {% else %}
+            <p class="empty-state">Nenhuma pergunta cadastrada.</p>
+            {% endif %}
+        </section>
+
+        <aside class="dashboard-panel questionario-add-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Adicionar pergunta</h2>
+                    <p class="page-subtitle">Nova pergunta</p>
+                </div>
+            </div>
+            <form method="post" class="builder-add-form">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="form-errors">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <p class="builder-field">
+                    <label for="{{ form.texto.id_for_label }}">Pergunta</label>
+                    {{ form.texto }}
+                    {% if form.texto.errors %}<span class="form-errors">{{ form.texto.errors.0 }}</span>{% endif %}
+                </p>
+
+                <p class="builder-field">
+                    <label for="{{ form.ajuda.id_for_label }}">Texto de apoio</label>
+                    {{ form.ajuda }}
+                    {% if form.ajuda.errors %}<span class="form-errors">{{ form.ajuda.errors.0 }}</span>{% endif %}
+                </p>
+
+                <div class="builder-form-grid">
+                    <p class="builder-field">
+                        <label for="{{ form.tipo.id_for_label }}">Tipo</label>
+                        {{ form.tipo }}
+                        {% if form.tipo.errors %}<span class="form-errors">{{ form.tipo.errors.0 }}</span>{% endif %}
+                    </p>
+
+                    <label class="permission-toggle builder-required-toggle" for="{{ form.obrigatoria.id_for_label }}">
+                        {{ form.obrigatoria }}
+                        <span>
+                            <strong>Obrigatoria</strong>
+                            <small>Campo marcado com asterisco</small>
+                        </span>
+                    </label>
+                    {% if form.obrigatoria.errors %}<span class="form-errors builder-form-wide">{{ form.obrigatoria.errors.0 }}</span>{% endif %}
+                </div>
+
+                <p class="builder-field builder-options-field" data-options-field>
+                    <label for="{{ form.opcoes_texto.id_for_label }}">Opcoes</label>
+                    {{ form.opcoes_texto }}
+                    {% if form.opcoes_texto.errors %}<span class="form-errors">{{ form.opcoes_texto.errors.0 }}</span>{% endif %}
+                </p>
+
+                <button type="submit">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span class="btn-text">Adicionar pergunta</span>
+                </button>
+            </form>
+        </aside>
+    </section>
+</div>
+
+<script>
+    (function () {
+        const tipo = document.getElementById('{{ form.tipo.id_for_label }}');
+        const opcoes = document.querySelector('[data-options-field]');
+        if (!tipo || !opcoes) return;
+
+        function atualizarOpcoes() {
+            opcoes.classList.toggle('is-hidden', tipo.value !== 'escolha_unica');
+        }
+
+        tipo.addEventListener('change', atualizarOpcoes);
+        atualizarOpcoes();
+    })();
+</script>
+{% endblock %}

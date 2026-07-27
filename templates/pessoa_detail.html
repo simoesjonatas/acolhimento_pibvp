@@ -134,6 +134,67 @@
                 </form>
             </article>
 
+            {% if request.user.is_staff or request.user.is_superuser %}
+            {% if is_participante %}
+            <article class="person-summary-card questionario-card">
+                <h2>Questionario de membresia</h2>
+
+                {% if convites_questionario %}
+                <ul class="convite-list">
+                    {% for convite in convites_questionario %}
+                    <li class="convite-item">
+                        <div class="convite-item-head">
+                            <strong>{{ convite.questionario.titulo }}</strong>
+                            {% if convite.respondido %}
+                            <span class="exec-status exec-status-concluida"><span class="exec-status-dot"></span> Respondido</span>
+                            {% else %}
+                            <span class="exec-status exec-status-executando"><span class="exec-status-dot"></span> Pendente</span>
+                            {% endif %}
+                        </div>
+                        <input class="convite-link" type="text" value="{{ convite.link }}" readonly onclick="this.select()" aria-label="Link do questionario">
+                        <div class="convite-actions">
+                            <a class="btn secundario" href="{{ convite.link }}" target="_blank" rel="noopener">Preencher</a>
+                            {% if convite.respondido %}
+                            <a class="btn secundario" href="{% url 'convite-resposta' convite.pk %}">Ver resposta</a>
+                            {% else %}
+                            <form method="post" action="{% url 'convite-enviar-whatsapp' convite.pk %}" class="inline-form">
+                                {% csrf_token %}
+                                <button type="submit" class="btn secundario">Enviar por WhatsApp</button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="{% url 'convite-excluir' convite.pk %}" class="inline-form convite-excluir-form" onsubmit="return confirm('Remover este link do questionario?');">
+                                {% csrf_token %}
+                                <button type="submit" class="convite-excluir-btn" aria-label="Remover link do questionario" title="Remover">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                                </button>
+                            </form>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+
+                {% if questionarios_ativos %}
+                <form method="post" action="{% url 'pessoas-gerar-convite' pessoa.pk %}" class="convite-gerar-form">
+                    {% csrf_token %}
+                    <label for="questionario-select">Gerar novo link</label>
+                    <select name="questionario" id="questionario-select">
+                        {% for questionario in questionarios_ativos %}
+                        <option value="{{ questionario.pk }}">{{ questionario.titulo }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        <span class="btn-text">Gerar link</span>
+                    </button>
+                </form>
+                {% else %}
+                <p class="table-muted-text">Nenhum questionario ativo. <a href="{% url 'questionarios-lista' %}">Crie um</a>.</p>
+                {% endif %}
+            </article>
+            {% endif %}
+            {% endif %}
+
             <article class="person-summary-card timeline-compose-card">
                 <h2>Novo passo</h2>
                 <form method="post" class="timeline-compose-form">

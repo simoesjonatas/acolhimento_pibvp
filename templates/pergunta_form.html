@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar pergunta{% endblock %}
+
+{% block content %}
+<div class="pergunta-form-page">
+    <section class="page-hero pergunta-form-hero">
+        <div class="profile-identity">
+            <span class="profile-avatar questionario-avatar" aria-hidden="true">?</span>
+            <div>
+                <span class="section-eyebrow">Pergunta</span>
+                <h1>Editar pergunta</h1>
+                <p>{{ pergunta.questionario.titulo }}</p>
+            </div>
+        </div>
+
+        <div class="hero-actions">
+            <a class="btn secundario" href="{% url 'questionario-builder' pergunta.questionario_id %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                <span class="btn-text">Voltar</span>
+            </a>
+            <a class="btn secundario" href="{% url 'questionario-visualizar' pergunta.questionario_id %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span class="btn-text">Visualizar</span>
+            </a>
+        </div>
+    </section>
+
+    <section class="pergunta-editor-layout">
+        <aside class="profile-summary-card pergunta-summary-card">
+            <h2>Resumo</h2>
+            <div class="questionario-status-row">
+                <span class="profile-role-badge">{{ pergunta.get_tipo_display }}</span>
+                {% if pergunta.obrigatoria %}
+                <span class="profile-role-badge is-admin">Obrigatoria</span>
+                {% else %}
+                <span class="profile-role-badge">Opcional</span>
+                {% endif %}
+            </div>
+
+            <dl class="profile-summary-list">
+                <div>
+                    <dt>Questionario</dt>
+                    <dd>{{ pergunta.questionario.titulo }}</dd>
+                </div>
+                <div>
+                    <dt>Pergunta</dt>
+                    <dd>{{ pergunta.texto }}</dd>
+                </div>
+                <div>
+                    <dt>Ordem</dt>
+                    <dd>{{ pergunta.ordem }}</dd>
+                </div>
+            </dl>
+        </aside>
+
+        <section class="profile-form-card pergunta-form-card">
+            <div class="panel-header">
+                <div>
+                    <h2>Dados da pergunta</h2>
+                    <p>Atualize texto, tipo, obrigatoriedade e opcoes.</p>
+                </div>
+            </div>
+
+            <form method="post" class="builder-add-form pergunta-edit-form">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="form-errors">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <p class="builder-field">
+                    <label for="{{ form.texto.id_for_label }}">Pergunta</label>
+                    {{ form.texto }}
+                    {% if form.texto.errors %}<span class="form-errors">{{ form.texto.errors.0 }}</span>{% endif %}
+                </p>
+
+                <p class="builder-field">
+                    <label for="{{ form.ajuda.id_for_label }}">Texto de apoio</label>
+                    {{ form.ajuda }}
+                    {% if form.ajuda.errors %}<span class="form-errors">{{ form.ajuda.errors.0 }}</span>{% endif %}
+                </p>
+
+                <div class="builder-form-grid">
+                    <p class="builder-field">
+                        <label for="{{ form.tipo.id_for_label }}">Tipo</label>
+                        {{ form.tipo }}
+                        {% if form.tipo.errors %}<span class="form-errors">{{ form.tipo.errors.0 }}</span>{% endif %}
+                    </p>
+
+                    <label class="permission-toggle builder-required-toggle" for="{{ form.obrigatoria.id_for_label }}">
+                        {{ form.obrigatoria }}
+                        <span>
+                            <strong>Obrigatoria</strong>
+                            <small>Campo marcado com asterisco</small>
+                        </span>
+                    </label>
+                    {% if form.obrigatoria.errors %}<span class="form-errors builder-form-wide">{{ form.obrigatoria.errors.0 }}</span>{% endif %}
+                </div>
+
+                <p class="builder-field builder-options-field" data-options-field>
+                    <label for="{{ form.opcoes_texto.id_for_label }}">Opcoes</label>
+                    {{ form.opcoes_texto }}
+                    {% if form.opcoes_texto.errors %}<span class="form-errors">{{ form.opcoes_texto.errors.0 }}</span>{% endif %}
+                </p>
+
+                <p class="action-row">
+                    <button type="submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                        <span class="btn-text">Salvar pergunta</span>
+                    </button>
+                    <a class="btn secundario" href="{% url 'questionario-builder' pergunta.questionario_id %}">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        <span class="btn-text">Cancelar</span>
+                    </a>
+                </p>
+            </form>
+        </section>
+    </section>
+</div>
+
+<script>
+    (function () {
+        const tipo = document.getElementById('{{ form.tipo.id_for_label }}');
+        const opcoes = document.querySelector('[data-options-field]');
+        if (!tipo || !opcoes) return;
+
+        function atualizarOpcoes() {
+            opcoes.classList.toggle('is-hidden', tipo.value !== 'escolha_unica');
+        }
+
+        tipo.addEventListener('change', atualizarOpcoes);
+        atualizarOpcoes();
+    })();
+</script>
+{% endblock %}

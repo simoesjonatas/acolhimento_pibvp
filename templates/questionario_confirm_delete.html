@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+
+{% block title %}Excluir questionario{% endblock %}
+
+{% block content %}
+<h1>Excluir questionario</h1>
+<p>Tem certeza que deseja excluir "<strong>{{ questionario.titulo }}</strong>"? As perguntas e respostas vinculadas tambem serao removidas.</p>
+<form method="post">
+    {% csrf_token %}
+    <p class="action-row">
+        <button type="submit" class="danger">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+            <span class="btn-text">Excluir</span>
+        </button>
+        <a class="btn secundario" href="{% url 'questionarios-lista' %}">Cancelar</a>
+    </p>
+</form>
+{% endblock %}

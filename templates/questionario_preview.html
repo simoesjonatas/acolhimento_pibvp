@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Visualizar {{ questionario.titulo }}{% endblock %}
+
+{% block content %}
+<div class="page-hero">
+    <div>
+        <span class="section-eyebrow">Questionario</span>
+        <h1>Visualizar questionario</h1>
+        <p>{{ questionario.titulo }}</p>
+    </div>
+    <div class="hero-actions">
+        <a class="btn secundario" href="{% url 'questionario-builder' questionario.pk %}">Perguntas</a>
+        <a class="btn secundario" href="{% url 'questionario-editar' questionario.pk %}">Config</a>
+        <a class="btn secundario" href="{% url 'questionarios-lista' %}">Voltar</a>
+    </div>
+</div>
+
+<section class="public-form-wrap">
+    <div class="public-form-card questionario-preview-card">
+        <span class="section-eyebrow">PIBVP Acolhimento</span>
+        <h1>{{ questionario.titulo }}</h1>
+        {% if questionario.descricao %}<p>{{ questionario.descricao }}</p>{% endif %}
+        <p class="public-form-para">Previa do formulario enviado por link.</p>
+
+        {% if form.perguntas %}
+        <form class="questionario-responder-form questionario-preview-form">
+            <div class="report-field">
+                <label for="{{ form.respondente_nome.id_for_label }}">{{ form.respondente_nome.label }}</label>
+                {{ form.respondente_nome }}
+            </div>
+
+            {% for pergunta, campo in form.campos_perguntas %}
+            <div class="report-field">
+                <label for="{{ campo.id_for_label }}">{{ pergunta.texto }}{% if pergunta.obrigatoria %} <span class="obrigatoria-marca">*</span>{% endif %}</label>
+                {% if pergunta.ajuda %}<small class="table-muted-text">{{ pergunta.ajuda }}</small>{% endif %}
+                {{ campo }}
+            </div>
+            {% endfor %}
+        </form>
+        {% else %}
+        <p class="empty-state">Nenhuma pergunta cadastrada neste questionario.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
