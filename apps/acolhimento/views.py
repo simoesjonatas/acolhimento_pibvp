@@ -702,7 +702,14 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		context['status_atual'] = self.object.status
 		context['status_fluxo'] = status_fluxo
 
-		if self.request.user.is_superuser:
+		user = self.request.user
+		pode_ver_questionario = (
+			user.is_staff or user.is_superuser or user.has_perm(PERMISSAO_CONVERSAR_PESSOAS)
+		)
+		context['pode_ver_questionario'] = pode_ver_questionario
+		context['pode_excluir_convite'] = user.is_staff or user.is_superuser
+
+		if pode_ver_questionario:
 			convites = list(self.object.convites_questionario.select_related('questionario'))
 			for convite in convites:
 				convite.link = self.request.build_absolute_uri(
@@ -1380,7 +1387,7 @@ class PerguntaMoverView(SuperAdminPermissaoMixin, View):
 		return redirect('questionario-builder', pk=pergunta.questionario_id)
 
 
-class GerarConviteQuestionarioView(SuperAdminPermissaoMixin, View):
+class GerarConviteQuestionarioView(ConversasPessoasPermissaoMixin, View):
 	def post(self, request, pk):
 		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
 		if pessoa.status != PrimeiroContato.StatusAcolhimento.PARTICIPANTE:
@@ -1417,7 +1424,7 @@ class GerarConviteQuestionarioView(SuperAdminPermissaoMixin, View):
 		return redirect('pessoas-detalhe', pk=pessoa.pk)
 
 
-class ExcluirConviteQuestionarioView(SuperAdminPermissaoMixin, View):
+class ExcluirConviteQuestionarioView(AdminPermissaoMixin, View):
 	def post(self, request, pk):
 		convite = get_object_or_404(
 			ConviteQuestionario.objects.select_related('pessoa', 'questionario'), pk=pk
@@ -1436,7 +1443,7 @@ class ExcluirConviteQuestionarioView(SuperAdminPermissaoMixin, View):
 		return redirect('pessoas-detalhe', pk=pessoa_id)
 
 
-class EnviarConviteWhatsappView(SuperAdminPermissaoMixin, View):
+class EnviarConviteWhatsappView(ConversasPessoasPermissaoMixin, View):
 	def post(self, request, pk):
 		convite = get_object_or_404(
 			ConviteQuestionario.objects.select_related('pessoa', 'questionario'), pk=pk
@@ -1476,7 +1483,7 @@ class EnviarConviteWhatsappView(SuperAdminPermissaoMixin, View):
 		return redirect('pessoas-detalhe', pk=pessoa.pk)
 
 
-class RespostaConviteDetailView(SuperAdminPermissaoMixin, DetailView):
+class RespostaConviteDetailView(ConversasPessoasPermissaoMixin, DetailView):
 	template_name = 'resposta_detail.html'
 	model = ConviteQuestionario
 	context_object_name = 'convite'

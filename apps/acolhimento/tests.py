@@ -21,6 +21,7 @@ from apps.acolhimento.models import (
 from apps.acolhimento.views import (
 	PERMISSAO_CONVERSAR_PESSOAS,
 	DisparoMensagemMassaView,
+	ExcluirConviteQuestionarioView,
 	MensagemFilaListView,
 	PrimeiroContatoMensagensView,
 	ProcessamentoFilaControleView,
@@ -621,14 +622,37 @@ class QuestionarioTests(TestCase):
 		self.assertContains(resp, 'Questionarios')
 
 	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
-	def test_staff_nao_gera_convite_questionario(self):
+	def test_staff_gera_convite_questionario(self):
 		self.client.force_login(self.staff_admin)
 		resp = self.client.post(
 			reverse('pessoas-gerar-convite', args=[self.pessoa.pk]),
 			{'questionario': self.questionario.pk},
 		)
-		self.assertEqual(resp.status_code, 403)
-		self.assertEqual(ConviteQuestionario.objects.filter(pessoa=self.pessoa).count(), 0)
+		self.assertEqual(resp.status_code, 302)
+		self.assertEqual(ConviteQuestionario.objects.filter(pessoa=self.pessoa).count(), 1)
+
+	def test_permissao_mensagens_gera_mas_nao_exclui_convite(self):
+		# Usuario com a permissao 'pode_conversar_pessoas' (nao staff/super):
+		# pode gerar o link, mas nao pode excluir.
+		operador = get_user_model().objects.create_user('operador', password='x')
+		perm = Permission.objects.get(codename='pode_conversar_pessoas', content_type__app_label='acolhimento')
+		operador.user_permissions.add(perm)
+		self.client.force_login(operador)
+
+		# Pode gerar (302, redirect sem render)
+		resp = self.client.post(
+			reverse('pessoas-gerar-convite', args=[self.pessoa.pk]),
+			{'questionario': self.questionario.pk},
+		)
+		self.assertEqual(resp.status_code, 302)
+		convite = ConviteQuestionario.objects.get(pessoa=self.pessoa)
+
+		# NAO pode excluir -> PermissionDenied
+		request = RequestFactory().post(reverse('convite-excluir', args=[convite.pk]))
+		request.user = operador
+		with self.assertRaises(PermissionDenied):
+			ExcluirConviteQuestionarioView.as_view()(request, pk=convite.pk)
+		self.assertTrue(ConviteQuestionario.objects.filter(pk=convite.pk).exists())
 
 	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
 	def test_novo_questionario_renderiza_form_para_admin(self):
@@ -818,3 +842,60 @@ class JanelaWhatsappTests(TestCase):
 		).first()
 		self.assertIsNotNone(mensagem)
 		self.assertEqual(mensagem.metadata_envio.get('tipo_template'), 'continuar_conversa')
+
+
+class PermissaoConversaTests(TestCase):
+	"""Usuarios com 'pode_conversar_pessoas' (nao staff/super) usam a tela de conversa."""
+
+	def setUp(self):
+		self.operador = get_user_model().objects.create_user('operador_conv', password='x')
+		perm = Permission.objects.get(codename='pode_conversar_pessoas', content_type__app_label='acolhimento')
+		self.operador.user_permissions.add(perm)
+		self.sem_perm = get_user_model().objects.create_user('sem_perm_conv', password='x')
+		self.pessoa = PrimeiroContato.objects.create(
+			nome='Contato',
+			telefone_whatsapp='31955551111',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			iniciou_interacao=True,
+		)
+		# entrada recente -> janela de 24h aberta (permite envio livre)
+		MensagemContato.objects.create(
+			pessoa=self.pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+			conteudo='oi',
+		)
+
+	def test_operador_enfileira_mensagem(self):
+		self.client.force_login(self.operador)
+		resp = self.client.post(
+			reverse('pessoas-enfileirar-mensagem', args=[self.pessoa.pk]),
+			{'conteudo': 'Ola do operador'},
+		)
+		self.assertEqual(resp.status_code, 302)
+		self.assertTrue(
+			MensagemContato.objects.filter(
+				pessoa=self.pessoa,
+				direcao=MensagemContato.DirecaoChoices.SAIDA,
+				conteudo='Ola do operador',
+			).exists()
+		)
+
+	@override_settings(TWILIO_TEMPLATE_CONTINUAR_SID='HXtestecontinuar')
+	def test_operador_envia_template_continuar(self):
+		self.client.force_login(self.operador)
+		resp = self.client.post(reverse('pessoas-template-continuar', args=[self.pessoa.pk]))
+		self.assertEqual(resp.status_code, 302)
+		mensagem = MensagemContato.objects.filter(
+			pessoa=self.pessoa, direcao=MensagemContato.DirecaoChoices.SAIDA
+		).order_by('-id').first()
+		self.assertEqual(mensagem.metadata_envio.get('tipo_template'), 'continuar_conversa')
+
+	def test_sem_permissao_nao_acessa_conversa(self):
+		request = RequestFactory().get(reverse('pessoas-mensagens', args=[self.pessoa.pk]))
+		request.user = self.sem_perm
+		with self.assertRaises(PermissionDenied):
+			PrimeiroContatoMensagensView.as_view()(request, pk=self.pessoa.pk)

@@ -179,7 +179,7 @@
                 </form>
             </article>
 
-            {% if request.user.is_superuser %}
+            {% if pode_ver_questionario %}
             {% if is_participante %}
             <article class="person-summary-card questionario-card">
                 <h2>Questionario de membresia</h2>
@@ -207,12 +207,14 @@
                                 <button type="submit" class="btn secundario">Enviar por WhatsApp</button>
                             </form>
                             {% endif %}
+                            {% if pode_excluir_convite %}
                             <form method="post" action="{% url 'convite-excluir' convite.pk %}" class="inline-form convite-excluir-form" onsubmit="return confirm('Remover este link do questionario?');">
                                 {% csrf_token %}
                                 <button type="submit" class="convite-excluir-btn" aria-label="Remover link do questionario" title="Remover">
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                                 </button>
                             </form>
+                            {% endif %}
                         </div>
                     </li>
                     {% endfor %}
