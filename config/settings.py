@@ -189,6 +189,9 @@ TWILIO_STATUS_CALLBACK_URL = os.getenv('TWILIO_STATUS_CALLBACK_URL', '')
 TWILIO_REQUEST_TIMEOUT_SECONDS = int(os.getenv('TWILIO_REQUEST_TIMEOUT_SECONDS', '10'))
 TWILIO_TEMPLATE_OPT_IN_SID = os.getenv('TWILIO_TEMPLATE_OPT_IN_SID', '')
 TWILIO_TEMPLATE_OPT_IN_VARIABLES = os.getenv('TWILIO_TEMPLATE_OPT_IN_VARIABLES', '{}')
+# Template de continuacao: reabre a janela de 24h depois que ela fecha (diferente do de boas-vindas).
+TWILIO_TEMPLATE_CONTINUAR_SID = os.getenv('TWILIO_TEMPLATE_CONTINUAR_SID', '')
+TWILIO_TEMPLATE_CONTINUAR_VARIABLES = os.getenv('TWILIO_TEMPLATE_CONTINUAR_VARIABLES', '{}')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

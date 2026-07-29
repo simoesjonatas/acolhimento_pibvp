@@ -1,9 +1,10 @@
-from datetime import time
+from datetime import time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import PermissionDenied
 from django.test import RequestFactory, TestCase, override_settings
+from django.utils import timezone
 from django.urls import reverse
 
 from apps.acolhimento.fila_processor import processar_fila_mensagens
@@ -239,6 +240,14 @@ class BloqueioWhatsappOptInTests(TestCase):
 		# Mesmo enviando canal=email, o form ignora e usa WhatsApp (canal fixo).
 		self.pessoa.iniciou_interacao = True
 		self.pessoa.save(update_fields=['iniciou_interacao'])
+		# Entrada recente -> janela de 24h aberta (senao o envio livre e bloqueado).
+		MensagemContato.objects.create(
+			pessoa=self.pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+			conteudo='Oi',
+		)
 		url = reverse('pessoas-enfileirar-mensagem', args=[self.pessoa.pk])
 		resp = self.client.post(
 			url,
@@ -693,6 +702,14 @@ class QuestionarioTests(TestCase):
 	def test_enviar_convite_whatsapp_registra_timeline(self):
 		self.pessoa.iniciou_interacao = True
 		self.pessoa.save(update_fields=['iniciou_interacao'])
+		# Entrada recente -> janela de 24h aberta.
+		MensagemContato.objects.create(
+			pessoa=self.pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+			conteudo='Oi',
+		)
 		convite = ConviteQuestionario.objects.create(questionario=self.questionario, pessoa=self.pessoa)
 		self.client.force_login(self.admin)
 		resp = self.client.post(reverse('convite-enviar-whatsapp', args=[convite.pk]))
@@ -710,3 +727,94 @@ class QuestionarioTests(TestCase):
 				descricao__icontains='WhatsApp',
 			).exists()
 		)
+
+
+class JanelaWhatsappTests(TestCase):
+	def setUp(self):
+		self.user = get_user_model().objects.create_user('equipe_janela', password='x', is_staff=True)
+		self.pessoa = PrimeiroContato.objects.create(
+			nome='Zeca',
+			telefone_whatsapp='31988887777',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			iniciou_interacao=True,
+		)
+		self.client.force_login(self.user)
+
+	def _entrada(self, quando):
+		msg = MensagemContato.objects.create(
+			pessoa=self.pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+			conteudo='oi',
+		)
+		MensagemContato.objects.filter(pk=msg.pk).update(enfileirada_em=quando)
+		return msg
+
+	def test_janela_aberta_com_entrada_recente(self):
+		from apps.acolhimento.whatsapp_rules import janela_atendimento_aberta
+		self._entrada(timezone.now() - timedelta(hours=1))
+		self.assertTrue(janela_atendimento_aberta(self.pessoa))
+
+	def test_janela_fechada_sem_entrada_recente(self):
+		from apps.acolhimento.whatsapp_rules import janela_atendimento_aberta
+		self._entrada(timezone.now() - timedelta(hours=30))
+		self.assertFalse(janela_atendimento_aberta(self.pessoa))
+
+	def test_processador_cancela_livre_com_janela_fechada(self):
+		self._entrada(timezone.now() - timedelta(hours=30))
+		mensagem = MensagemContato.objects.create(
+			pessoa=self.pessoa,
+			criado_por=self.user,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.SAIDA,
+			status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+			conteudo='Mensagem livre fora da janela.',
+		)
+		resultado = processar_fila_mensagens(limit=5)
+		mensagem.refresh_from_db()
+		self.assertEqual(resultado['falha'], 1)
+		self.assertEqual(mensagem.status_fila, MensagemContato.StatusFilaChoices.CANCELADA)
+		self.assertEqual(mensagem.metadata_envio['bloqueio_envio']['motivo'], 'whatsapp_janela_24h_fechada')
+
+	def test_template_continuar_isento_da_janela(self):
+		# Janela fechada, mas o template de continuacao nao e bloqueado.
+		mensagem = MensagemContato.objects.create(
+			pessoa=self.pessoa,
+			criado_por=self.user,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.SAIDA,
+			status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+			conteudo='Template de continuacao',
+			metadata_envio={'tipo_template': 'continuar_conversa'},
+		)
+		resultado = processar_fila_mensagens(limit=5, dry_run=True)
+		mensagem.refresh_from_db()
+		self.assertEqual(resultado['total_processado'], 1)
+		self.assertEqual(resultado['falha'], 0)
+
+	def test_enfileirar_livre_bloqueado_com_janela_fechada(self):
+		self._entrada(timezone.now() - timedelta(hours=30))
+		resp = self.client.post(
+			reverse('pessoas-enfileirar-mensagem', args=[self.pessoa.pk]),
+			{'conteudo': 'Oi, tudo bem?'},
+		)
+		self.assertEqual(resp.status_code, 302)
+		self.assertFalse(
+			MensagemContato.objects.filter(
+				pessoa=self.pessoa,
+				direcao=MensagemContato.DirecaoChoices.SAIDA,
+			).exists()
+		)
+
+	@override_settings(TWILIO_TEMPLATE_CONTINUAR_SID='HXtestecontinuar')
+	def test_enviar_template_continuar_enfileira(self):
+		resp = self.client.post(reverse('pessoas-template-continuar', args=[self.pessoa.pk]))
+		self.assertEqual(resp.status_code, 302)
+		mensagem = MensagemContato.objects.filter(
+			pessoa=self.pessoa, direcao=MensagemContato.DirecaoChoices.SAIDA
+		).first()
+		self.assertIsNotNone(mensagem)
+		self.assertEqual(mensagem.metadata_envio.get('tipo_template'), 'continuar_conversa')

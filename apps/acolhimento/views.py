@@ -1,6 +1,9 @@
 import csv
+import json
 import threading
+from datetime import timedelta
 
+from django.conf import settings
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.http import JsonResponse
@@ -24,7 +27,16 @@ from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensa
 from apps.acolhimento.models import ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
 from apps.acolhimento.reports import filtrar_pessoas, gerar_relatorio, resumo_filtros, resumo_pessoas
-from apps.acolhimento.whatsapp_rules import WHATSAPP_OPTIN_REQUIRED_ERROR, pessoa_pode_receber_whatsapp
+from apps.acolhimento.whatsapp_rules import (
+	JANELA_ATENDIMENTO_HORAS,
+	WHATSAPP_OPTIN_REQUIRED_ERROR,
+	janela_atendimento_aberta,
+	motivo_bloqueio_livre,
+	pessoa_pode_receber_whatsapp,
+	pode_enviar_livre,
+	precisa_template_continuar,
+	ultima_entrada_em,
+)
 
 
 PERMISSAO_CONVERSAR_PESSOAS = 'acolhimento.pode_conversar_pessoas'
@@ -558,13 +570,13 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		conteudo = form.cleaned_data['conteudo']
 
 		if canal == MensagemContato.CanalChoices.WHATSAPP:
-			pessoas_bloqueadas = [pessoa for pessoa in pessoas if not pessoa_pode_receber_whatsapp(pessoa)]
-			pessoas = [pessoa for pessoa in pessoas if pessoa_pode_receber_whatsapp(pessoa)]
+			pessoas_bloqueadas = [pessoa for pessoa in pessoas if not pode_enviar_livre(pessoa)]
+			pessoas = [pessoa for pessoa in pessoas if pode_enviar_livre(pessoa)]
 
 			if pessoas_bloqueadas:
 				messages.warning(
 					self.request,
-					f'{len(pessoas_bloqueadas)} pessoa(s) ignorada(s): ainda nao responderam ao template de primeiro contato.',
+					f'{len(pessoas_bloqueadas)} pessoa(s) ignorada(s): sem opt-in ou com a janela de 24h fechada (precisam de template).',
 				)
 
 			if not pessoas:
@@ -805,6 +817,15 @@ class PrimeiroContatoMensagensView(LoginRequiredMixin, ConversasPessoasPermissao
 		context['has_more_messages'] = total_mensagens > len(mensagens_recentes)
 		context['oldest_message_id'] = mensagens[0].id if mensagens else ''
 		context['enfileirar_mensagem_form'] = kwargs.get('enfileirar_mensagem_form', EnfileirarMensagemForm())
+
+		ultima_entrada = ultima_entrada_em(self.object)
+		context['ultima_entrada'] = ultima_entrada
+		context['janela_fecha_em'] = (
+			ultima_entrada + timedelta(hours=JANELA_ATENDIMENTO_HORAS) if ultima_entrada else None
+		)
+		context['janela_aberta'] = janela_atendimento_aberta(self.object)
+		context['precisa_template_continuar'] = precisa_template_continuar(self.object)
+		context['template_continuar_configurado'] = bool((settings.TWILIO_TEMPLATE_CONTINUAR_SID or '').strip())
 		return context
 
 
@@ -868,12 +889,11 @@ class PrimeiroContatoEnfileirarMensagemView(LoginRequiredMixin, ConversasPessoas
 			mensagem.direcao = MensagemContato.DirecaoChoices.SAIDA
 			mensagem.status_fila = MensagemContato.StatusFilaChoices.PENDENTE
 
-			if (
-				mensagem.canal == MensagemContato.CanalChoices.WHATSAPP
-				and not pessoa_pode_receber_whatsapp(pessoa)
-			):
-				messages.error(request, WHATSAPP_OPTIN_REQUIRED_ERROR)
-				return redirect('pessoas-mensagens', pk=pessoa.pk)
+			if mensagem.canal == MensagemContato.CanalChoices.WHATSAPP:
+				bloqueio = motivo_bloqueio_livre(pessoa)
+				if bloqueio:
+					messages.error(request, bloqueio[1])
+					return redirect('pessoas-mensagens', pk=pessoa.pk)
 
 			mensagem.save()
 			messages.success(request, 'Mensagem enfileirada com sucesso.')
@@ -883,6 +903,50 @@ class PrimeiroContatoEnfileirarMensagemView(LoginRequiredMixin, ConversasPessoas
 		for campo, erros in form.errors.items():
 			for erro in erros:
 				messages.error(request, f'{campo}: {erro}')
+		return redirect('pessoas-mensagens', pk=pessoa.pk)
+
+
+class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, View):
+	"""Enfileira o template de continuacao para reabrir a janela de 24h do WhatsApp."""
+
+	def post(self, request, pk, *args, **kwargs):
+		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		template_sid = (settings.TWILIO_TEMPLATE_CONTINUAR_SID or '').strip()
+		if not template_sid:
+			messages.error(request, 'Template de continuacao nao configurado. Defina TWILIO_TEMPLATE_CONTINUAR_SID.')
+			return redirect('pessoas-mensagens', pk=pessoa.pk)
+
+		try:
+			variaveis_base = json.loads(settings.TWILIO_TEMPLATE_CONTINUAR_VARIABLES or '{}')
+			if not isinstance(variaveis_base, dict):
+				variaveis_base = {}
+		except Exception:
+			variaveis_base = {}
+
+		content_variables = json.dumps(
+			{**variaveis_base, '1': (pessoa.nome or '').strip() or 'amigo(a)'},
+			ensure_ascii=False,
+		)
+		MensagemContato.objects.create(
+			pessoa=pessoa,
+			criado_por=request.user,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.SAIDA,
+			status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+			prioridade=5,
+			conteudo='Template de continuacao enfileirado',
+			metadata_envio={
+				'tipo_template': 'continuar_conversa',
+				'twilio_template': {
+					'content_sid': template_sid,
+					'content_variables': content_variables,
+				},
+			},
+		)
+		messages.success(
+			request,
+			'Template de continuacao enfileirado. Quando a pessoa responder, a janela de 24h reabre.',
+		)
 		return redirect('pessoas-mensagens', pk=pessoa.pk)
 
 
@@ -1378,8 +1442,9 @@ class EnviarConviteWhatsappView(SuperAdminPermissaoMixin, View):
 			ConviteQuestionario.objects.select_related('pessoa', 'questionario'), pk=pk
 		)
 		pessoa = convite.pessoa
-		if not pessoa_pode_receber_whatsapp(pessoa):
-			messages.error(request, WHATSAPP_OPTIN_REQUIRED_ERROR)
+		bloqueio = motivo_bloqueio_livre(pessoa)
+		if bloqueio:
+			messages.error(request, bloqueio[1])
 			return redirect('pessoas-detalhe', pk=pessoa.pk)
 
 		link = request.build_absolute_uri(

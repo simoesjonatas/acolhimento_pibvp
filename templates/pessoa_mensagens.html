@@ -72,6 +72,27 @@
         </div>
 
         <footer class="conversation-composer-bar">
+            {% if janela_aberta and janela_fecha_em %}
+            <div class="janela-status janela-status-aberta">
+                <span class="janela-status-dot" aria-hidden="true"></span>
+                <span>Janela de 24h aberta — fecha em <strong data-janela-countdown="{{ janela_fecha_em|date:'c' }}">--</strong></span>
+            </div>
+            {% elif precisa_template_continuar %}
+            <div class="janela-aviso">
+                <div class="janela-aviso-texto">
+                    <strong>Janela de 24h fechada.</strong>
+                    A pessoa nao responde ha mais de 24h — mensagens livres serao bloqueadas (evita o erro 63016). Envie o template de continuacao para reabrir a conversa.
+                </div>
+                {% if template_continuar_configurado %}
+                <form method="post" action="{% url 'pessoas-template-continuar' pessoa.pk %}" class="inline-form">
+                    {% csrf_token %}
+                    <button type="submit" class="btn secundario janela-aviso-btn">Enviar template de continuacao</button>
+                </form>
+                {% else %}
+                <small class="table-muted-text">Configure TWILIO_TEMPLATE_CONTINUAR_SID para habilitar o envio.</small>
+                {% endif %}
+            </div>
+            {% endif %}
             <form method="post" action="{% url 'pessoas-enfileirar-mensagem' pessoa.pk %}" class="message-compose-form">
                 {% csrf_token %}
                 <div class="compose-input">
@@ -175,6 +196,34 @@
         scrollToBottom('auto');
         updateScrollButton();
     }, 0);
+})();
+</script>
+
+<script>
+(function () {
+    var alvo = document.querySelector('[data-janela-countdown]');
+    if (!alvo) {
+        return;
+    }
+    var fechaEm = new Date(alvo.getAttribute('data-janela-countdown'));
+    if (isNaN(fechaEm.getTime())) {
+        return;
+    }
+
+    function atualizar() {
+        var restanteMs = fechaEm.getTime() - Date.now();
+        if (restanteMs <= 0) {
+            alvo.textContent = 'menos de 1 min';
+            return;
+        }
+        var totalMin = Math.floor(restanteMs / 60000);
+        var horas = Math.floor(totalMin / 60);
+        var minutos = totalMin % 60;
+        alvo.textContent = horas > 0 ? (horas + 'h ' + minutos + 'min') : (minutos + 'min');
+    }
+
+    atualizar();
+    window.setInterval(atualizar, 30000);
 })();
 </script>
 {% endblock %}
