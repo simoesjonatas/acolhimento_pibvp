@@ -81,13 +81,23 @@
             <div class="janela-aviso">
                 <div class="janela-aviso-texto">
                     <strong>Janela de 24h fechada.</strong>
-                    A pessoa nao responde ha mais de 24h — mensagens livres serao bloqueadas (evita o erro 63016). Envie o template de continuacao para reabrir a conversa.
+                    A pessoa nao responde ha mais de 24h — mensagens livres serao bloqueadas (evita o erro 63016).
+                    {% if pode_enviar_template_continuar %}Envie o template de continuacao para reabrir a conversa.{% else %}O template de continuacao ja foi enviado; aguarde a pessoa responder.{% endif %}
                 </div>
                 {% if template_continuar_configurado %}
-                <form method="post" action="{% url 'pessoas-template-continuar' pessoa.pk %}" class="inline-form">
-                    {% csrf_token %}
-                    <button type="submit" class="btn secundario janela-aviso-btn">Enviar template de continuacao</button>
-                </form>
+                    {% if pode_enviar_template_continuar %}
+                    <form method="post" action="{% url 'pessoas-template-continuar' pessoa.pk %}" class="inline-form">
+                        {% csrf_token %}
+                        <button type="submit" class="btn secundario janela-aviso-btn">Enviar template de continuacao</button>
+                    </form>
+                    {% else %}
+                    <div class="janela-aviso-espera" title="Para nao cobrar duas vezes e nao infringir as regras da Meta, so e possivel reenviar apos 24h.">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+                        <span>Reenvio liberado em
+                            {% if template_continuar_liberado_em %}<strong data-janela-countdown="{{ template_continuar_liberado_em|date:'c' }}">--</strong>{% else %}breve{% endif %}
+                        </span>
+                    </div>
+                    {% endif %}
                 {% else %}
                 <small class="table-muted-text">Configure TWILIO_TEMPLATE_CONTINUAR_SID para habilitar o envio.</small>
                 {% endif %}

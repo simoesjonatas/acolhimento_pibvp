@@ -32,9 +32,12 @@ from apps.acolhimento.whatsapp_rules import (
 	WHATSAPP_OPTIN_REQUIRED_ERROR,
 	janela_atendimento_aberta,
 	motivo_bloqueio_livre,
+	motivo_bloqueio_template_continuar,
 	pessoa_pode_receber_whatsapp,
 	pode_enviar_livre,
+	pode_enviar_template_continuar,
 	precisa_template_continuar,
+	proximo_template_continuar_em,
 	ultima_entrada_em,
 )
 
@@ -833,6 +836,8 @@ class PrimeiroContatoMensagensView(LoginRequiredMixin, ConversasPessoasPermissao
 		context['janela_aberta'] = janela_atendimento_aberta(self.object)
 		context['precisa_template_continuar'] = precisa_template_continuar(self.object)
 		context['template_continuar_configurado'] = bool((settings.TWILIO_TEMPLATE_CONTINUAR_SID or '').strip())
+		context['pode_enviar_template_continuar'] = pode_enviar_template_continuar(self.object)
+		context['template_continuar_liberado_em'] = proximo_template_continuar_em(self.object)
 		return context
 
 
@@ -921,6 +926,11 @@ class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoM
 		template_sid = (settings.TWILIO_TEMPLATE_CONTINUAR_SID or '').strip()
 		if not template_sid:
 			messages.error(request, 'Template de continuacao nao configurado. Defina TWILIO_TEMPLATE_CONTINUAR_SID.')
+			return redirect('pessoas-mensagens', pk=pessoa.pk)
+
+		bloqueio = motivo_bloqueio_template_continuar(pessoa)
+		if bloqueio:
+			messages.error(request, bloqueio[1])
 			return redirect('pessoas-mensagens', pk=pessoa.pk)
 
 		try:

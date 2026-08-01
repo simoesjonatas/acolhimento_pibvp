@@ -843,6 +843,71 @@ class JanelaWhatsappTests(TestCase):
 		self.assertIsNotNone(mensagem)
 		self.assertEqual(mensagem.metadata_envio.get('tipo_template'), 'continuar_conversa')
 
+	def _templates_continuar(self):
+		return MensagemContato.objects.filter(
+			pessoa=self.pessoa,
+			direcao=MensagemContato.DirecaoChoices.SAIDA,
+			metadata_envio__tipo_template='continuar_conversa',
+		)
+
+	@override_settings(TWILIO_TEMPLATE_CONTINUAR_SID='HXtestecontinuar')
+	def test_template_continuar_bloqueia_reenvio_em_24h(self):
+		from apps.acolhimento.whatsapp_rules import pode_enviar_template_continuar
+		url = reverse('pessoas-template-continuar', args=[self.pessoa.pk])
+		self.client.post(url)
+		self.assertEqual(self._templates_continuar().count(), 1)
+		self.assertFalse(pode_enviar_template_continuar(self.pessoa))
+		# Reenvio dentro das 24h e bloqueado (evita cobranca duplicada).
+		resp = self.client.post(url)
+		self.assertEqual(resp.status_code, 302)
+		self.assertEqual(self._templates_continuar().count(), 1)
+
+	@override_settings(TWILIO_TEMPLATE_CONTINUAR_SID='HXtestecontinuar')
+	def test_template_continuar_liberado_apos_24h(self):
+		from apps.acolhimento.whatsapp_rules import pode_enviar_template_continuar
+		url = reverse('pessoas-template-continuar', args=[self.pessoa.pk])
+		self.client.post(url)
+		self._templates_continuar().update(enfileirada_em=timezone.now() - timedelta(hours=25))
+		self.assertTrue(pode_enviar_template_continuar(self.pessoa))
+		resp = self.client.post(url)
+		self.assertEqual(resp.status_code, 302)
+		self.assertEqual(self._templates_continuar().count(), 2)
+
+	def test_template_continuar_falha_nao_bloqueia_reenvio(self):
+		from apps.acolhimento.whatsapp_rules import pode_enviar_template_continuar
+		MensagemContato.objects.create(
+			pessoa=self.pessoa,
+			criado_por=self.user,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.SAIDA,
+			status_fila=MensagemContato.StatusFilaChoices.FALHA,
+			conteudo='Template de continuacao',
+			metadata_envio={'tipo_template': 'continuar_conversa'},
+		)
+		self.assertTrue(pode_enviar_template_continuar(self.pessoa))
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES, TWILIO_TEMPLATE_CONTINUAR_SID='HXtestecontinuar')
+	def test_tela_mostra_botao_quando_pode_enviar_template(self):
+		resp = self.client.get(reverse('pessoas-mensagens', args=[self.pessoa.pk]))
+		self.assertEqual(resp.status_code, 200)
+		self.assertContains(resp, 'Enviar template de continuacao')
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES, TWILIO_TEMPLATE_CONTINUAR_SID='HXtestecontinuar')
+	def test_tela_mostra_espera_apos_enviar_template(self):
+		MensagemContato.objects.create(
+			pessoa=self.pessoa,
+			criado_por=self.user,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.SAIDA,
+			status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+			conteudo='Template de continuacao',
+			metadata_envio={'tipo_template': 'continuar_conversa'},
+		)
+		resp = self.client.get(reverse('pessoas-mensagens', args=[self.pessoa.pk]))
+		self.assertEqual(resp.status_code, 200)
+		self.assertContains(resp, 'Reenvio liberado em')
+		self.assertNotContains(resp, 'Enviar template de continuacao')
+
 
 class PermissaoConversaTests(TestCase):
 	"""Usuarios com 'pode_conversar_pessoas' (nao staff/super) usam a tela de conversa."""

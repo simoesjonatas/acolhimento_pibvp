@@ -909,6 +909,26 @@
     white-space: nowrap;
 }
 
+.janela-aviso-espera {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    padding: 6px 10px;
+    border: 1px solid #e3c38c;
+    border-radius: var(--radius);
+    background: #fff;
+    color: #76541e;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.janela-aviso-espera svg {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+}
+
 .janela-status {
     display: flex;
     align-items: center;

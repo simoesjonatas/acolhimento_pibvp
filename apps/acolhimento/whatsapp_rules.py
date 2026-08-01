@@ -17,6 +17,13 @@ WHATSAPP_JANELA_FECHADA_ERROR = (
     'WhatsApp bloqueado: a janela de 24h esta fechada (a pessoa nao responde ha mais de 24h). '
     'Envie o template de continuacao para reabrir a conversa antes de mandar mensagens livres.'
 )
+WHATSAPP_TEMPLATE_CONTINUAR_RECENTE_ERROR = (
+    'Template de continuacao ja enviado nas ultimas 24h. Aguarde a pessoa responder para '
+    'a janela reabrir; so e possivel reenviar depois de 24h (evita cobranca duplicada e '
+    'nao infringe as regras da Meta).'
+)
+
+TEMPLATE_CONTINUAR_TIPO = 'continuar_conversa'
 
 
 def pessoa_pode_receber_whatsapp(pessoa) -> bool:
@@ -58,6 +65,61 @@ def motivo_bloqueio_livre(pessoa):
         return ('whatsapp_sem_interacao_previa', WHATSAPP_OPTIN_REQUIRED_ERROR)
     if not janela_atendimento_aberta(pessoa):
         return ('whatsapp_janela_24h_fechada', WHATSAPP_JANELA_FECHADA_ERROR)
+    return None
+
+
+# status_fila em que o template de continuacao ainda "vale" (nao falhou): enquanto isso,
+# reenviar so desperdicaria dinheiro. Falha/cancelada liberam nova tentativa.
+_STATUS_TEMPLATE_ATIVO = (
+    MensagemContato.StatusFilaChoices.PENDENTE,
+    MensagemContato.StatusFilaChoices.AGENDADA,
+    MensagemContato.StatusFilaChoices.PROCESSANDO,
+    MensagemContato.StatusFilaChoices.ENVIADA,
+)
+
+
+def ultimo_template_continuar_em(pessoa):
+    """Data/hora do ultimo template de continuacao ainda valido (nao falhou), ou None."""
+    return (
+        pessoa.mensagens.filter(
+            direcao=MensagemContato.DirecaoChoices.SAIDA,
+            status_fila__in=_STATUS_TEMPLATE_ATIVO,
+            metadata_envio__tipo_template=TEMPLATE_CONTINUAR_TIPO,
+        )
+        .order_by('-enfileirada_em')
+        .values_list('enfileirada_em', flat=True)
+        .first()
+    )
+
+
+def template_continuar_em_espera(pessoa) -> bool:
+    """Ja ha um template de continuacao enviado ha menos de 24h (nao pode reenviar ainda)."""
+    ultimo = ultimo_template_continuar_em(pessoa)
+    if not ultimo:
+        return False
+    return ultimo >= timezone.now() - timedelta(hours=JANELA_ATENDIMENTO_HORAS)
+
+
+def proximo_template_continuar_em(pessoa):
+    """Quando sera possivel reenviar o template de continuacao, ou None se ja pode."""
+    ultimo = ultimo_template_continuar_em(pessoa)
+    if not ultimo:
+        return None
+    liberacao = ultimo + timedelta(hours=JANELA_ATENDIMENTO_HORAS)
+    return liberacao if liberacao > timezone.now() else None
+
+
+def pode_enviar_template_continuar(pessoa) -> bool:
+    """Pode enfileirar um novo template de continuacao agora (opt-in dado e sem reenvio recente)."""
+    return pessoa_pode_receber_whatsapp(pessoa) and not template_continuar_em_espera(pessoa)
+
+
+def motivo_bloqueio_template_continuar(pessoa):
+    """(codigo, mensagem) do bloqueio do template de continuacao, ou None se pode enviar."""
+    if not pessoa_pode_receber_whatsapp(pessoa):
+        return ('whatsapp_sem_interacao_previa', WHATSAPP_OPTIN_REQUIRED_ERROR)
+    if template_continuar_em_espera(pessoa):
+        return ('whatsapp_template_continuar_recente', WHATSAPP_TEMPLATE_CONTINUAR_RECENTE_ERROR)
     return None
 
 
