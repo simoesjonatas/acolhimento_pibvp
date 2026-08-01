@@ -523,7 +523,16 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		if sem_pendente == 'sim':
 			queryset = queryset.exclude(mensagens__status_fila=MensagemContato.StatusFilaChoices.PENDENTE)
 
-		return queryset.order_by('nome').distinct()
+		return (
+			queryset.annotate(
+				ultima_entrada=Max(
+					'mensagens__enfileirada_em',
+					filter=Q(mensagens__direcao=MensagemContato.DirecaoChoices.ENTRADA),
+				)
+			)
+			.order_by('nome')
+			.distinct()
+		)
 
 	def get_form_kwargs(self):
 		kwargs = super().get_form_kwargs()
@@ -551,6 +560,19 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 				for valor in self.request.POST.getlist('pessoas')
 				if valor.isdigit()
 			]
+
+		# Status da janela de 24h por pessoa (sem N+1: usa a anotacao ultima_entrada).
+		limite_janela = timezone.now() - timedelta(hours=JANELA_ATENDIMENTO_HORAS)
+		audiencia = []
+		total_janela_aberta = 0
+		for pessoa in queryset_filtrado:
+			ultima = getattr(pessoa, 'ultima_entrada', None)
+			janela_aberta = bool(ultima and ultima >= limite_janela)
+			pode_livre = bool(pessoa.iniciou_interacao and janela_aberta)
+			if pode_livre:
+				total_janela_aberta += 1
+			audiencia.append({'pessoa': pessoa, 'janela_aberta': janela_aberta, 'pode_livre': pode_livre})
+
 		context['busca'] = self.request.GET.get('q', '').strip()
 		context['status_atual'] = self.request.GET.get('status', '').strip()
 		context['origem_atual'] = self.request.GET.get('origem', '').strip()
@@ -563,34 +585,84 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		]
 		context['origem_choices'] = PrimeiroContato.OrigemCadastroChoices.choices
 		context['responsaveis_choices'] = responsaveis_choices
-		context['total_pessoas_filtradas'] = queryset_filtrado.count()
+		context['audiencia'] = audiencia
+		context['total_pessoas_filtradas'] = len(audiencia)
+		context['total_janela_aberta'] = total_janela_aberta
 		context['selected_pessoas'] = selected_pessoas
+		context['modo_livre'] = DisparoMensagemMassaForm.MODO_LIVRE
+		context['modo_template'] = DisparoMensagemMassaForm.MODO_TEMPLATE
+		context['modo_atual'] = (
+			self.request.POST.get('modo') if self.request.method == 'POST' else ''
+		) or DisparoMensagemMassaForm.MODO_LIVRE
 		return context
 
-	def form_valid(self, form):
+	def _enfileirar_template(self, form):
+		"""Modo template: envia um Content Template (marketing) para todos os selecionados."""
 		pessoas = list(form.cleaned_data['pessoas'])
-		canal = form.cleaned_data['canal']
-		conteudo = form.cleaned_data['conteudo']
+		content_sid = form.cleaned_data['content_sid'].strip()
+		base_vars = form.cleaned_data.get('content_variables') or {}
 
-		if canal == MensagemContato.CanalChoices.WHATSAPP:
-			pessoas_bloqueadas = [pessoa for pessoa in pessoas if not pode_enviar_livre(pessoa)]
-			pessoas = [pessoa for pessoa in pessoas if pode_enviar_livre(pessoa)]
-
-			if pessoas_bloqueadas:
-				messages.warning(
-					self.request,
-					f'{len(pessoas_bloqueadas)} pessoa(s) ignorada(s): sem opt-in ou com a janela de 24h fechada (precisam de template).',
-				)
-
-			if not pessoas:
-				messages.error(self.request, 'Nenhuma mensagem WhatsApp foi criada. Todos os selecionados ainda aguardam resposta ao template.')
-				return redirect(self.success_url)
+		def _variaveis_para(pessoa):
+			if not base_vars:
+				return ''
+			nome = (pessoa.nome or '').strip()
+			person_vars = {
+				chave: (valor.replace('{nome}', nome) if isinstance(valor, str) else valor)
+				for chave, valor in base_vars.items()
+			}
+			return json.dumps(person_vars, ensure_ascii=False)
 
 		mensagens = [
 			MensagemContato(
 				pessoa=pessoa,
 				criado_por=self.request.user,
-				canal=canal,
+				canal=MensagemContato.CanalChoices.WHATSAPP,
+				direcao=MensagemContato.DirecaoChoices.SAIDA,
+				status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+				prioridade=5,
+				agendada_para=None,
+				conteudo=f'[Template] {content_sid}',
+				metadata_envio={
+					'tipo_template': 'marketing_massa',
+					'twilio_template': {
+						'content_sid': content_sid,
+						'content_variables': _variaveis_para(pessoa),
+					},
+				},
+			)
+			for pessoa in pessoas
+		]
+		MensagemContato.objects.bulk_create(mensagens)
+		messages.success(self.request, f'{len(mensagens)} template(s) enfileirado(s) para disparo em massa.')
+		return super().form_valid(form)
+
+	def _enfileirar_livre(self, form):
+		"""Modo livre: mensagem de texto so para quem esta com a janela de 24h aberta."""
+		pessoas = list(form.cleaned_data['pessoas'])
+		conteudo = form.cleaned_data['conteudo']
+
+		pessoas_bloqueadas = [pessoa for pessoa in pessoas if not pode_enviar_livre(pessoa)]
+		pessoas = [pessoa for pessoa in pessoas if pode_enviar_livre(pessoa)]
+
+		if pessoas_bloqueadas:
+			messages.warning(
+				self.request,
+				f'{len(pessoas_bloqueadas)} pessoa(s) ignorada(s): janela de 24h fechada. '
+				'Use o disparo por template para alcanca-las.',
+			)
+
+		if not pessoas:
+			messages.error(
+				self.request,
+				'Nenhuma mensagem livre foi criada: nenhum selecionado esta com a janela de 24h aberta.',
+			)
+			return redirect(self.success_url)
+
+		mensagens = [
+			MensagemContato(
+				pessoa=pessoa,
+				criado_por=self.request.user,
+				canal=MensagemContato.CanalChoices.WHATSAPP,
 				direcao=MensagemContato.DirecaoChoices.SAIDA,
 				status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
 				prioridade=5,
@@ -599,10 +671,14 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 			)
 			for pessoa in pessoas
 		]
-
 		MensagemContato.objects.bulk_create(mensagens)
 		messages.success(self.request, f'{len(mensagens)} mensagem(ns) enfileirada(s) com sucesso.')
 		return super().form_valid(form)
+
+	def form_valid(self, form):
+		if form.cleaned_data['modo'] == DisparoMensagemMassaForm.MODO_TEMPLATE:
+			return self._enfileirar_template(form)
+		return self._enfileirar_livre(form)
 
 
 class PrimeiroContatoCreateView(LoginRequiredMixin, CreateView):

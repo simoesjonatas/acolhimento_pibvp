@@ -1584,6 +1584,14 @@
     grid-template-columns: minmax(300px, 390px) minmax(0, 1fr);
     gap: 14px;
     align-items: start;
+    min-width: 0;
+}
+
+/* Deixa os itens encolherem para a tabela rolar internamente em vez de esticar a pagina. */
+.broadcast-mode,
+.broadcast-composer,
+.broadcast-audience {
+    min-width: 0;
 }
 
 .broadcast-composer,
@@ -1594,6 +1602,164 @@
 .broadcast-composer .panel-header p,
 .broadcast-audience .panel-header p {
     margin-bottom: 0;
+}
+
+.broadcast-mode {
+    grid-column: 1 / -1;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: var(--shadow-soft);
+}
+
+.broadcast-mode-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.broadcast-mode-option {
+    display: block;
+    cursor: pointer;
+}
+
+.broadcast-mode-option input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.broadcast-mode-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: 'icon title' 'icon desc';
+    align-items: center;
+    gap: 2px 12px;
+    height: 100%;
+    padding: 14px;
+    border: 1.5px solid var(--line);
+    border-radius: var(--radius);
+    background: #fbfcfa;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.broadcast-mode-icon {
+    grid-area: icon;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #eef3ea;
+    color: var(--primary);
+}
+
+.broadcast-mode-icon svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.broadcast-mode-card strong {
+    grid-area: title;
+    font-size: 0.98rem;
+}
+
+.broadcast-mode-card small {
+    grid-area: desc;
+    color: #65766b;
+    font-size: 0.8rem;
+    line-height: 1.35;
+}
+
+.broadcast-mode-option input:checked + .broadcast-mode-card {
+    border-color: var(--primary);
+    background: #eef7f0;
+    box-shadow: 0 0 0 3px rgba(39, 103, 73, 0.14);
+}
+
+.broadcast-mode-option input:focus-visible + .broadcast-mode-card {
+    border-color: var(--primary);
+}
+
+.broadcast-fields > label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 800;
+    font-size: 0.86rem;
+}
+
+.broadcast-fields textarea,
+.broadcast-fields input[type="text"] {
+    width: 100%;
+}
+
+.broadcast-fields[data-fields-livre] textarea {
+    min-height: 200px;
+}
+
+.broadcast-template-grid {
+    display: grid;
+    gap: 14px;
+}
+
+.broadcast-template-grid label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 800;
+    font-size: 0.86rem;
+}
+
+.broadcast-template-grid small {
+    display: block;
+    margin-top: 4px;
+}
+
+.broadcast-template-grid code {
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: #eef1ec;
+    font-size: 0.78rem;
+}
+
+.janela-badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.janela-badge-aberta {
+    border: 1px solid #9bd3b1;
+    background: #ecf8ef;
+    color: #1e6640;
+}
+
+.janela-badge-fechada {
+    border: 1px solid #e3c38c;
+    background: var(--accent-soft);
+    color: #76541e;
+}
+
+.broadcast-row.is-disabled {
+    opacity: 0.5;
+}
+
+.broadcast-row.is-disabled .audience-person strong {
+    text-decoration: line-through;
 }
 
 .broadcast-message-grid {
@@ -1660,6 +1826,7 @@
 .broadcast-audience-table {
     max-height: 520px;
     margin-top: 12px;
+    overflow-x: auto;
     overflow-y: auto;
 }
 
@@ -3187,6 +3354,10 @@
     .row-actions button,
     .panel-header .btn {
         width: 100%;
+    }
+
+    .broadcast-mode-grid {
+        grid-template-columns: 1fr;
     }
 
     .builder-item {

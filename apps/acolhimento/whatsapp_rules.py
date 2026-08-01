@@ -123,22 +123,14 @@ def motivo_bloqueio_template_continuar(pessoa):
     return None
 
 
-def _sids_templates():
-    sids = {
-        (getattr(settings, 'TWILIO_TEMPLATE_OPT_IN_SID', '') or '').strip(),
-        (getattr(settings, 'TWILIO_TEMPLATE_CONTINUAR_SID', '') or '').strip(),
-    }
-    return {sid for sid in sids if sid}
-
-
 def mensagem_eh_template(mensagem: MensagemContato) -> bool:
-    """Templates (opt-in ou continuacao) sao isentos da janela de 24h."""
+    """Toda mensagem enviada via Content Template SID (opt-in, continuacao ou marketing) e
+    isenta da janela de 24h: templates aprovados pela Meta podem iniciar/retomar a conversa."""
     metadata = dict(mensagem.metadata_envio or {})
-    if metadata.get('tipo_template') in ('primeiro_contato_opt_in', 'continuar_conversa'):
+    if metadata.get('tipo_template'):
         return True
     template_cfg = dict(metadata.get('twilio_template') or {})
-    content_sid = (template_cfg.get('content_sid') or '').strip()
-    return bool(content_sid and content_sid in _sids_templates())
+    return bool((template_cfg.get('content_sid') or '').strip())
 
 
 def mensagem_eh_template_primeiro_contato(mensagem: MensagemContato) -> bool:

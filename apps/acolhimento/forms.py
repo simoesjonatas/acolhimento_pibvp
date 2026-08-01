@@ -1,3 +1,5 @@
+import json
+
 from django import forms
 from django.utils import timezone
 
@@ -121,8 +123,34 @@ class EnfileirarMensagemForm(forms.ModelForm):
 
 
 class DisparoMensagemMassaForm(forms.Form):
-    canal = forms.ChoiceField(choices=MensagemContato.CanalChoices.choices)
-    conteudo = forms.CharField(widget=forms.Textarea(attrs={'rows': 5}))
+    """Dois modos de disparo: mensagem livre (janela 24h aberta) ou template de marketing."""
+
+    MODO_LIVRE = 'livre'
+    MODO_TEMPLATE = 'template'
+    MODO_CHOICES = [
+        (MODO_LIVRE, 'Mensagem livre — so para quem esta com a janela de 24h aberta'),
+        (MODO_TEMPLATE, 'Template — para qualquer pessoa fora do primeiro contato (marketing)'),
+    ]
+
+    modo = forms.ChoiceField(
+        choices=MODO_CHOICES,
+        initial=MODO_LIVRE,
+        widget=forms.RadioSelect,
+    )
+    conteudo = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 5, 'placeholder': 'Escreva a mensagem que sera enviada...'}),
+    )
+    content_sid = forms.CharField(
+        required=False,
+        label='Content Template SID',
+        widget=forms.TextInput(attrs={'placeholder': 'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}),
+    )
+    content_variables = forms.CharField(
+        required=False,
+        label='Variaveis do template (JSON)',
+        widget=forms.Textarea(attrs={'rows': 2, 'placeholder': '{"1": "{nome}"}'}),
+    )
     pessoas = forms.ModelMultipleChoiceField(
         queryset=PrimeiroContato.objects.none(),
         widget=forms.CheckboxSelectMultiple,
@@ -134,6 +162,32 @@ class DisparoMensagemMassaForm(forms.Form):
         if pessoas_queryset is None:
             pessoas_queryset = PrimeiroContato.objects.order_by('nome')
         self.fields['pessoas'].queryset = pessoas_queryset
+
+    def clean_content_variables(self):
+        raw = (self.cleaned_data.get('content_variables') or '').strip()
+        if not raw:
+            return {}
+        try:
+            parsed = json.loads(raw)
+        except ValueError:
+            raise forms.ValidationError('JSON invalido. Ex.: {"1": "{nome}"}.')
+        if not isinstance(parsed, dict):
+            raise forms.ValidationError('Use um objeto JSON, ex.: {"1": "{nome}"}.')
+        return parsed
+
+    def clean(self):
+        cleaned = super().clean()
+        modo = cleaned.get('modo')
+        if modo == self.MODO_TEMPLATE:
+            sid = (cleaned.get('content_sid') or '').strip()
+            if not sid:
+                self.add_error('content_sid', 'Informe o Content Template SID para o disparo por template.')
+            elif not sid.startswith('HX'):
+                self.add_error('content_sid', 'O Content SID da Twilio comeca com "HX".')
+        else:
+            if not (cleaned.get('conteudo') or '').strip():
+                self.add_error('conteudo', 'Escreva a mensagem que sera enviada.')
+        return cleaned
 
 
 class RelatorioPessoasForm(forms.Form):

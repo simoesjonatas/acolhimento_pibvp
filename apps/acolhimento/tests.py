@@ -964,3 +964,119 @@ class PermissaoConversaTests(TestCase):
 		request.user = self.sem_perm
 		with self.assertRaises(PermissionDenied):
 			PrimeiroContatoMensagensView.as_view()(request, pk=self.pessoa.pk)
+
+
+class DisparoMassaTests(TestCase):
+	"""Disparo em massa em dois modos: mensagem livre (janela aberta) e template (marketing)."""
+
+	def setUp(self):
+		self.user = get_user_model().objects.create_user('equipe_massa', password='x', is_staff=True)
+		self.client.force_login(self.user)
+		self.pessoa_aberta = PrimeiroContato.objects.create(
+			nome='Ana Aberta',
+			telefone_whatsapp='31900001111',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			status=PrimeiroContato.StatusAcolhimento.PARTICIPANTE,
+			iniciou_interacao=True,
+		)
+		MensagemContato.objects.create(
+			pessoa=self.pessoa_aberta,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+			conteudo='oi',
+		)
+		# Sem entrada recente -> janela de 24h fechada.
+		self.pessoa_fechada = PrimeiroContato.objects.create(
+			nome='Bruno Fechado',
+			telefone_whatsapp='31900002222',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			status=PrimeiroContato.StatusAcolhimento.PARTICIPANTE,
+			iniciou_interacao=True,
+		)
+
+	def _saidas(self, pessoa):
+		return MensagemContato.objects.filter(
+			pessoa=pessoa, direcao=MensagemContato.DirecaoChoices.SAIDA
+		)
+
+	def test_modo_livre_so_envia_para_janela_aberta(self):
+		resp = self.client.post(
+			reverse('mensagens-disparo-massa'),
+			{
+				'modo': 'livre',
+				'conteudo': 'Ola pessoal',
+				'pessoas': [self.pessoa_aberta.pk, self.pessoa_fechada.pk],
+			},
+		)
+		self.assertEqual(resp.status_code, 302)
+		self.assertEqual(self._saidas(self.pessoa_aberta).count(), 1)
+		self.assertEqual(self._saidas(self.pessoa_fechada).count(), 0)
+
+	def test_modo_template_envia_para_todos_mesmo_com_janela_fechada(self):
+		resp = self.client.post(
+			reverse('mensagens-disparo-massa'),
+			{
+				'modo': 'template',
+				'content_sid': 'HXabc123',
+				'pessoas': [self.pessoa_aberta.pk, self.pessoa_fechada.pk],
+			},
+		)
+		self.assertEqual(resp.status_code, 302)
+		for pessoa in (self.pessoa_aberta, self.pessoa_fechada):
+			mensagem = self._saidas(pessoa).first()
+			self.assertIsNotNone(mensagem)
+			self.assertEqual(mensagem.metadata_envio['tipo_template'], 'marketing_massa')
+			self.assertEqual(mensagem.metadata_envio['twilio_template']['content_sid'], 'HXabc123')
+
+	def test_modo_template_personaliza_nome_por_pessoa(self):
+		resp = self.client.post(
+			reverse('mensagens-disparo-massa'),
+			{
+				'modo': 'template',
+				'content_sid': 'HXabc123',
+				'content_variables': '{"1": "{nome}"}',
+				'pessoas': [self.pessoa_aberta.pk],
+			},
+		)
+		self.assertEqual(resp.status_code, 302)
+		mensagem = self._saidas(self.pessoa_aberta).first()
+		self.assertIn('Ana Aberta', mensagem.metadata_envio['twilio_template']['content_variables'])
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_modo_template_exige_content_sid(self):
+		resp = self.client.post(
+			reverse('mensagens-disparo-massa'),
+			{
+				'modo': 'template',
+				'content_sid': '',
+				'pessoas': [self.pessoa_aberta.pk],
+			},
+		)
+		self.assertEqual(resp.status_code, 200)  # re-renderiza com erro de validacao
+		self.assertEqual(
+			MensagemContato.objects.filter(direcao=MensagemContato.DirecaoChoices.SAIDA).count(),
+			0,
+		)
+
+	def test_template_marketing_isento_da_janela_no_processador(self):
+		mensagem = MensagemContato.objects.create(
+			pessoa=self.pessoa_fechada,
+			criado_por=self.user,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.SAIDA,
+			status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+			conteudo='[Template] HXabc123',
+			metadata_envio={
+				'tipo_template': 'marketing_massa',
+				'twilio_template': {'content_sid': 'HXabc123', 'content_variables': ''},
+			},
+		)
+		resultado = processar_fila_mensagens(limit=5, dry_run=True)
+		mensagem.refresh_from_db()
+		self.assertEqual(resultado['falha'], 0)
+		self.assertEqual(resultado['total_processado'], 1)
