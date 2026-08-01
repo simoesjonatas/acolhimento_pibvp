@@ -1080,3 +1080,76 @@ class DisparoMassaTests(TestCase):
 		mensagem.refresh_from_db()
 		self.assertEqual(resultado['falha'], 0)
 		self.assertEqual(resultado['total_processado'], 1)
+
+
+class JanelaAbertaFiltroTests(TestCase):
+	"""Filtro de janela de 24h na lista de pessoas + contagem no dashboard."""
+
+	def setUp(self):
+		self.user = get_user_model().objects.create_user('equipe_janela_lista', password='x', is_staff=True)
+		self.client.force_login(self.user)
+		self.aberta = PrimeiroContato.objects.create(
+			nome='Com Janela',
+			telefone_whatsapp='31900007777',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			iniciou_interacao=True,
+		)
+		# Entrada recente -> janela aberta.
+		MensagemContato.objects.create(
+			pessoa=self.aberta,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+			conteudo='oi',
+		)
+		self.fechada = PrimeiroContato.objects.create(
+			nome='Sem Janela',
+			telefone_whatsapp='31900008888',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			iniciou_interacao=True,
+		)
+		# Entrada antiga (>24h) -> janela fechada.
+		msg = MensagemContato.objects.create(
+			pessoa=self.fechada,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+			conteudo='oi',
+		)
+		MensagemContato.objects.filter(pk=msg.pk).update(
+			enfileirada_em=timezone.now() - timedelta(hours=30)
+		)
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_filtro_janela_aberta(self):
+		resp = self.client.get(reverse('pessoas-lista'), {'janela': 'aberta'})
+		nomes = [p.nome for p in resp.context['pessoas']]
+		self.assertIn('Com Janela', nomes)
+		self.assertNotIn('Sem Janela', nomes)
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_filtro_janela_fechada(self):
+		resp = self.client.get(reverse('pessoas-lista'), {'janela': 'fechada'})
+		nomes = [p.nome for p in resp.context['pessoas']]
+		self.assertIn('Sem Janela', nomes)
+		self.assertNotIn('Com Janela', nomes)
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_lista_sem_filtro_mostra_todas(self):
+		resp = self.client.get(reverse('pessoas-lista'))
+		nomes = [p.nome for p in resp.context['pessoas']]
+		self.assertIn('Com Janela', nomes)
+		self.assertIn('Sem Janela', nomes)
+
+	def test_contador_janela_aberta(self):
+		from apps.acolhimento.whatsapp_rules import contar_pessoas_janela_aberta
+		self.assertEqual(contar_pessoas_janela_aberta(), 1)
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_dashboard_expoe_total_janela_aberta(self):
+		resp = self.client.get(reverse('dashboard'))
+		self.assertEqual(resp.context['total_janela_aberta'], 1)

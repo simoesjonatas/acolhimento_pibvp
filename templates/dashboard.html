@@ -67,6 +67,11 @@
         <span class="kpi-label">Membros</span>
         <strong class="kpi-value">{{ total_membros }}</strong>
     </article>
+    <a class="kpi-card kpi-card-janela" href="{% url 'pessoas-lista' %}?janela=aberta">
+        <span class="kpi-label">Janela 24h aberta</span>
+        <strong class="kpi-value">{{ total_janela_aberta }}</strong>
+        <span class="kpi-hint">Responderam nas últimas 24h — ver pessoas</span>
+    </a>
 </section>
 
 <section class="dashboard-panel">

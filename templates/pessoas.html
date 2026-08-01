@@ -45,6 +45,14 @@
             <option value="nao" {% if iniciou_interacao_atual == 'nao' %}selected{% endif %}>Nao</option>
         </select>
     </div>
+    <div>
+        <label for="janela">Janela 24h</label>
+        <select id="janela" name="janela">
+            <option value="">Todas</option>
+            <option value="aberta" {% if janela_atual == 'aberta' %}selected{% endif %}>Aberta</option>
+            <option value="fechada" {% if janela_atual == 'fechada' %}selected{% endif %}>Fechada</option>
+        </select>
+    </div>
     <button type="submit">
         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="3 4 21 4 14 12 14 19 10 21 10 12 3 4"/></svg>
         <span class="btn-text">Filtrar</span>

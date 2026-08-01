@@ -1,9 +1,10 @@
 from datetime import timedelta
 
 from django.conf import settings
+from django.db.models import Max, Q
 from django.utils import timezone
 
-from apps.acolhimento.models import MensagemContato
+from apps.acolhimento.models import MensagemContato, PrimeiroContato
 
 
 # Janela de atendimento do WhatsApp: apos 24h sem resposta da pessoa, so e
@@ -47,6 +48,39 @@ def janela_atendimento_aberta(pessoa) -> bool:
     if not ultima:
         return False
     return ultima >= timezone.now() - timedelta(hours=JANELA_ATENDIMENTO_HORAS)
+
+
+def janela_aberta_cutoff():
+    """Momento-limite: uma mensagem recebida depois disso mantem a janela de 24h aberta."""
+    return timezone.now() - timedelta(hours=JANELA_ATENDIMENTO_HORAS)
+
+
+def anotar_ultima_entrada(queryset):
+    """Anota 'ultima_entrada' (datahora da ultima mensagem recebida) num queryset de PrimeiroContato."""
+    return queryset.annotate(
+        ultima_entrada=Max(
+            'mensagens__enfileirada_em',
+            filter=Q(mensagens__direcao=MensagemContato.DirecaoChoices.ENTRADA),
+        )
+    )
+
+
+def filtrar_janela_aberta(queryset):
+    """Pessoas com a janela de 24h aberta: receberam mensagem nas ultimas 24h."""
+    return anotar_ultima_entrada(queryset).filter(ultima_entrada__gte=janela_aberta_cutoff())
+
+
+def filtrar_janela_fechada(queryset):
+    """Pessoas com a janela de 24h fechada: sem mensagem recebida nas ultimas 24h (ou nenhuma)."""
+    cutoff = janela_aberta_cutoff()
+    return anotar_ultima_entrada(queryset).filter(
+        Q(ultima_entrada__lt=cutoff) | Q(ultima_entrada__isnull=True)
+    )
+
+
+def contar_pessoas_janela_aberta() -> int:
+    """Quantas pessoas estao com a janela de 24h aberta agora."""
+    return filtrar_janela_aberta(PrimeiroContato.objects.all()).count()
 
 
 def pode_enviar_livre(pessoa) -> bool:

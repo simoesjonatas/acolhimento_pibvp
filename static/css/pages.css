@@ -1330,6 +1330,14 @@
     display: grid;
     gap: 14px;
     align-content: start;
+    min-width: 0;
+}
+
+/* Impede que os cards (grid items) estourem a largura da coluna e se sobreponham
+   em tablets: sem isto, o min-width:auto deixa a grade interna (.detail-grid) vazar. */
+.person-main-column > *,
+.person-side-column > * {
+    min-width: 0;
 }
 
 .person-summary-card {
@@ -1391,8 +1399,11 @@
 }
 
 .timeline-filter-form {
-    display: grid;
-    grid-template-columns: minmax(220px, 1fr) minmax(150px, 190px) minmax(140px, 170px) auto;
+    /* Flex com wrap: os campos crescem/quebram conforme a largura da coluna (que fica
+       estreita no layout de 2 colunas dos tablets), e o bloco de acoes mantem a largura
+       natural (Filtrar + Limpar lado a lado) em vez de vazar para o card ao lado. */
+    display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     align-items: end;
     margin-bottom: 12px;
@@ -1400,6 +1411,20 @@
     border: 1px solid var(--line);
     border-radius: var(--radius);
     background: #fbfcf8;
+}
+
+.timeline-filter-form > * {
+    flex: 1 1 150px;
+    min-width: 0;
+}
+
+.timeline-filter-form > .timeline-search-field {
+    flex-grow: 2;
+    flex-basis: 200px;
+}
+
+.timeline-filter-form > .timeline-filter-actions {
+    flex: 0 0 auto;
 }
 
 .timeline-filter-form label {
@@ -1414,7 +1439,7 @@
 .timeline-filter-actions {
     display: flex;
     gap: 8px;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
 }
 
 .timeline-filter-actions .btn,
@@ -2133,6 +2158,29 @@
     color: var(--text);
     font-size: clamp(1.65rem, 3vw, 2.15rem);
     line-height: 1;
+}
+
+a.kpi-card {
+    text-decoration: none;
+    color: inherit;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+a.kpi-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 32px rgba(28, 52, 39, 0.15);
+}
+
+.kpi-card-janela::before {
+    background: var(--primary);
+}
+
+.kpi-hint {
+    display: block;
+    margin-top: 8px;
+    color: #5f7065;
+    font-size: 0.72rem;
+    font-weight: 700;
 }
 
 .dashboard-panel {
@@ -3344,6 +3392,13 @@
         grid-template-columns: 1fr;
         flex-direction: column;
         align-items: stretch;
+    }
+
+    /* Empilhado (flex-direction: column): evita que o flex-basis vire altura dos campos.
+       O segundo seletor iguala a especificidade da regra base do campo de busca. */
+    .timeline-filter-form > *,
+    .timeline-filter-form > .timeline-search-field {
+        flex-basis: auto;
     }
 
     .row-actions {

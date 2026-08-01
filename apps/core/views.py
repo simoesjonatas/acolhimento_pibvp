@@ -13,6 +13,7 @@ from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato
+from apps.acolhimento.whatsapp_rules import contar_pessoas_janela_aberta
 from apps.core.forms import PerfilForm, UsuarioCreateForm, UsuarioUpdateForm
 
 
@@ -123,6 +124,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 		total_membros = PrimeiroContato.objects.filter(
 			status=PrimeiroContato.StatusAcolhimento.MEMBRO
 		).count()
+		total_janela_aberta = contar_pessoas_janela_aberta()
 
 		ultimos_passos = InteracaoAcolhimento.objects.select_related('pessoa')[:8]
 
@@ -135,6 +137,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 				'total_acompanhamento': total_acompanhamento,
 				'total_participante': total_participante,
 				'total_membros': total_membros,
+				'total_janela_aberta': total_janela_aberta,
 				'ultimos_passos': ultimos_passos,
 			}
 		)

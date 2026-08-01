@@ -30,6 +30,8 @@ from apps.acolhimento.reports import filtrar_pessoas, gerar_relatorio, resumo_fi
 from apps.acolhimento.whatsapp_rules import (
 	JANELA_ATENDIMENTO_HORAS,
 	WHATSAPP_OPTIN_REQUIRED_ERROR,
+	filtrar_janela_aberta,
+	filtrar_janela_fechada,
 	janela_atendimento_aberta,
 	motivo_bloqueio_livre,
 	motivo_bloqueio_template_continuar,
@@ -103,6 +105,7 @@ class PrimeiroContatoQuerysetMixin:
 		busca = self.request.GET.get('q', '').strip()
 		origem = self.request.GET.get('origem', '').strip()
 		iniciou_interacao = self.request.GET.get('iniciou_interacao', '').strip()
+		janela = self.request.GET.get('janela', '').strip()
 		sort_coluna, direcao = self.get_sort_state()
 
 		if busca:
@@ -120,6 +123,11 @@ class PrimeiroContatoQuerysetMixin:
 			queryset = queryset.filter(iniciou_interacao=True)
 		elif iniciou_interacao == 'nao':
 			queryset = queryset.filter(iniciou_interacao=False)
+
+		if janela == 'aberta':
+			queryset = filtrar_janela_aberta(queryset)
+		elif janela == 'fechada':
+			queryset = filtrar_janela_fechada(queryset)
 
 		ordering = self.sort_map.get(sort_coluna, 'data_primeiro_contato')
 		if direcao == 'desc':
@@ -172,6 +180,7 @@ class PrimeiroContatoListView(LoginRequiredMixin, PrimeiroContatoQuerysetMixin, 
 		context['busca'] = self.request.GET.get('q', '').strip()
 		context['origem_atual'] = self.request.GET.get('origem', '').strip()
 		context['iniciou_interacao_atual'] = self.request.GET.get('iniciou_interacao', '').strip()
+		context['janela_atual'] = self.request.GET.get('janela', '').strip()
 		context['origem_choices'] = PrimeiroContato.OrigemCadastroChoices.choices
 		context['sort_coluna_atual'] = sort_coluna_atual
 		context['sort_direcao_atual'] = sort_direcao_atual
