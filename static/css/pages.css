@@ -1065,12 +1065,30 @@
 }
 
 .queue-filter-form {
-    grid-template-columns: minmax(230px, 1.45fr) repeat(5, minmax(132px, 1fr)) auto;
+    /* Flex com wrap para respeitar a largura da pagina: o grid fixo de 7 colunas vazava
+       entre ~920px e ~1190px. Os campos crescem/quebram e as acoes mantem a largura
+       natural (Filtrar + Limpar lado a lado). */
+    display: flex;
+    flex-wrap: wrap;
     margin-bottom: 0;
     padding: 0;
     border: 0;
     background: transparent;
     box-shadow: none;
+}
+
+.queue-filter-form > * {
+    flex: 1 1 150px;
+    min-width: 0;
+}
+
+.queue-filter-form > .queue-filter-search {
+    flex-grow: 2;
+    flex-basis: 220px;
+}
+
+.queue-filter-form > .queue-filter-actions {
+    flex: 0 0 auto;
 }
 
 .queue-filter-actions {
@@ -3395,9 +3413,11 @@ a.kpi-card:hover {
     }
 
     /* Empilhado (flex-direction: column): evita que o flex-basis vire altura dos campos.
-       O segundo seletor iguala a especificidade da regra base do campo de busca. */
+       Os seletores dos campos de busca igualam a especificidade das regras base. */
     .timeline-filter-form > *,
-    .timeline-filter-form > .timeline-search-field {
+    .timeline-filter-form > .timeline-search-field,
+    .queue-filter-form > *,
+    .queue-filter-form > .queue-filter-search {
         flex-basis: auto;
     }
 
