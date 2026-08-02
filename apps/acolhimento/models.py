@@ -457,3 +457,34 @@ class RespostaPergunta(models.Model):
 		if self.opcao_id:
 			return self.opcao.texto
 		return self.valor_texto
+
+
+class TemplateWhatsapp(models.Model):
+	"""Configuracao dos templates padrao da Twilio, editavel pela aplicacao (superusuario).
+
+	Quando preenchido, sobrescreve o valor do .env (settings); vazio => usa o .env.
+	Os valores de `tipo` batem com metadata_envio['tipo_template'] das mensagens.
+	"""
+
+	class Tipo(models.TextChoices):
+		PRIMEIRO_CONTATO = 'primeiro_contato_opt_in', 'Primeiro contato (opt-in)'
+		CONTINUAR = 'continuar_conversa', 'Continuar conversa'
+
+	tipo = models.CharField(max_length=40, choices=Tipo.choices, unique=True)
+	content_sid = models.CharField('Content Template SID', max_length=64, blank=True)
+	content_variables = models.TextField('Variaveis (JSON)', blank=True, default='{}')
+	atualizado_em = models.DateTimeField(auto_now=True)
+	atualizado_por = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='templates_whatsapp_atualizados',
+	)
+
+	class Meta:
+		verbose_name = 'Template do WhatsApp'
+		verbose_name_plural = 'Templates do WhatsApp'
+
+	def __str__(self):
+		return self.get_tipo_display()

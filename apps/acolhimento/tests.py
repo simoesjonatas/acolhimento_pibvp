@@ -17,9 +17,11 @@ from apps.acolhimento.models import (
 	PerguntaQuestionario,
 	PrimeiroContato,
 	Questionario,
+	TemplateWhatsapp,
 )
 from apps.acolhimento.views import (
 	PERMISSAO_CONVERSAR_PESSOAS,
+	ConfiguracaoTemplatesView,
 	DisparoMensagemMassaView,
 	ExcluirConviteQuestionarioView,
 	MensagemFilaListView,
@@ -1153,3 +1155,68 @@ class JanelaAbertaFiltroTests(TestCase):
 	def test_dashboard_expoe_total_janela_aberta(self):
 		resp = self.client.get(reverse('dashboard'))
 		self.assertEqual(resp.context['total_janela_aberta'], 1)
+
+
+class ConfiguracaoTemplatesTests(TestCase):
+	"""Tela de configuracao dos templates padrao da Twilio (somente superusuario)."""
+
+	def setUp(self):
+		self.super = get_user_model().objects.create_superuser('super_cfg', 'super_cfg@ex.com', 'x')
+		self.staff = get_user_model().objects.create_user('staff_cfg', password='x', is_staff=True)
+		self.url = reverse('configuracao-templates')
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_superuser_acessa(self):
+		self.client.force_login(self.super)
+		resp = self.client.get(self.url)
+		self.assertEqual(resp.status_code, 200)
+
+	def test_staff_nao_superuser_bloqueado(self):
+		request = RequestFactory().get(self.url)
+		request.user = self.staff
+		with self.assertRaises(PermissionDenied):
+			ConfiguracaoTemplatesView.as_view()(request)
+
+	def test_salva_sobrescreve_env(self):
+		from apps.acolhimento import template_config
+		self.client.force_login(self.super)
+		resp = self.client.post(self.url, {
+			'opt_in_sid': 'HXoptinNOVO',
+			'opt_in_variables': '{"2": "abc"}',
+			'continuar_sid': 'HXcontinuarNOVO',
+			'continuar_variables': '{}',
+		})
+		self.assertEqual(resp.status_code, 302)
+		self.assertEqual(TemplateWhatsapp.objects.count(), 2)
+		self.assertEqual(template_config.opt_in_sid(), 'HXoptinNOVO')
+		self.assertEqual(template_config.continuar_sid(), 'HXcontinuarNOVO')
+
+	@override_settings(TWILIO_TEMPLATE_CONTINUAR_SID='HXvemdoenv')
+	def test_fallback_env_quando_sem_config(self):
+		from apps.acolhimento import template_config
+		self.assertFalse(TemplateWhatsapp.objects.filter(tipo=TemplateWhatsapp.Tipo.CONTINUAR).exists())
+		self.assertEqual(template_config.continuar_sid(), 'HXvemdoenv')
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_sid_invalido_rejeitado(self):
+		self.client.force_login(self.super)
+		resp = self.client.post(self.url, {
+			'opt_in_sid': 'ZZinvalido',
+			'opt_in_variables': '{}',
+			'continuar_sid': '',
+			'continuar_variables': '{}',
+		})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(TemplateWhatsapp.objects.count(), 0)
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_variables_json_invalido_rejeitado(self):
+		self.client.force_login(self.super)
+		resp = self.client.post(self.url, {
+			'opt_in_sid': 'HXok',
+			'opt_in_variables': 'nao-e-json',
+			'continuar_sid': '',
+			'continuar_variables': '{}',
+		})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(TemplateWhatsapp.objects.count(), 0)

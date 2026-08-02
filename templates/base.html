@@ -78,7 +78,7 @@
             <div class="nav-dropdown header-settings" data-nav-dropdown>
                 <button
                     type="button"
-                    class="nav-link nav-dropdown-toggle nav-settings-button {% if request.resolver_match.url_name == 'usuarios-lista' or request.resolver_match.url_name == 'usuarios-novo' or request.resolver_match.url_name == 'usuarios-editar' or request.resolver_match.url_name == 'usuarios-excluir' or request.resolver_match.url_name == 'mensagens-processamento' or request.resolver_match.url_name == 'questionarios-lista' or request.resolver_match.url_name == 'questionarios-novo' or request.resolver_match.url_name == 'questionario-builder' or request.resolver_match.url_name == 'questionario-visualizar' or request.resolver_match.url_name == 'questionario-editar' or request.resolver_match.url_name == 'pergunta-editar' %}active{% endif %}"
+                    class="nav-link nav-dropdown-toggle nav-settings-button {% if request.resolver_match.url_name == 'usuarios-lista' or request.resolver_match.url_name == 'usuarios-novo' or request.resolver_match.url_name == 'usuarios-editar' or request.resolver_match.url_name == 'usuarios-excluir' or request.resolver_match.url_name == 'mensagens-processamento' or request.resolver_match.url_name == 'questionarios-lista' or request.resolver_match.url_name == 'questionarios-novo' or request.resolver_match.url_name == 'questionario-builder' or request.resolver_match.url_name == 'questionario-visualizar' or request.resolver_match.url_name == 'questionario-editar' or request.resolver_match.url_name == 'pergunta-editar' or request.resolver_match.url_name == 'configuracao-templates' %}active{% endif %}"
                     aria-label="Configuracoes"
                     aria-expanded="false"
                     aria-controls="settings-navigation"
@@ -105,6 +105,12 @@
                         class="nav-dropdown-link {% if request.resolver_match.url_name == 'questionarios-lista' or request.resolver_match.url_name == 'questionarios-novo' or request.resolver_match.url_name == 'questionario-builder' or request.resolver_match.url_name == 'questionario-visualizar' or request.resolver_match.url_name == 'questionario-editar' or request.resolver_match.url_name == 'pergunta-editar' %}active{% endif %}"
                     >
                         Questionarios
+                    </a>
+                    <a
+                        href="{% url 'configuracao-templates' %}"
+                        class="nav-dropdown-link {% if request.resolver_match.url_name == 'configuracao-templates' %}active{% endif %}"
+                    >
+                        Templates WhatsApp
                     </a>
                 </div>
             </div>

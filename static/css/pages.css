@@ -3167,6 +3167,55 @@ a.kpi-card:hover {
     margin-bottom: 0;
 }
 
+/* Configuracao de templates do WhatsApp */
+.config-templates-page {
+    display: grid;
+    gap: 14px;
+}
+
+.config-templates-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 14px;
+    align-items: start;
+}
+
+.config-template-card {
+    min-width: 0;
+}
+
+.config-template-card .builder-field {
+    margin-bottom: 14px;
+}
+
+.config-template-card small {
+    display: block;
+    margin-top: 5px;
+    overflow-wrap: anywhere;
+}
+
+.config-template-card code {
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: #eef1ec;
+    font-size: 0.78rem;
+}
+
+.config-alert {
+    padding: 12px 14px;
+    border: 1px solid #e3c38c;
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+    color: #76541e;
+    font-size: 0.88rem;
+}
+
+.config-meta {
+    margin: 4px 0 0;
+    color: #64756a;
+    font-size: 0.8rem;
+}
+
 .profile-form {
     display: grid;
     gap: 12px;

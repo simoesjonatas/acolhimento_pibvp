@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block title %}Templates do WhatsApp{% endblock %}
+
+{% block content %}
+<div class="config-templates-page">
+    <section class="page-hero">
+        <div>
+            <span class="section-eyebrow">Configuracoes</span>
+            <h1>Templates do WhatsApp</h1>
+            <p>Troque os SIDs e variaveis dos templates padrao da Twilio direto pela aplicacao. Deixe um campo vazio para usar o valor do <code>.env</code>.</p>
+        </div>
+        <a class="btn secundario" href="{% url 'dashboard' %}">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+            <span class="btn-text">Voltar</span>
+        </a>
+    </section>
+
+    {% if not twilio_habilitado %}
+    <div class="config-alert">
+        <strong>Twilio desativado</strong> (TWILIO_ENABLED=false): o envio real fica pausado, mas voce ja pode configurar os templates aqui.
+    </div>
+    {% endif %}
+
+    <form method="post" class="config-templates-form">
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
+
+        <div class="config-templates-grid">
+            <section class="profile-form-card config-template-card">
+                <div class="panel-header">
+                    <div>
+                        <h2>Primeiro contato (opt-in)</h2>
+                        <p>Abre a conversa com quem esta em Primeiro contato (disparo do painel).</p>
+                    </div>
+                </div>
+
+                <p class="builder-field">
+                    <label for="{{ form.opt_in_sid.id_for_label }}">Content Template SID</label>
+                    {{ form.opt_in_sid }}
+                    {% if env_opt_in_sid %}<small class="table-muted-text">Padrao do .env: <code>{{ env_opt_in_sid }}</code></small>
+                    {% else %}<small class="table-muted-text">Sem padrao no .env — defina o SID aqui.</small>{% endif %}
+                    {% if form.opt_in_sid.errors %}<span class="form-errors">{{ form.opt_in_sid.errors.0 }}</span>{% endif %}
+                </p>
+
+                <p class="builder-field">
+                    <label for="{{ form.opt_in_variables.id_for_label }}">Variaveis (JSON)</label>
+                    {{ form.opt_in_variables }}
+                    <small class="table-muted-text">A variavel <code>1</code> e preenchida automaticamente com o nome da pessoa; use este JSON para as demais.</small>
+                    {% if form.opt_in_variables.errors %}<span class="form-errors">{{ form.opt_in_variables.errors.0 }}</span>{% endif %}
+                </p>
+
+                {% with cfg=configs.primeiro_contato_opt_in %}
+                {% if cfg %}<p class="config-meta">Salvo em {{ cfg.atualizado_em|date:'d/m/Y H:i' }}{% if cfg.atualizado_por %} por {{ cfg.atualizado_por.get_full_name|default:cfg.atualizado_por.username }}{% endif %}.</p>{% endif %}
+                {% endwith %}
+            </section>
+
+            <section class="profile-form-card config-template-card">
+                <div class="panel-header">
+                    <div>
+                        <h2>Continuar conversa</h2>
+                        <p>Reabre a janela de 24h quando a pessoa parou de responder.</p>
+                    </div>
+                </div>
+
+                <p class="builder-field">
+                    <label for="{{ form.continuar_sid.id_for_label }}">Content Template SID</label>
+                    {{ form.continuar_sid }}
+                    {% if env_continuar_sid %}<small class="table-muted-text">Padrao do .env: <code>{{ env_continuar_sid }}</code></small>
+                    {% else %}<small class="table-muted-text">Sem padrao no .env — defina o SID aqui.</small>{% endif %}
+                    {% if form.continuar_sid.errors %}<span class="form-errors">{{ form.continuar_sid.errors.0 }}</span>{% endif %}
+                </p>
+
+                <p class="builder-field">
+                    <label for="{{ form.continuar_variables.id_for_label }}">Variaveis (JSON)</label>
+                    {{ form.continuar_variables }}
+                    <small class="table-muted-text">A variavel <code>1</code> e preenchida automaticamente com o nome da pessoa; use este JSON para as demais.</small>
+                    {% if form.continuar_variables.errors %}<span class="form-errors">{{ form.continuar_variables.errors.0 }}</span>{% endif %}
+                </p>
+
+                {% with cfg=configs.continuar_conversa %}
+                {% if cfg %}<p class="config-meta">Salvo em {{ cfg.atualizado_em|date:'d/m/Y H:i' }}{% if cfg.atualizado_por %} por {{ cfg.atualizado_por.get_full_name|default:cfg.atualizado_por.username }}{% endif %}.</p>{% endif %}
+                {% endwith %}
+            </section>
+        </div>
+
+        <div class="action-row">
+            <button type="submit">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                <span class="btn-text">Salvar templates</span>
+            </button>
+            <a class="btn secundario" href="{% url 'dashboard' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <span class="btn-text">Cancelar</span>
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}

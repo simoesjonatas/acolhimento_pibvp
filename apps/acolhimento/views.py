@@ -23,8 +23,9 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento.fila_processor import processar_fila_mensagens
-from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RelatorioPessoasForm, ResponderQuestionarioForm
-from apps.acolhimento.models import ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario
+from apps.acolhimento import template_config
+from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RelatorioPessoasForm, ResponderQuestionarioForm, TemplatesWhatsappForm
+from apps.acolhimento.models import ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario, TemplateWhatsapp
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
 from apps.acolhimento.reports import filtrar_pessoas, gerar_relatorio, resumo_filtros, resumo_pessoas
 from apps.acolhimento.whatsapp_rules import (
@@ -920,7 +921,7 @@ class PrimeiroContatoMensagensView(LoginRequiredMixin, ConversasPessoasPermissao
 		)
 		context['janela_aberta'] = janela_atendimento_aberta(self.object)
 		context['precisa_template_continuar'] = precisa_template_continuar(self.object)
-		context['template_continuar_configurado'] = bool((settings.TWILIO_TEMPLATE_CONTINUAR_SID or '').strip())
+		context['template_continuar_configurado'] = bool(template_config.continuar_sid())
 		context['pode_enviar_template_continuar'] = pode_enviar_template_continuar(self.object)
 		context['template_continuar_liberado_em'] = proximo_template_continuar_em(self.object)
 		return context
@@ -1008,9 +1009,9 @@ class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoM
 
 	def post(self, request, pk, *args, **kwargs):
 		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
-		template_sid = (settings.TWILIO_TEMPLATE_CONTINUAR_SID or '').strip()
+		template_sid = template_config.continuar_sid()
 		if not template_sid:
-			messages.error(request, 'Template de continuacao nao configurado. Defina TWILIO_TEMPLATE_CONTINUAR_SID.')
+			messages.error(request, 'Template de continuacao nao configurado. Defina o SID na tela de configuracao de templates.')
 			return redirect('pessoas-mensagens', pk=pessoa.pk)
 
 		bloqueio = motivo_bloqueio_template_continuar(pessoa)
@@ -1019,7 +1020,7 @@ class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoM
 			return redirect('pessoas-mensagens', pk=pessoa.pk)
 
 		try:
-			variaveis_base = json.loads(settings.TWILIO_TEMPLATE_CONTINUAR_VARIABLES or '{}')
+			variaveis_base = json.loads(template_config.continuar_variables() or '{}')
 			if not isinstance(variaveis_base, dict):
 				variaveis_base = {}
 		except Exception:
@@ -1050,6 +1051,56 @@ class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoM
 			'Template de continuacao enfileirado. Quando a pessoa responder, a janela de 24h reabre.',
 		)
 		return redirect('pessoas-mensagens', pk=pessoa.pk)
+
+
+class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, FormView):
+	"""Tela (superusuario) para trocar os templates padrao da Twilio sem mexer no .env."""
+
+	template_name = 'configuracao_templates.html'
+	form_class = TemplatesWhatsappForm
+	success_url = reverse_lazy('configuracao-templates')
+	raise_exception = True
+
+	def get_initial(self):
+		return {
+			'opt_in_sid': template_config.opt_in_sid(),
+			'opt_in_variables': template_config.opt_in_variables(),
+			'continuar_sid': template_config.continuar_sid(),
+			'continuar_variables': template_config.continuar_variables(),
+		}
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		context['twilio_habilitado'] = settings.TWILIO_ENABLED
+		context['env_opt_in_sid'] = (settings.TWILIO_TEMPLATE_OPT_IN_SID or '').strip()
+		context['env_continuar_sid'] = (settings.TWILIO_TEMPLATE_CONTINUAR_SID or '').strip()
+		context['configs'] = {
+			cfg.tipo: cfg
+			for cfg in TemplateWhatsapp.objects.select_related('atualizado_por')
+		}
+		return context
+
+	def form_valid(self, form):
+		dados = form.cleaned_data
+		valores = {
+			TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO: (dados['opt_in_sid'], dados['opt_in_variables']),
+			TemplateWhatsapp.Tipo.CONTINUAR: (dados['continuar_sid'], dados['continuar_variables']),
+		}
+		for tipo, (sid, variables) in valores.items():
+			TemplateWhatsapp.objects.update_or_create(
+				tipo=tipo,
+				defaults={
+					'content_sid': sid,
+					'content_variables': variables,
+					'atualizado_por': self.request.user,
+				},
+			)
+		messages.success(self.request, 'Templates do WhatsApp atualizados com sucesso.')
+		return super().form_valid(form)
+
+	def form_invalid(self, form):
+		messages.error(self.request, 'Nao foi possivel salvar. Verifique os campos destacados.')
+		return super().form_invalid(form)
 
 
 class MensagemContatoExcluirView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, View):

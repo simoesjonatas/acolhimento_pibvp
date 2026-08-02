@@ -168,12 +168,13 @@ def mensagem_eh_template(mensagem: MensagemContato) -> bool:
 
 
 def mensagem_eh_template_primeiro_contato(mensagem: MensagemContato) -> bool:
+    from apps.acolhimento import template_config  # lazy: evita ciclo de import no load
     metadata = dict(mensagem.metadata_envio or {})
     if metadata.get('tipo_template') == 'primeiro_contato_opt_in':
         return True
     template_cfg = dict(metadata.get('twilio_template') or {})
     content_sid = (template_cfg.get('content_sid') or '').strip()
-    opt_in_sid = (getattr(settings, 'TWILIO_TEMPLATE_OPT_IN_SID', '') or '').strip()
+    opt_in_sid = template_config.opt_in_sid()
     return bool(content_sid and opt_in_sid and content_sid == opt_in_sid)
 
 

@@ -357,3 +357,46 @@ class ResponderQuestionarioForm(forms.Form):
             else:
                 resposta.valor_texto = str(valor)
             resposta.save()
+
+
+class TemplatesWhatsappForm(forms.Form):
+    """Edita os dois templates padrao da Twilio (opt-in e continuar). Superusuario."""
+
+    opt_in_sid = forms.CharField(
+        required=False,
+        label='Content Template SID',
+        widget=forms.TextInput(attrs={'placeholder': 'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}),
+    )
+    opt_in_variables = forms.CharField(
+        required=False,
+        label='Variaveis (JSON)',
+        widget=forms.Textarea(attrs={'rows': 2, 'placeholder': '{"1": "{nome}"}'}),
+    )
+    continuar_sid = forms.CharField(
+        required=False,
+        label='Content Template SID',
+        widget=forms.TextInput(attrs={'placeholder': 'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}),
+    )
+    continuar_variables = forms.CharField(
+        required=False,
+        label='Variaveis (JSON)',
+        widget=forms.Textarea(attrs={'rows': 2, 'placeholder': '{}'}),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        for campo in ('opt_in_sid', 'continuar_sid'):
+            sid = (cleaned.get(campo) or '').strip()
+            if sid and not sid.startswith('HX'):
+                self.add_error(campo, 'O Content SID da Twilio comeca com "HX".')
+            cleaned[campo] = sid
+        for campo in ('opt_in_variables', 'continuar_variables'):
+            raw = (cleaned.get(campo) or '').strip() or '{}'
+            try:
+                parsed = json.loads(raw)
+                if not isinstance(parsed, dict):
+                    raise ValueError
+            except ValueError:
+                self.add_error(campo, 'JSON invalido. Use um objeto, ex.: {"1": "{nome}"}.')
+            cleaned[campo] = raw
+        return cleaned

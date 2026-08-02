@@ -12,6 +12,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, ListView, TemplateView, UpdateView
 
+from apps.acolhimento import template_config
 from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato
 from apps.acolhimento.whatsapp_rules import contar_pessoas_janela_aberta
 from apps.core.forms import PerfilForm, UsuarioCreateForm, UsuarioUpdateForm
@@ -58,13 +59,13 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 			messages.info(request, 'Nao ha pessoas em Primeiro contato para disparo.')
 			return redirect('dashboard')
 
-		if action == 'disparar_template_opt_in' and not settings.TWILIO_TEMPLATE_OPT_IN_SID:
-			messages.error(request, 'Template SID nao configurado. Defina TWILIO_TEMPLATE_OPT_IN_SID.')
+		template_sid = template_config.opt_in_sid()
+		if action == 'disparar_template_opt_in' and not template_sid:
+			messages.error(request, 'Template SID nao configurado. Defina o SID na tela de configuracao de templates.')
 			return redirect('dashboard')
 
-		template_sid = settings.TWILIO_TEMPLATE_OPT_IN_SID
 		try:
-			template_vars_base = json.loads(settings.TWILIO_TEMPLATE_OPT_IN_VARIABLES or '{}')
+			template_vars_base = json.loads(template_config.opt_in_variables() or '{}')
 			if not isinstance(template_vars_base, dict):
 				template_vars_base = {}
 		except Exception:

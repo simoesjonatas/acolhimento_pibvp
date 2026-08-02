@@ -3,6 +3,7 @@ from django.urls import path
 from apps.acolhimento.views import (
     AutoCadastroCreateView,
     AutoCadastroSuccessView,
+    ConfiguracaoTemplatesView,
     DisparoMensagemMassaView,
     EnviarConviteWhatsappView,
     EnviarTemplateContinuarView,
@@ -43,6 +44,7 @@ urlpatterns = [
     path('mensagens/fila/', MensagemFilaListView.as_view(), name='mensagens-fila'),
     path('mensagens/processamento/', ProcessamentoFilaControleView.as_view(), name='mensagens-processamento'),
     path('mensagens/disparo/', DisparoMensagemMassaView.as_view(), name='mensagens-disparo-massa'),
+    path('configuracoes/templates/', ConfiguracaoTemplatesView.as_view(), name='configuracao-templates'),
     path('mensagens/webhook/twilio-status/', TwilioStatusWebhookView.as_view(), name='mensagens-webhook-twilio-status'),
     path('mensagens/webhook/twilio-inbound/', TwilioInboundWebhookView.as_view(), name='mensagens-webhook-twilio-inbound'),
     path('mensagens/<int:pk>/excluir/', MensagemContatoExcluirView.as_view(), name='mensagens-excluir'),
