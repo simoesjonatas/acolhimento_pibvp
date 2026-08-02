@@ -2120,10 +2120,17 @@
 }
 
 .dashboard-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    /* Flex com wrap: a ultima linha estica os cards para preencher a largura
+       (evita o "buraco" quando o numero de cards nao divide a linha certinho). */
+    display: flex;
+    flex-wrap: wrap;
     gap: 12px;
     margin: 0 0 18px;
+}
+
+.dashboard-cards > * {
+    flex: 1 1 160px;
+    min-width: 0;
 }
 
 .kpi-card {
