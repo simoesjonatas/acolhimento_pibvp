@@ -9,6 +9,24 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'img/site-icon.svg' %}">
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
     <link rel="stylesheet" href="{% static 'css/pages.css' %}">
+    <style>
+        /* Indicador discreto de conexao do WhatsApp no header. */
+        .wa-menu-status { display:inline-flex; align-items:center; gap:7px; padding:6px 11px;
+            border-radius: var(--radius); border:1px solid rgba(255,255,255,.14);
+            background:rgba(255,255,255,.06); color:rgba(250,255,249,.82);
+            font-size:.78rem; font-weight:700; line-height:1; text-decoration:none; white-space:nowrap; }
+        a.wa-menu-status:hover { background:rgba(255,255,255,.12); color:#fff; }
+        .wa-menu-dot { width:9px; height:9px; border-radius:50%; background:#9ca3af; flex:0 0 auto;
+            box-shadow:0 0 0 3px rgba(255,255,255,.08); }
+        .wa-menu-status.wa-ok   .wa-menu-dot { background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.20); }
+        .wa-menu-status.wa-wait .wa-menu-dot { background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.20); }
+        .wa-menu-status.wa-off  .wa-menu-dot { background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,.20); }
+        /* Mobile: o header-right vira grid; o badge fica em linha propria, compacto a
+           esquerda (justify-self:start impede o esticao) e nao rouba a coluna do perfil. */
+        @media (max-width: 1280px) {
+            .header-right .wa-menu-status { grid-column: 1 / -1; justify-self: start; order: -1; }
+        }
+    </style>
 </head>
 <body>
     <div id="app-loading-bar" aria-hidden="true"></div>
@@ -71,6 +89,18 @@
             </nav>
         </div>
         <div class="header-right{% if user.is_superuser %} has-settings{% endif %}">
+            {% if whatsapp_provider == 'evolution' %}
+            {% if user.is_superuser %}
+            <a href="{% url 'configuracao-whatsapp' %}" class="wa-menu-status wa-{{ whatsapp_estado_classe }}"
+               title="WhatsApp {{ whatsapp_estado_texto }} — clique para conectar" data-no-loading>
+                <span class="wa-menu-dot"></span><span class="wa-menu-text">WhatsApp</span>
+            </a>
+            {% else %}
+            <span class="wa-menu-status wa-{{ whatsapp_estado_classe }}" title="WhatsApp {{ whatsapp_estado_texto }}">
+                <span class="wa-menu-dot"></span><span class="wa-menu-text">WhatsApp</span>
+            </span>
+            {% endif %}
+            {% endif %}
             <a href="{% url 'perfil' %}" class="profile-chip {% if request.resolver_match.url_name == 'perfil' %}active{% endif %}">
                 Ola, {{ user.username }}
             </a>
@@ -106,11 +136,17 @@
                     >
                         Questionarios
                     </a>
+					<a
+						href="{% url 'configuracao-templates' %}"
+						class="nav-dropdown-link {% if request.resolver_match.url_name == 'configuracao-templates' %}active{% endif %}"
+					>
+						Mensagens WhatsApp
+					</a>
                     <a
-                        href="{% url 'configuracao-templates' %}"
-                        class="nav-dropdown-link {% if request.resolver_match.url_name == 'configuracao-templates' %}active{% endif %}"
+                        href="{% url 'configuracao-whatsapp' %}"
+                        class="nav-dropdown-link {% if request.resolver_match.url_name == 'configuracao-whatsapp' %}active{% endif %}"
                     >
-                        Templates WhatsApp
+                        Conexao WhatsApp
                     </a>
                 </div>
             </div>

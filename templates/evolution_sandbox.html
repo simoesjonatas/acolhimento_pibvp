@@ -1,0 +1,155 @@
+{% load static %}<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sandbox WhatsApp — Teste de conexao</title>
+  <style>
+    :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --txt:#e2e8f0; --muted:#94a3b8;
+            --green:#22c55e; --amber:#f59e0b; --red:#ef4444; --blue:#3b82f6; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--txt);
+           font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; line-height:1.5; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { font-size: 1.4rem; margin:0 0 4px; }
+    h2 { font-size: 1.05rem; margin: 0 0 12px; }
+    .sub { color: var(--muted); margin: 0 0 20px; font-size:.92rem; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
+            padding:18px; margin-bottom:18px; }
+    .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+    .kv { font-size:.85rem; color:var(--muted); }
+    .kv b { color:var(--txt); font-weight:600; }
+    .badge { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px;
+             font-size:.8rem; font-weight:600; }
+    .dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+    .b-ok { background:rgba(34,197,94,.15); color:var(--green); }
+    .b-wait { background:rgba(245,158,11,.15); color:var(--amber); }
+    .b-off { background:rgba(239,68,68,.15); color:var(--red); }
+    label { display:block; font-size:.85rem; color:var(--muted); margin:0 0 4px; }
+    input, textarea { width:100%; background:#0b1220; border:1px solid var(--line); color:var(--txt);
+            border-radius:8px; padding:10px 12px; font-size:.95rem; font-family:inherit; }
+    textarea { min-height:80px; resize:vertical; }
+    .btn { border:none; border-radius:8px; padding:10px 16px; font-size:.9rem; font-weight:600;
+            cursor:pointer; color:#fff; background:var(--blue); }
+    .btn.secondary { background:#475569; }
+    .btn.danger { background:var(--red); }
+    .btn:hover { filter:brightness(1.08); }
+    .qr { text-align:center; padding:12px; background:#fff; border-radius:10px; display:inline-block; }
+    .qr img { width:260px; height:260px; display:block; }
+    .pair { font-family: ui-monospace, monospace; font-size:1.1rem; letter-spacing:2px; color:var(--txt); }
+    pre { background:#0b1220; border:1px solid var(--line); border-radius:8px; padding:12px;
+          overflow:auto; font-size:.82rem; max-height:340px; }
+    a { color:#7dd3fc; }
+    .mt8{margin-top:8px}.mt12{margin-top:12px}.mb0{margin-bottom:0}
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    @media (max-width:620px){ .grid2{grid-template-columns:1fr} .qr img{width:220px;height:220px} }
+    .note { font-size:.82rem; color:var(--muted); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Sandbox — WhatsApp</h1>
+  <p class="sub">Ambiente isolado para testar a conexao direta do WhatsApp. Nao afeta o fluxo atual do sistema.</p>
+
+  <!-- Config + status -->
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div>
+        {% if not reachable %}
+          <span class="badge b-off"><span class="dot" style="background:var(--red)"></span> API fora do ar</span>
+        {% elif state_ok %}
+          <span class="badge b-ok"><span class="dot" style="background:var(--green)"></span> WhatsApp conectado</span>
+        {% elif state == 'connecting' %}
+          <span class="badge b-wait"><span class="dot" style="background:var(--amber)"></span> Conectando… (escaneie o QR)</span>
+        {% else %}
+          <span class="badge b-off"><span class="dot" style="background:var(--red)"></span> Desconectado{% if state %} ({{ state }}){% endif %}</span>
+        {% endif %}
+      </div>
+      <form method="post" class="mb0">{% csrf_token %}
+        <input type="hidden" name="action" value="status">
+        <button class="btn secondary" type="submit">Atualizar status</button>
+      </form>
+    </div>
+    <div class="mt12 kv">
+      <div>API: <b>{{ base_url }}</b> &nbsp;·&nbsp; Instância: <b>{{ instance }}</b></div>
+      <div class="mt8">Painel da conexao: <a href="{{ manager_url }}" target="_blank" rel="noopener">{{ manager_url }}</a></div>
+    </div>
+    {% if not reachable %}
+      <p class="note mt12">Nao consegui falar com a API de WhatsApp. Verifique se o servico de conexao esta em execucao.</p>
+    {% endif %}
+  </div>
+
+  <!-- 1. Conectar -->
+  <div class="card">
+    <h2>1 · Conectar o WhatsApp</h2>
+    <p class="note mb0">Clique para criar a instância e gerar o QR. No celular: WhatsApp → <b>Aparelhos conectados</b> →
+      <b>Conectar um aparelho</b> e escaneie. (Use um número que possa ficar pareado — ideal um chip de testes.)</p>
+    <div class="row mt12">
+      <form method="post" class="mb0">{% csrf_token %}
+        <input type="hidden" name="action" value="create">
+        <button class="btn" type="submit">Criar instância e gerar QR</button>
+      </form>
+      <form method="post" class="mb0">{% csrf_token %}
+        <input type="hidden" name="action" value="connect">
+        <button class="btn secondary" type="submit">Regerar QR</button>
+      </form>
+      {% if state_ok %}
+      <form method="post" class="mb0">{% csrf_token %}
+        <input type="hidden" name="action" value="logout">
+        <button class="btn danger" type="submit">Desconectar</button>
+      </form>
+      {% endif %}
+    </div>
+
+    {% if qr_data_uri %}
+      <div class="mt12 row" style="align-items:flex-start; gap:20px">
+        <div class="qr"><img src="{{ qr_data_uri }}" alt="QR code para parear WhatsApp"></div>
+        {% if pairing_code %}
+        <div>
+          <div class="note">Ou use o código de pareamento:</div>
+          <div class="pair mt8">{{ pairing_code }}</div>
+        </div>
+        {% endif %}
+      </div>
+    {% elif state_ok %}
+      <p class="note mt12">✅ Já conectado — pule para o passo 2.</p>
+    {% endif %}
+  </div>
+
+  <!-- 2. Enviar -->
+  <div class="card">
+    <h2>2 · Enviar mensagem de teste</h2>
+    <form method="post">{% csrf_token %}
+      <input type="hidden" name="action" value="send">
+      <div class="grid2">
+        <div>
+          <label>Número de destino (com DDI+DDD)</label>
+          <input type="text" name="number" placeholder="+55 11 99999-9999" value="{{ sent_number }}" required>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button class="btn" type="submit" style="width:auto">Enviar via WhatsApp</button>
+        </div>
+      </div>
+      <div class="mt12">
+        <label>Mensagem</label>
+        <textarea name="text" required>{{ sent_text }}</textarea>
+      </div>
+    </form>
+    {% if not state_ok %}
+      <p class="note mt12">Dica: o envio só funciona com o WhatsApp <b>conectado</b> (passo 1).</p>
+    {% endif %}
+  </div>
+
+  <!-- 3. Debug -->
+  {% if last_action %}
+  <div class="card">
+    <h2>Última ação: {{ last_action }} <span class="note">(HTTP {{ last_status }})</span></h2>
+    <pre>{{ last_response_pretty }}</pre>
+  </div>
+  {% endif %}
+
+  <p class="note">Pagina de teste isolada para a conexao do WhatsApp.</p>
+</div>
+</body>
+</html>

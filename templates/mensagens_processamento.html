@@ -3,6 +3,25 @@
 {% block title %}Processamento da fila{% endblock %}
 
 {% block content %}
+<style>
+    .auto-switch-row { display:flex; justify-content:space-between; align-items:center; gap:16px;
+        flex-wrap:wrap; padding:14px 16px; border:1px solid rgba(0,0,0,.10); border-radius:12px;
+        background:rgba(0,0,0,.02); margin-bottom:18px; }
+    .auto-switch-info strong { display:block; font-size:1rem; }
+    .auto-switch-info p { margin:2px 0 0; }
+    .auto-switch-form { margin:0; }
+    .switch-toggle { display:inline-flex; align-items:center; gap:10px; background:none; border:none;
+        cursor:pointer; padding:0; font-weight:800; }
+    .switch-track { width:52px; height:28px; border-radius:999px; background:#cbd5e1; position:relative;
+        transition:background .2s; flex:0 0 auto; }
+    .switch-thumb { position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%;
+        background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.3); transition:left .2s; }
+    .switch-toggle.is-on .switch-track { background:#22c55e; }
+    .switch-toggle.is-on .switch-thumb { left:27px; }
+    .switch-label { font-size:.78rem; letter-spacing:.5px; }
+    .switch-toggle.is-on .switch-label { color:#15803d; }
+    .switch-toggle.is-off .switch-label { color:#b91c1c; }
+</style>
 <div class="topo-acoes">
     <div>
         <h1>Processamento da fila de mensagens</h1>
@@ -48,6 +67,26 @@
         {% if execucao_ativa %}
         <span class="exec-status exec-status-executando"><span class="exec-status-dot"></span> Em execucao</span>
         {% endif %}
+    </div>
+
+    <div class="auto-switch-row">
+        <div class="auto-switch-info">
+            <strong>Processamento automatico</strong>
+            <p class="table-muted-text">
+                {% if auto_ativo %}Ligado: a fila e consumida sozinha assim que uma mensagem e enfileirada.
+                {% else %}Desligado: as mensagens ficam na fila ate alguem processar manualmente abaixo.{% endif %}
+            </p>
+        </div>
+        <form method="post" class="auto-switch-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="{% if auto_ativo %}auto_off{% else %}auto_on{% endif %}">
+            <button type="submit" class="switch-toggle {% if auto_ativo %}is-on{% else %}is-off{% endif %}"
+                    role="switch" aria-checked="{% if auto_ativo %}true{% else %}false{% endif %}"
+                    title="{% if auto_ativo %}Desligar{% else %}Ligar{% endif %} processamento automatico">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+                <span class="switch-label">{% if auto_ativo %}LIGADO{% else %}DESLIGADO{% endif %}</span>
+            </button>
+        </form>
     </div>
 
     {% if execucao_ativa %}

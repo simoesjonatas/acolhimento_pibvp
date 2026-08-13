@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -33,7 +34,9 @@ def _split_env_list(var_name: str, default: str) -> list[str]:
 
 ALLOWED_HOSTS = _split_env_list(
     'DJANGO_ALLOWED_HOSTS',
-    'acolhimento.simoesti.com.br,localhost,127.0.0.1',
+    # host.docker.internal: permite que o container do Evolution (Docker) mande
+    # webhooks para o Django rodando no host. Inofensivo em producao.
+    'acolhimento.simoesti.com.br,localhost,127.0.0.1,host.docker.internal',
 )
 
 CSRF_TRUSTED_ORIGINS = _split_env_list(
@@ -81,6 +84,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'apps.core.context_processors.mensagens_retorno_pendente',
+                'apps.core.context_processors.whatsapp_conexao',
             ],
         },
     },
@@ -190,8 +194,35 @@ TWILIO_REQUEST_TIMEOUT_SECONDS = int(os.getenv('TWILIO_REQUEST_TIMEOUT_SECONDS',
 TWILIO_TEMPLATE_OPT_IN_SID = os.getenv('TWILIO_TEMPLATE_OPT_IN_SID', '')
 TWILIO_TEMPLATE_OPT_IN_VARIABLES = os.getenv('TWILIO_TEMPLATE_OPT_IN_VARIABLES', '{}')
 # Template de continuacao: reabre a janela de 24h depois que ela fecha (diferente do de boas-vindas).
-TWILIO_TEMPLATE_CONTINUAR_SID = os.getenv('TWILIO_TEMPLATE_CONTINUAR_SID', '')
+TWILIO_TEMPLATE_CONTINUAR_SID = os.getenv('TWILIO_TEMPLATE_CONTINUAR_SID', 'HX7e2031da82a4a61e7e887be341a3c2af')
 TWILIO_TEMPLATE_CONTINUAR_VARIABLES = os.getenv('TWILIO_TEMPLATE_CONTINUAR_VARIABLES', '{}')
+
+
+# ---------------------------------------------------------------------------
+# Provider de WhatsApp: 'evolution' ou 'twilio'.
+# Nesta branch (feat/evolution-integracao) o padrao do app e 'evolution'.
+# Durante os testes o padrao volta a 'twilio': as regras de opt-in/janela sao
+# semanticas da Twilio e o modo Baileys tentaria enviar de verdade (rede).
+# Sempre trocavel por ambiente: WHATSAPP_PROVIDER=twilio|evolution.
+# ---------------------------------------------------------------------------
+_default_whatsapp_provider = 'twilio' if 'test' in sys.argv else 'evolution'
+WHATSAPP_PROVIDER = os.getenv('WHATSAPP_PROVIDER', _default_whatsapp_provider).strip().lower()
+
+# Evolution API (Baileys / WhatsApp Web). Defaults casam com evolution/docker-compose.yml.
+EVOLUTION_BASE_URL = os.getenv('EVOLUTION_BASE_URL', 'http://localhost:8085').rstrip('/')
+EVOLUTION_API_KEY = os.getenv('EVOLUTION_API_KEY', 'pibvp-teste-2026')
+EVOLUTION_INSTANCE = os.getenv('EVOLUTION_INSTANCE', 'pibvp-teste')
+EVOLUTION_REQUEST_TIMEOUT_SECONDS = int(os.getenv('EVOLUTION_REQUEST_TIMEOUT_SECONDS', '30'))
+# No modo Baileys nao existe template aprovado: as mensagens de "template" da Twilio
+# (opt-in / continuar) viram texto simples. {nome} e substituido pelo nome da pessoa.
+EVOLUTION_TEXTO_OPTIN = os.getenv(
+    'EVOLUTION_TEXTO_OPTIN',
+    'Ola {nome}! Aqui e o acolhimento da PIBVP. Podemos conversar por aqui?',
+)
+EVOLUTION_TEXTO_CONTINUAR = os.getenv(
+    'EVOLUTION_TEXTO_CONTINUAR',
+    'Ola {nome}, tudo bem? Podemos continuar nossa conversa?',
+)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

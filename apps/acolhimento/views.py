@@ -23,9 +23,9 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento.fila_processor import processar_fila_mensagens
-from apps.acolhimento import template_config
+from apps.acolhimento import fila_auto, template_config
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RelatorioPessoasForm, ResponderQuestionarioForm, TemplatesWhatsappForm
-from apps.acolhimento.models import ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario, TemplateWhatsapp
+from apps.acolhimento.models import ConfiguracaoProcessamentoFila, ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario, TemplateWhatsapp
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
 from apps.acolhimento.reports import filtrar_pessoas, gerar_relatorio, resumo_filtros, resumo_pessoas
 from apps.acolhimento.whatsapp_rules import (
@@ -383,6 +383,10 @@ def _run_execucao_fila(execucao_id: int):
 				'atualizado_em',
 			]
 		)
+
+		# Modo automatico: se o switch estiver ligado e sobrou pendente, drena o resto.
+		if execucao.status == ExecucaoProcessamentoFila.StatusExecucaoChoices.CONCLUIDA:
+			fila_auto.disparar_auto_se_ligado()
 	except Exception as exc:  # pragma: no cover
 		execucao.refresh_from_db()
 		_append_execucao_log(execucao, f'Erro inesperado: {exc}')
@@ -400,27 +404,34 @@ class ProcessamentoFilaControleView(LoginRequiredMixin, SuperAdminPermissaoMixin
 		action = (request.POST.get('action') or '').strip()
 
 		if action == 'iniciar':
-			em_execucao = ExecucaoProcessamentoFila.objects.filter(
-				status=ExecucaoProcessamentoFila.StatusExecucaoChoices.EXECUTANDO
-			).exists()
-			if em_execucao:
-				messages.error(request, 'Ja existe um processamento em execucao.')
-				return redirect('mensagens-processamento')
-
 			try:
 				limite = max(int(request.POST.get('limit', '20')), 1)
 			except ValueError:
 				limite = 20
 
 			dry_run = request.POST.get('dry_run') == 'on'
-			execucao = ExecucaoProcessamentoFila.objects.create(
+			execucao = fila_auto.iniciar_execucao_fila(
 				solicitado_por=request.user,
-				status=ExecucaoProcessamentoFila.StatusExecucaoChoices.EXECUTANDO,
 				limite=limite,
 				dry_run=dry_run,
+				origem=ExecucaoProcessamentoFila.OrigemChoices.MANUAL,
 			)
-			threading.Thread(target=_run_execucao_fila, args=(execucao.id,), daemon=True).start()
-			messages.success(request, f'Processamento #{execucao.id} iniciado.')
+			if execucao is None:
+				messages.error(request, 'Ja existe um processamento em execucao.')
+			else:
+				messages.success(request, f'Processamento #{execucao.id} iniciado.')
+			return redirect('mensagens-processamento')
+
+		if action in ('auto_on', 'auto_off'):
+			cfg = ConfiguracaoProcessamentoFila.carregar()
+			cfg.auto_ativo = (action == 'auto_on')
+			cfg.atualizado_por = request.user
+			cfg.save(update_fields=['auto_ativo', 'atualizado_por', 'atualizado_em'])
+			if cfg.auto_ativo:
+				fila_auto.disparar_auto_se_ligado()
+				messages.success(request, 'Processamento automatico LIGADO: a fila e consumida sozinha a cada nova mensagem enfileirada.')
+			else:
+				messages.info(request, 'Processamento automatico DESLIGADO: as mensagens ficam na fila ate alguem processar manualmente.')
 			return redirect('mensagens-processamento')
 
 		if action == 'parar':
@@ -493,6 +504,7 @@ class ProcessamentoFilaControleView(LoginRequiredMixin, SuperAdminPermissaoMixin
 		context['execucao_ativa'] = execucao_ativa
 		context['total_execucoes'] = paginator.count
 		context['fila'] = fila
+		context['auto_ativo'] = ConfiguracaoProcessamentoFila.auto_ligado()
 		return context
 
 
@@ -687,8 +699,12 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 
 	def form_valid(self, form):
 		if form.cleaned_data['modo'] == DisparoMensagemMassaForm.MODO_TEMPLATE:
-			return self._enfileirar_template(form)
-		return self._enfileirar_livre(form)
+			resposta = self._enfileirar_template(form)
+		else:
+			resposta = self._enfileirar_livre(form)
+		# Processamento automatico: bulk_create nao emite signal, entao dispara aqui.
+		fila_auto.agendar_disparo_auto()
+		return resposta
 
 
 class PrimeiroContatoCreateView(LoginRequiredMixin, CreateView):
@@ -921,7 +937,8 @@ class PrimeiroContatoMensagensView(LoginRequiredMixin, ConversasPessoasPermissao
 		)
 		context['janela_aberta'] = janela_atendimento_aberta(self.object)
 		context['precisa_template_continuar'] = precisa_template_continuar(self.object)
-		context['template_continuar_configurado'] = bool(template_config.continuar_sid())
+		context['usa_evolution'] = template_config.usando_evolution()
+		context['template_continuar_configurado'] = template_config.continuar_configurado()
 		context['pode_enviar_template_continuar'] = pode_enviar_template_continuar(self.object)
 		context['template_continuar_liberado_em'] = proximo_template_continuar_em(self.object)
 		return context
@@ -1009,9 +1026,17 @@ class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoM
 
 	def post(self, request, pk, *args, **kwargs):
 		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		tipo_template = TemplateWhatsapp.Tipo.CONTINUAR
+		usa_evolution = template_config.usando_evolution()
 		template_sid = template_config.continuar_sid()
-		if not template_sid:
-			messages.error(request, 'Template de continuacao nao configurado. Defina o SID na tela de configuracao de templates.')
+		if not template_config.continuar_configurado():
+			mensagem_config = (
+				'Mensagem de continuacao do WhatsApp nao configurada. '
+				'Defina o texto na tela de configuracao de templates.'
+				if usa_evolution
+				else 'Template de continuacao nao configurado. Defina o SID na tela de configuracao de templates.'
+			)
+			messages.error(request, mensagem_config)
 			return redirect('pessoas-mensagens', pk=pessoa.pk)
 
 		bloqueio = motivo_bloqueio_template_continuar(pessoa)
@@ -1026,10 +1051,21 @@ class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoM
 		except Exception:
 			variaveis_base = {}
 
-		content_variables = json.dumps(
-			{**variaveis_base, '1': (pessoa.nome or '').strip() or 'amigo(a)'},
-			ensure_ascii=False,
-		)
+		nome = (pessoa.nome or '').strip() or 'amigo(a)'
+		content_variables = json.dumps({**variaveis_base, '1': nome}, ensure_ascii=False)
+		metadata_envio = {'tipo_template': tipo_template}
+		if template_sid:
+			metadata_envio['twilio_template'] = {
+				'content_sid': template_sid,
+				'content_variables': content_variables,
+			}
+		if usa_evolution:
+			texto_evolution = template_config.continuar_texto_evolution().replace('{nome}', nome)
+			metadata_envio['evolution_texto'] = texto_evolution
+			conteudo = texto_evolution
+		else:
+			conteudo = 'Template de continuacao enfileirado'
+
 		MensagemContato.objects.create(
 			pessoa=pessoa,
 			criado_por=request.user,
@@ -1037,14 +1073,8 @@ class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoM
 			direcao=MensagemContato.DirecaoChoices.SAIDA,
 			status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
 			prioridade=5,
-			conteudo='Template de continuacao enfileirado',
-			metadata_envio={
-				'tipo_template': 'continuar_conversa',
-				'twilio_template': {
-					'content_sid': template_sid,
-					'content_variables': content_variables,
-				},
-			},
+			conteudo=conteudo,
+			metadata_envio=metadata_envio,
 		)
 		messages.success(
 			request,
@@ -1054,7 +1084,7 @@ class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoM
 
 
 class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, FormView):
-	"""Tela (superusuario) para trocar os templates padrao da Twilio sem mexer no .env."""
+	"""Tela (superusuario) para trocar templates Twilio e textos WhatsApp."""
 
 	template_name = 'configuracao_templates.html'
 	form_class = TemplatesWhatsappForm
@@ -1065,15 +1095,21 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 		return {
 			'opt_in_sid': template_config.opt_in_sid(),
 			'opt_in_variables': template_config.opt_in_variables(),
+			'opt_in_texto_evolution': template_config.opt_in_texto_evolution(),
 			'continuar_sid': template_config.continuar_sid(),
 			'continuar_variables': template_config.continuar_variables(),
+			'continuar_texto_evolution': template_config.continuar_texto_evolution(),
 		}
 
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
 		context['twilio_habilitado'] = settings.TWILIO_ENABLED
+		context['usa_evolution'] = template_config.usando_evolution()
+		context['whatsapp_provider'] = template_config.provider()
 		context['env_opt_in_sid'] = (settings.TWILIO_TEMPLATE_OPT_IN_SID or '').strip()
 		context['env_continuar_sid'] = (settings.TWILIO_TEMPLATE_CONTINUAR_SID or '').strip()
+		context['env_opt_in_texto_evolution'] = (settings.EVOLUTION_TEXTO_OPTIN or '').strip()
+		context['env_continuar_texto_evolution'] = (settings.EVOLUTION_TEXTO_CONTINUAR or '').strip()
 		context['configs'] = {
 			cfg.tipo: cfg
 			for cfg in TemplateWhatsapp.objects.select_related('atualizado_por')
@@ -1083,15 +1119,22 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 	def form_valid(self, form):
 		dados = form.cleaned_data
 		valores = {
-			TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO: (dados['opt_in_sid'], dados['opt_in_variables']),
-			TemplateWhatsapp.Tipo.CONTINUAR: (dados['continuar_sid'], dados['continuar_variables']),
+			TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO: {
+				'content_sid': dados['opt_in_sid'],
+				'content_variables': dados['opt_in_variables'],
+				'texto_evolution': dados['opt_in_texto_evolution'],
+			},
+			TemplateWhatsapp.Tipo.CONTINUAR: {
+				'content_sid': dados['continuar_sid'],
+				'content_variables': dados['continuar_variables'],
+				'texto_evolution': dados['continuar_texto_evolution'],
+			},
 		}
-		for tipo, (sid, variables) in valores.items():
+		for tipo, defaults in valores.items():
 			TemplateWhatsapp.objects.update_or_create(
 				tipo=tipo,
 				defaults={
-					'content_sid': sid,
-					'content_variables': variables,
+					**defaults,
 					'atualizado_por': self.request.user,
 				},
 			)

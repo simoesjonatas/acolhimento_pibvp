@@ -1,4 +1,5 @@
 from datetime import time, timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -329,6 +330,45 @@ class BloqueioWhatsappOptInTests(TestCase):
 				descricao__icontains='liberou',
 			).exists()
 		)
+
+
+class BoasVindasEvolutionTests(TestCase):
+	def setUp(self):
+		self.user = get_user_model().objects.create_user('equipe_evolution', password='x', is_staff=True)
+		self.client.force_login(self.user)
+		self.pessoa = PrimeiroContato.objects.create(
+			nome='Visitante',
+			telefone_whatsapp='31955554444',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO,
+		)
+
+	@override_settings(WHATSAPP_PROVIDER='evolution', TWILIO_TEMPLATE_OPT_IN_SID='', EVOLUTION_TEXTO_OPTIN='')
+	def test_dashboard_enfileira_boas_vindas_evolution_sem_sid(self):
+		TemplateWhatsapp.objects.create(
+			tipo=TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO,
+			texto_evolution='Bem-vindo, {nome}!',
+		)
+
+		resp = self.client.post(reverse('dashboard'), {'action': 'disparar_template_opt_in'})
+		self.assertEqual(resp.status_code, 302)
+
+		mensagem = MensagemContato.objects.get(pessoa=self.pessoa)
+		self.assertEqual(mensagem.conteudo, 'Bem-vindo, Visitante!')
+		self.assertEqual(mensagem.metadata_envio['tipo_template'], 'primeiro_contato_opt_in')
+		self.assertEqual(mensagem.metadata_envio['evolution_texto'], 'Bem-vindo, Visitante!')
+		self.assertNotIn('twilio_template', mensagem.metadata_envio)
+
+		self.pessoa.refresh_from_db()
+		self.assertEqual(self.pessoa.status, PrimeiroContato.StatusAcolhimento.ROBO)
+
+	@override_settings(WHATSAPP_PROVIDER='evolution', TWILIO_TEMPLATE_OPT_IN_SID='', EVOLUTION_TEXTO_OPTIN='')
+	def test_dashboard_exige_texto_evolution(self):
+		resp = self.client.post(reverse('dashboard'), {'action': 'disparar_template_opt_in'})
+		self.assertEqual(resp.status_code, 302)
+		self.assertFalse(MensagemContato.objects.filter(pessoa=self.pessoa).exists())
 
 
 class PermissaoConversasPessoasTests(TestCase):
@@ -845,6 +885,25 @@ class JanelaWhatsappTests(TestCase):
 		self.assertIsNotNone(mensagem)
 		self.assertEqual(mensagem.metadata_envio.get('tipo_template'), 'continuar_conversa')
 
+	@override_settings(WHATSAPP_PROVIDER='evolution', TWILIO_TEMPLATE_CONTINUAR_SID='', EVOLUTION_TEXTO_CONTINUAR='')
+	def test_enviar_continuar_evolution_sem_sid_usa_texto_configurado(self):
+		TemplateWhatsapp.objects.create(
+			tipo=TemplateWhatsapp.Tipo.CONTINUAR,
+			texto_evolution='Oi {nome}, podemos continuar?',
+		)
+
+		resp = self.client.post(reverse('pessoas-template-continuar', args=[self.pessoa.pk]))
+		self.assertEqual(resp.status_code, 302)
+		mensagem = MensagemContato.objects.filter(
+			pessoa=self.pessoa, direcao=MensagemContato.DirecaoChoices.SAIDA
+		).first()
+
+		self.assertIsNotNone(mensagem)
+		self.assertEqual(mensagem.conteudo, 'Oi Zeca, podemos continuar?')
+		self.assertEqual(mensagem.metadata_envio.get('tipo_template'), 'continuar_conversa')
+		self.assertEqual(mensagem.metadata_envio.get('evolution_texto'), 'Oi Zeca, podemos continuar?')
+		self.assertNotIn('twilio_template', mensagem.metadata_envio)
+
 	def _templates_continuar(self):
 		return MensagemContato.objects.filter(
 			pessoa=self.pessoa,
@@ -1183,13 +1242,17 @@ class ConfiguracaoTemplatesTests(TestCase):
 		resp = self.client.post(self.url, {
 			'opt_in_sid': 'HXoptinNOVO',
 			'opt_in_variables': '{"2": "abc"}',
+			'opt_in_texto_evolution': 'Boas-vindas {nome}',
 			'continuar_sid': 'HXcontinuarNOVO',
 			'continuar_variables': '{}',
+			'continuar_texto_evolution': 'Continuar {nome}',
 		})
 		self.assertEqual(resp.status_code, 302)
 		self.assertEqual(TemplateWhatsapp.objects.count(), 2)
 		self.assertEqual(template_config.opt_in_sid(), 'HXoptinNOVO')
 		self.assertEqual(template_config.continuar_sid(), 'HXcontinuarNOVO')
+		self.assertEqual(template_config.opt_in_texto_evolution(), 'Boas-vindas {nome}')
+		self.assertEqual(template_config.continuar_texto_evolution(), 'Continuar {nome}')
 
 	@override_settings(TWILIO_TEMPLATE_CONTINUAR_SID='HXvemdoenv')
 	def test_fallback_env_quando_sem_config(self):
@@ -1220,3 +1283,40 @@ class ConfiguracaoTemplatesTests(TestCase):
 		})
 		self.assertEqual(resp.status_code, 200)
 		self.assertEqual(TemplateWhatsapp.objects.count(), 0)
+
+
+class EvolutionGatewayTextoTests(TestCase):
+	@override_settings(WHATSAPP_PROVIDER='evolution', EVOLUTION_TEXTO_OPTIN='')
+	def test_gateway_usa_texto_configurado_no_banco(self):
+		from apps.acolhimento import whatsapp_gateway
+
+		pessoa = PrimeiroContato.objects.create(
+			nome='Lia',
+			telefone_whatsapp='31999990000',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+		)
+		TemplateWhatsapp.objects.create(
+			tipo=TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO,
+			texto_evolution='Ola {nome}, seja bem-vinda!',
+		)
+		mensagem = MensagemContato.objects.create(
+			pessoa=pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.SAIDA,
+			status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+			conteudo='Template opt-in enfileirado',
+			metadata_envio={'tipo_template': 'primeiro_contato_opt_in'},
+		)
+
+		with patch('apps.acolhimento.evolution_service.send_whatsapp_text') as send:
+			send.return_value = {'sid': 'EV123', 'status': 'sent'}
+			envelope = whatsapp_gateway.enviar(mensagem, '+5531999990000')
+
+		send.assert_called_once_with(
+			to_phone='+5531999990000',
+			text='Ola Lia, seja bem-vinda!',
+		)
+		self.assertEqual(envelope['provider'], 'evolution')
+		self.assertEqual(envelope['referencia_externa'], 'EV123')

@@ -1,7 +1,6 @@
 import json
 
 from django.contrib import messages
-from django.conf import settings
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordChangeForm
@@ -13,7 +12,7 @@ from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento import template_config
-from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato
+from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato, TemplateWhatsapp
 from apps.acolhimento.whatsapp_rules import contar_pessoas_janela_aberta
 from apps.core.forms import PerfilForm, UsuarioCreateForm, UsuarioUpdateForm
 
@@ -59,9 +58,17 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 			messages.info(request, 'Nao ha pessoas em Primeiro contato para disparo.')
 			return redirect('dashboard')
 
+		tipo_template = TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO
+		usa_evolution = template_config.usando_evolution()
 		template_sid = template_config.opt_in_sid()
-		if action == 'disparar_template_opt_in' and not template_sid:
-			messages.error(request, 'Template SID nao configurado. Defina o SID na tela de configuracao de templates.')
+		if action == 'disparar_template_opt_in' and not template_config.opt_in_configurado():
+			mensagem_config = (
+				'Mensagem de boas-vindas do WhatsApp nao configurada. '
+				'Defina o texto na tela de configuracao de templates.'
+				if usa_evolution
+				else 'Template SID nao configurado. Defina o SID na tela de configuracao de templates.'
+			)
+			messages.error(request, mensagem_config)
 			return redirect('dashboard')
 
 		try:
@@ -70,41 +77,56 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 				template_vars_base = {}
 		except Exception:
 			template_vars_base = {}
-		mensagens = [
-			MensagemContato(
-				pessoa=pessoa,
-				criado_por=request.user,
-				canal=MensagemContato.CanalChoices.WHATSAPP,
-				direcao=MensagemContato.DirecaoChoices.SAIDA,
-				status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
-				prioridade=5,
-				agendada_para=None,
-				conteudo='Template opt-in enfileirado',
-				metadata_envio={
-					'tipo_template': 'primeiro_contato_opt_in',
-					'twilio_template': {
-						'content_sid': template_sid,
-						'content_variables': json.dumps(
-							{
-								**template_vars_base,
-								'1': (pessoa.nome or '').strip() or 'amigo(a)',
-							},
-							ensure_ascii=False,
-						),
-					}
+		texto_evolution_base = template_config.opt_in_texto_evolution() if usa_evolution else ''
+		mensagens = []
+		for pessoa in pessoas_primeiro_contato:
+			nome = (pessoa.nome or '').strip() or 'amigo(a)'
+			content_variables = json.dumps(
+				{
+					**template_vars_base,
+					'1': nome,
 				},
+				ensure_ascii=False,
 			)
-			for pessoa in pessoas_primeiro_contato
-		]
+			metadata_envio = {'tipo_template': tipo_template}
+			if template_sid:
+				metadata_envio['twilio_template'] = {
+					'content_sid': template_sid,
+					'content_variables': content_variables,
+				}
+			if usa_evolution:
+				texto_evolution = texto_evolution_base.replace('{nome}', nome)
+				metadata_envio['evolution_texto'] = texto_evolution
+				conteudo = texto_evolution
+			else:
+				conteudo = 'Template opt-in enfileirado'
+
+			mensagens.append(
+				MensagemContato(
+					pessoa=pessoa,
+					criado_por=request.user,
+					canal=MensagemContato.CanalChoices.WHATSAPP,
+					direcao=MensagemContato.DirecaoChoices.SAIDA,
+					status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+					prioridade=5,
+					agendada_para=None,
+					conteudo=conteudo,
+					metadata_envio=metadata_envio,
+				)
+			)
 
 		MensagemContato.objects.bulk_create(mensagens)
 		PrimeiroContato.objects.filter(
 			id__in=[pessoa.id for pessoa in pessoas_primeiro_contato]
 		).update(status=PrimeiroContato.StatusAcolhimento.ROBO)
 
+		# Processamento automatico: bulk_create nao emite signal, entao dispara aqui.
+		from apps.acolhimento import fila_auto
+		fila_auto.agendar_disparo_auto()
+
 		messages.success(
 			request,
-			f'Disparo com template Twilio criado para {len(mensagens)} pessoa(s) e status atualizado para Robo.',
+			f'Disparo de boas-vindas criado para {len(mensagens)} pessoa(s) e status atualizado para Robo.',
 		)
 		return redirect('dashboard')
 

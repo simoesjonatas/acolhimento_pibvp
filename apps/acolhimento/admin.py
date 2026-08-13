@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from apps.acolhimento.forms import PrimeiroContatoAdminForm
-from apps.acolhimento.models import CampanhaComunicacao, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato
+from apps.acolhimento.models import CampanhaComunicacao, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato, TemplateWhatsapp
 
 
 @admin.register(PrimeiroContato)
@@ -65,3 +65,10 @@ class ExecucaoProcessamentoFilaAdmin(admin.ModelAdmin):
 	list_filter = ('status', 'dry_run', 'iniciado_em')
 	search_fields = ('id', 'solicitado_por__username', 'solicitado_por__first_name', 'solicitado_por__last_name')
 	readonly_fields = ('iniciado_em', 'finalizado_em', 'atualizado_em')
+
+
+@admin.register(TemplateWhatsapp)
+class TemplateWhatsappAdmin(admin.ModelAdmin):
+	list_display = ('tipo', 'content_sid', 'atualizado_em', 'atualizado_por')
+	search_fields = ('tipo', 'content_sid', 'texto_evolution')
+	readonly_fields = ('atualizado_em',)

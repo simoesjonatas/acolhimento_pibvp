@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+
+{% block title %}Conexao do WhatsApp{% endblock %}
+
+{% block content %}
+<div class="config-whatsapp-page">
+    <style>
+        .wa-conn-badge { display:inline-flex; align-items:center; gap:8px; padding:6px 14px;
+            border-radius:999px; font-weight:600; font-size:.9rem; }
+        .wa-conn-badge .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+        .wa-conn-badge.ok   { background:rgba(34,197,94,.15);  color:#15803d; }
+        .wa-conn-badge.ok   .dot { background:#22c55e; }
+        .wa-conn-badge.wait { background:rgba(245,158,11,.15); color:#b45309; }
+        .wa-conn-badge.wait .dot { background:#f59e0b; }
+        .wa-conn-badge.off  { background:rgba(239,68,68,.15);  color:#b91c1c; }
+        .wa-conn-badge.off  .dot { background:#ef4444; }
+        .wa-conn-grid { display:grid; grid-template-columns: 320px 1fr; gap:20px; align-items:start; }
+        @media (max-width: 860px){ .wa-conn-grid { grid-template-columns: 1fr; } }
+        .wa-qr-box { background:#fff; padding:14px; border-radius:12px; display:inline-block;
+            box-shadow:0 1px 4px rgba(0,0,0,.15); }
+        .wa-qr-box img { width:260px; height:260px; display:block; }
+        .wa-pairing { font-family: ui-monospace, monospace; font-size:1.2rem; letter-spacing:3px; }
+        .wa-kv { margin:4px 0; }
+        .wa-kv b { font-weight:600; }
+        .wa-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; }
+        .wa-actions form { margin:0; }
+    </style>
+
+    <section class="page-hero">
+        <div>
+            <span class="section-eyebrow">Configuracoes</span>
+            <h1>Conexao do WhatsApp</h1>
+            <p>Gere o QR e conecte a conta do WhatsApp usada pelo sistema. Somente superusuarios.</p>
+        </div>
+        <a class="btn secundario" href="{% url 'configuracao-whatsapp' %}" data-no-loading>
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            <span class="btn-text">Atualizar status</span>
+        </a>
+    </section>
+
+    {% if not usando_evolution %}
+    <div class="config-alert">
+        <strong>Modo atual: {{ provider_rotulo }}.</strong> Esta tela pareia a conexao direta do WhatsApp.
+        Voce pode conectar/parear aqui mesmo assim; o indicador no menu aparece quando este modo estiver ativo.
+    </div>
+    {% endif %}
+
+    <div class="wa-conn-grid">
+        <section class="profile-form-card">
+            <div class="panel-header"><div><h2>Status</h2></div></div>
+
+            {% if not reachable %}
+                <span class="wa-conn-badge off"><span class="dot"></span> API fora do ar</span>
+                <p class="table-muted-text" style="margin-top:10px">
+                    Nao consegui falar com a API de WhatsApp em <code>{{ base_url }}</code>.
+                    Verifique se o servico de conexao esta em execucao.
+                </p>
+            {% elif estado_ok %}
+                <span class="wa-conn-badge ok"><span class="dot"></span> WhatsApp conectado</span>
+            {% elif estado == 'connecting' %}
+                <span class="wa-conn-badge wait"><span class="dot"></span> Conectando… escaneie o QR</span>
+            {% else %}
+                <span class="wa-conn-badge off"><span class="dot"></span> Desconectado</span>
+            {% endif %}
+
+            <p class="wa-kv" style="margin-top:14px">Instancia: <b>{{ instance }}</b></p>
+            <p class="wa-kv">API: <b>{{ base_url }}</b></p>
+            <p class="wa-kv table-muted-text">Painel da conexao:
+                <a href="{{ manager_url }}" target="_blank" rel="noopener">{{ manager_url }}</a></p>
+        </section>
+
+        <section class="profile-form-card">
+            <div class="panel-header"><div>
+                <h2>Conectar aparelho</h2>
+                <p>No celular: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> e escaneie.</p>
+            </div></div>
+
+            <div class="wa-actions">
+                <form method="post">{% csrf_token %}
+                    <input type="hidden" name="acao" value="criar">
+                    <button type="submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="21" y2="21"/></svg>
+                        <span class="btn-text">Gerar QR</span>
+                    </button>
+                </form>
+                <form method="post">{% csrf_token %}
+                    <input type="hidden" name="acao" value="conectar">
+                    <button type="submit" class="btn secundario">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                        <span class="btn-text">Regerar QR</span>
+                    </button>
+                </form>
+                {% if estado_ok %}
+                <form method="post" onsubmit="return confirm('Desconectar o WhatsApp pareado?');">{% csrf_token %}
+                    <input type="hidden" name="acao" value="desconectar">
+                    <button type="submit" class="btn secundario">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+                        <span class="btn-text">Desconectar</span>
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+
+            {% if qr_data_uri %}
+                <div style="display:flex; flex-wrap:wrap; gap:22px; align-items:center; margin-top:18px">
+                    <div class="wa-qr-box"><img src="{{ qr_data_uri }}" alt="QR code para parear o WhatsApp"></div>
+                    {% if pairing_code %}
+                    <div>
+                        <p class="table-muted-text" style="margin:0 0 6px">Ou use o codigo de pareamento:</p>
+                        <p class="wa-pairing">{{ pairing_code }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                <p class="table-muted-text" style="margin-top:10px">O QR expira em segundos. Se falhar, clique em <b>Regerar QR</b>.</p>
+            {% elif estado_ok %}
+                <p class="table-muted-text" style="margin-top:16px">✅ Ja conectado. Nao e preciso escanear.</p>
+            {% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}

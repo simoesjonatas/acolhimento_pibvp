@@ -112,6 +112,11 @@ Principais variáveis usadas pelo projeto:
 - `TWILIO_STATUS_CALLBACK_URL` (opcional em local; use uma URL pública real para webhooks)
 - `TWILIO_TEMPLATE_OPT_IN_SID` (Content SID do template aprovado)
 - `TWILIO_TEMPLATE_OPT_IN_VARIABLES` (JSON string com variáveis do template)
+- `TWILIO_TEMPLATE_CONTINUAR_SID` (Content SID do template aprovado para continuar conversa)
+- `TWILIO_TEMPLATE_CONTINUAR_VARIABLES` (JSON string com variáveis do template de continuação)
+- `WHATSAPP_PROVIDER` (`twilio` ou `evolution`)
+- `EVOLUTION_TEXTO_OPTIN` (texto de boas-vindas quando usar Evolution; aceita `{nome}`)
+- `EVOLUTION_TEXTO_CONTINUAR` (texto para continuar conversa quando usar Evolution; aceita `{nome}`)
 
 Exemplo para produção (domínio oficial):
 

@@ -23,10 +23,13 @@ from apps.acolhimento.views import (
     ResponderQuestionarioView,
     ResponderSucessoView,
 )
+from apps.core.evolution_sandbox import evolution_sandbox
 from apps.core.views import forbidden_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Sandbox isolado para testar o Evolution API (avaliacao de troca da Twilio). Remover apos os testes.
+    path('sandbox/evolution/', evolution_sandbox, name='evolution-sandbox'),
     path('', include('apps.core.urls')),
     path('auto-cadastro/', AutoCadastroCreateView.as_view(), name='auto-cadastro-publico'),
     path('auto-cadastro/sucesso/', AutoCadastroSuccessView.as_view(), name='auto-cadastro-publico-sucesso'),

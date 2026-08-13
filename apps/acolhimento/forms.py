@@ -360,7 +360,7 @@ class ResponderQuestionarioForm(forms.Form):
 
 
 class TemplatesWhatsappForm(forms.Form):
-    """Edita os dois templates padrao da Twilio (opt-in e continuar). Superusuario."""
+    """Edita os templates Twilio e os textos equivalentes do WhatsApp."""
 
     opt_in_sid = forms.CharField(
         required=False,
@@ -372,6 +372,14 @@ class TemplatesWhatsappForm(forms.Form):
         label='Variaveis (JSON)',
         widget=forms.Textarea(attrs={'rows': 2, 'placeholder': '{"1": "{nome}"}'}),
     )
+    opt_in_texto_evolution = forms.CharField(
+        required=False,
+        label='Mensagem no WhatsApp',
+        widget=forms.Textarea(attrs={
+            'rows': 4,
+            'placeholder': 'Ola {nome}! Aqui e o acolhimento da PIBVP. Podemos conversar por aqui?',
+        }),
+    )
     continuar_sid = forms.CharField(
         required=False,
         label='Content Template SID',
@@ -381,6 +389,14 @@ class TemplatesWhatsappForm(forms.Form):
         required=False,
         label='Variaveis (JSON)',
         widget=forms.Textarea(attrs={'rows': 2, 'placeholder': '{}'}),
+    )
+    continuar_texto_evolution = forms.CharField(
+        required=False,
+        label='Mensagem no WhatsApp',
+        widget=forms.Textarea(attrs={
+            'rows': 4,
+            'placeholder': 'Ola {nome}, tudo bem? Podemos continuar nossa conversa?',
+        }),
     )
 
     def clean(self):
@@ -399,4 +415,6 @@ class TemplatesWhatsappForm(forms.Form):
             except ValueError:
                 self.add_error(campo, 'JSON invalido. Use um objeto, ex.: {"1": "{nome}"}.')
             cleaned[campo] = raw
+        for campo in ('opt_in_texto_evolution', 'continuar_texto_evolution'):
+            cleaned[campo] = (cleaned.get(campo) or '').strip()
         return cleaned

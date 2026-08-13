@@ -265,6 +265,10 @@ class ExecucaoProcessamentoFila(models.Model):
 		INTERROMPIDA = 'interrompida', 'Interrompida'
 		FALHA = 'falha', 'Falha'
 
+	class OrigemChoices(models.TextChoices):
+		MANUAL = 'manual', 'Manual'
+		AUTOMATICO = 'automatico', 'Automatico'
+
 	solicitado_por = models.ForeignKey(
 		settings.AUTH_USER_MODEL,
 		on_delete=models.SET_NULL,
@@ -279,6 +283,11 @@ class ExecucaoProcessamentoFila(models.Model):
 	)
 	limite = models.PositiveIntegerField(default=20)
 	dry_run = models.BooleanField(default=False)
+	origem = models.CharField(
+		max_length=20,
+		choices=OrigemChoices.choices,
+		default=OrigemChoices.MANUAL,
+	)
 	ids_filtrados = models.JSONField(default=list, blank=True)
 	total_selecionado = models.PositiveIntegerField(default=0)
 	total_processado = models.PositiveIntegerField(default=0)
@@ -297,6 +306,36 @@ class ExecucaoProcessamentoFila(models.Model):
 
 	def __str__(self):
 		return f'Execucao {self.pk} - {self.get_status_display()}'
+
+
+class ConfiguracaoProcessamentoFila(models.Model):
+	"""Singleton (pk=1) com o switch do processamento automatico da fila."""
+
+	auto_ativo = models.BooleanField(default=False)
+	atualizado_por = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='+',
+	)
+	atualizado_em = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		verbose_name = 'Configuracao do processamento da fila'
+		verbose_name_plural = 'Configuracao do processamento da fila'
+
+	def __str__(self):
+		return 'Processamento automatico: ' + ('ligado' if self.auto_ativo else 'desligado')
+
+	@classmethod
+	def carregar(cls):
+		obj, _created = cls.objects.get_or_create(pk=1)
+		return obj
+
+	@classmethod
+	def auto_ligado(cls) -> bool:
+		return cls.objects.filter(pk=1, auto_ativo=True).exists()
 
 
 class Questionario(models.Model):
@@ -460,9 +499,11 @@ class RespostaPergunta(models.Model):
 
 
 class TemplateWhatsapp(models.Model):
-	"""Configuracao dos templates padrao da Twilio, editavel pela aplicacao (superusuario).
+	"""Configuracao das mensagens padrao do WhatsApp, editavel pela aplicacao.
 
-	Quando preenchido, sobrescreve o valor do .env (settings); vazio => usa o .env.
+	Na Twilio, guarda o Content Template SID e suas variaveis. No Evolution,
+	guarda o texto simples equivalente. Quando preenchido, sobrescreve o
+	valor do .env (settings); vazio => usa o .env.
 	Os valores de `tipo` batem com metadata_envio['tipo_template'] das mensagens.
 	"""
 
@@ -473,6 +514,7 @@ class TemplateWhatsapp(models.Model):
 	tipo = models.CharField(max_length=40, choices=Tipo.choices, unique=True)
 	content_sid = models.CharField('Content Template SID', max_length=64, blank=True)
 	content_variables = models.TextField('Variaveis (JSON)', blank=True, default='{}')
+	texto_evolution = models.TextField('Texto WhatsApp', blank=True)
 	atualizado_em = models.DateTimeField(auto_now=True)
 	atualizado_por = models.ForeignKey(
 		settings.AUTH_USER_MODEL,
