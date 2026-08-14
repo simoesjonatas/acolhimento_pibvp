@@ -62,6 +62,36 @@ def _post(path: str, payload: dict, timeout: int | None = None) -> tuple[int, An
     return _request('POST', path, payload, timeout)
 
 
+def _webhook_events() -> list[str]:
+    raw_events = getattr(settings, 'EVOLUTION_WEBHOOK_EVENTS', [])
+    if isinstance(raw_events, str):
+        raw_events = raw_events.split(',')
+    return [str(event).strip().upper() for event in raw_events if str(event).strip()]
+
+
+def configure_webhook(*, enabled: bool = True) -> dict[str, Any]:
+    """Configura o webhook da instancia para receber mensagens/status em producao."""
+    webhook_url = (getattr(settings, 'EVOLUTION_WEBHOOK_URL', '') or '').strip()
+    if enabled and not webhook_url:
+        return {}
+
+    instance = settings.EVOLUTION_INSTANCE
+    payload: dict[str, Any] = {
+        'enabled': bool(enabled),
+        'url': webhook_url,
+        'webhookByEvents': bool(getattr(settings, 'EVOLUTION_WEBHOOK_BY_EVENTS', False)),
+        'webhookBase64': bool(getattr(settings, 'EVOLUTION_WEBHOOK_BASE64', False)),
+        'events': _webhook_events(),
+    }
+
+    webhook_secret = (getattr(settings, 'EVOLUTION_WEBHOOK_SECRET', '') or '').strip()
+    if webhook_secret:
+        payload['headers'] = {'X-Evolution-Webhook-Secret': webhook_secret}
+
+    _status, data = _post(f'/webhook/set/{instance}', payload)
+    return data if isinstance(data, dict) else {}
+
+
 def send_whatsapp_text(*, to_phone: str, text: str) -> dict[str, Any]:
     """Envia texto simples. Retorna dict normalizado (sid/status/to/raw)."""
     if not (text or '').strip():
@@ -107,18 +137,24 @@ def get_connection_state(timeout: int = 5) -> str | None:
 def create_instance() -> dict:
     """Cria a instancia. Idempotente: se ja existe, apenas segue (o connect gera o QR)."""
     instance = settings.EVOLUTION_INSTANCE
+    data: dict[str, Any] = {}
     try:
-        _status, data = _post('/instance/create', {
+        _status, raw_data = _post('/instance/create', {
             'instanceName': instance,
-            'integration': 'WHATSAPP-BAILEYS',
+            'integration': getattr(settings, 'EVOLUTION_INTEGRATION', 'WHATSAPP-BAILEYS'),
             'qrcode': True,
         })
+        data = raw_data if isinstance(raw_data, dict) else {}
     except EvolutionWhatsAppError as exc:
         texto = str(exc).lower()
         if 'already' in texto or 'exists' in texto or 'in use' in texto:
-            return {}
-        raise
-    return data if isinstance(data, dict) else {}
+            data = {}
+        else:
+            raise
+
+    if getattr(settings, 'EVOLUTION_AUTO_CONFIGURE_WEBHOOK', True):
+        data['webhook'] = configure_webhook()
+    return data
 
 
 def connect_qr() -> dict:

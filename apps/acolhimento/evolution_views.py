@@ -39,8 +39,10 @@ class ConfiguracaoWhatsappConexaoView(LoginRequiredMixin, UserPassesTestMixin, V
             'provider_rotulo': 'Conexao direta' if provider_normalizado == 'evolution' else 'Twilio',
             'usando_evolution': provider_normalizado == 'evolution',
             'base_url': settings.EVOLUTION_BASE_URL,
+            'public_url': settings.EVOLUTION_PUBLIC_URL,
             'instance': settings.EVOLUTION_INSTANCE,
-            'manager_url': f'{settings.EVOLUTION_BASE_URL}/manager',
+            'manager_url': f'{settings.EVOLUTION_PUBLIC_URL}/manager',
+            'webhook_url': settings.EVOLUTION_WEBHOOK_URL,
             'estado': estado,
             'estado_ok': estado == 'open',
             'reachable': estado is not None,
@@ -66,6 +68,8 @@ class ConfiguracaoWhatsappConexaoView(LoginRequiredMixin, UserPassesTestMixin, V
                 else:
                     messages.success(request, 'Conexao pronta.')
             elif acao == 'conectar':
+                if getattr(settings, 'EVOLUTION_AUTO_CONFIGURE_WEBHOOK', True):
+                    evolution_service.configure_webhook()
                 data = evolution_service.connect_qr()
                 qr_data_uri = _as_data_uri(data.get('base64'))
                 pairing_code = data.get('pairingCode') or data.get('code')

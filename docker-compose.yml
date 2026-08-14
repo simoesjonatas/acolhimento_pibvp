@@ -33,17 +33,34 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    extra_hosts:
+      # Permite que o container Django acesse stacks Docker separadas publicadas
+      # no host, como o Evolution em 127.0.0.1:8085.
+      - "host.docker.internal:host-gateway"
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-troque-esta-chave-em-producao}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-False}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-acolhimento.simoesti.com.br,localhost,127.0.0.1}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-https://acolhimento.simoesti.com.br,http://localhost:8183,http://127.0.0.1:8183}
       DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-False}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://acolhimento.simoesti.com.br}
       POSTGRES_DB: ${POSTGRES_DB:-acolhimento_pibvp}
       POSTGRES_USER: ${POSTGRES_USER:-acolhimento}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-troque-esta-senha-no-env}
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-evolution}
+      EVOLUTION_BASE_URL: ${EVOLUTION_BASE_URL:-http://host.docker.internal:8085}
+      EVOLUTION_PUBLIC_URL: ${EVOLUTION_PUBLIC_URL:-http://127.0.0.1:8085}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-troque-esta-chave-evolution-no-env}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-pibvp-producao}
+      EVOLUTION_INTEGRATION: ${EVOLUTION_INTEGRATION:-WHATSAPP-BAILEYS}
+      EVOLUTION_WEBHOOK_URL: ${EVOLUTION_WEBHOOK_URL:-https://acolhimento.simoesti.com.br/acolhimento/mensagens/webhook/evolution/}
+      EVOLUTION_WEBHOOK_EVENTS: ${EVOLUTION_WEBHOOK_EVENTS:-MESSAGES_UPSERT,MESSAGES_UPDATE}
+      EVOLUTION_WEBHOOK_BY_EVENTS: ${EVOLUTION_WEBHOOK_BY_EVENTS:-False}
+      EVOLUTION_WEBHOOK_BASE64: ${EVOLUTION_WEBHOOK_BASE64:-False}
+      EVOLUTION_WEBHOOK_SECRET: ${EVOLUTION_WEBHOOK_SECRET:-}
+      EVOLUTION_AUTO_CONFIGURE_WEBHOOK: ${EVOLUTION_AUTO_CONFIGURE_WEBHOOK:-True}
       TWILIO_ENABLED: ${TWILIO_ENABLED:-False}
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
@@ -51,6 +68,8 @@ services:
       TWILIO_STATUS_CALLBACK_URL: ${TWILIO_STATUS_CALLBACK_URL:-}
       TWILIO_TEMPLATE_OPT_IN_SID: ${TWILIO_TEMPLATE_OPT_IN_SID:-}
       TWILIO_TEMPLATE_OPT_IN_VARIABLES: ${TWILIO_TEMPLATE_OPT_IN_VARIABLES:-{}}
+      TWILIO_TEMPLATE_CONTINUAR_SID: ${TWILIO_TEMPLATE_CONTINUAR_SID:-}
+      TWILIO_TEMPLATE_CONTINUAR_VARIABLES: ${TWILIO_TEMPLATE_CONTINUAR_VARIABLES:-{}}
     ports:
       - "${APP_PORT:-8183}:8000"
 

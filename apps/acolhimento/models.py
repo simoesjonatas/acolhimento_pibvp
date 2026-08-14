@@ -49,6 +49,11 @@ class PrimeiroContato(models.Model):
 		APOIO_EMOCIONAL = 'apoio_emocional', 'Apoio emocional'
 		PARTICIPAR_DE_ALGO = 'participar_de_algo', 'Participar de algo'
 
+	class BotEtapaChoices(models.TextChoices):
+		# Estado da conversa no atendimento automatico (bot de menu).
+		INATIVO = 'inativo', 'Inativo'
+		MENU = 'menu', 'Aguardando escolha no menu'
+
 	telefone_whatsapp_validator = RegexValidator(
 		regex=r'^\(?[1-9]{2}\)?\s?9?\d{4}-?\d{4}$',
 		message='Informe um telefone/WhatsApp valido com DDD. Ex.: (31) 99999-9999',
@@ -65,6 +70,11 @@ class PrimeiroContato(models.Model):
 		default=OrigemCadastroChoices.EQUIPE,
 	)
 	iniciou_interacao = models.BooleanField(default=False)
+	bot_etapa = models.CharField(
+		max_length=20,
+		choices=BotEtapaChoices.choices,
+		default=BotEtapaChoices.INATIVO,
+	)
 	criado_por = models.ForeignKey(
 		settings.AUTH_USER_MODEL,
 		on_delete=models.SET_NULL,
@@ -530,3 +540,74 @@ class TemplateWhatsapp(models.Model):
 
 	def __str__(self):
 		return self.get_tipo_display()
+
+
+class ConfiguracaoAtendimentoBot(models.Model):
+	"""Singleton (pk=1): liga/desliga o atendimento automatico (bot de menu) e guarda os textos fixos."""
+
+	ativo = models.BooleanField(default=False)
+	mensagem_saudacao = models.TextField(
+		'Mensagem de saudacao',
+		default='Ola! Que bom falar com voce. Com o que posso te ajudar hoje?',
+	)
+	mensagem_fallback = models.TextField(
+		'Mensagem quando nao entende',
+		default='Nao entendi. Responda com o numero de uma das opcoes abaixo:',
+	)
+	atualizado_em = models.DateTimeField(auto_now=True)
+	atualizado_por = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='+',
+	)
+
+	class Meta:
+		verbose_name = 'Configuracao do atendimento automatico'
+		verbose_name_plural = 'Configuracao do atendimento automatico'
+
+	def __str__(self):
+		return 'Atendimento automatico: ' + ('ligado' if self.ativo else 'desligado')
+
+	@classmethod
+	def carregar(cls):
+		obj, _created = cls.objects.get_or_create(pk=1)
+		return obj
+
+	@classmethod
+	def ativo_ligado(cls) -> bool:
+		return cls.objects.filter(pk=1, ativo=True).exists()
+
+
+class OpcaoAtendimentoBot(models.Model):
+	"""Uma opcao do menu do atendimento automatico (cadastro pelo superusuario)."""
+
+	class Acao(models.TextChoices):
+		RESPONDER = 'responder', 'So responder'
+		TRANSFERIR_HUMANO = 'transferir_humano', 'Transferir para atendente'
+
+	ordem = models.PositiveIntegerField(default=1)
+	rotulo = models.CharField('Rotulo no menu', max_length=80)
+	palavras_chave = models.TextField(
+		'Palavras-chave',
+		blank=True,
+		help_text='Aliases que acionam a opcao (separados por virgula ou linha). O numero da opcao sempre funciona.',
+	)
+	resposta = models.TextField('Resposta enviada')
+	acao = models.CharField(max_length=20, choices=Acao.choices, default=Acao.RESPONDER)
+	ativa = models.BooleanField(default=True)
+	atualizado_em = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		ordering = ['ordem', 'id']
+		verbose_name = 'Opcao do atendimento automatico'
+		verbose_name_plural = 'Opcoes do atendimento automatico'
+
+	def __str__(self):
+		return f'{self.ordem}. {self.rotulo}'
+
+	def palavras_chave_lista(self) -> list[str]:
+		import re
+		bruto = re.split(r'[,\n;]+', self.palavras_chave or '')
+		return [item.strip().lower() for item in bruto if item.strip()]

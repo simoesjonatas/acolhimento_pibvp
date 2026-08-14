@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}Atendimento automatico{% endblock %}
+
+{% block content %}
+<style>
+    .switch-toggle { display:inline-flex; align-items:center; gap:10px; background:none; border:none;
+        cursor:pointer; padding:0; font-weight:800; }
+    .switch-track { width:52px; height:28px; border-radius:999px; background:#cbd5e1; position:relative;
+        transition:background .2s; flex:0 0 auto; }
+    .switch-thumb { position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%;
+        background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.3); transition:left .2s; }
+    .switch-toggle.is-on .switch-track { background:#22c55e; }
+    .switch-toggle.is-on .switch-thumb { left:27px; }
+    .switch-label { font-size:.78rem; letter-spacing:.5px; }
+    .switch-toggle.is-on .switch-label { color:#15803d; }
+    .switch-toggle.is-off .switch-label { color:#b91c1c; }
+    .bot-switch-row { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
+    .bot-preview { white-space:pre-wrap; background:#0b1220; color:#e2e8f0; border-radius:10px;
+        padding:12px 14px; font-size:.9rem; line-height:1.5; }
+    .bot-opcoes-acoes { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .bot-opcoes-acoes form { margin:0; }
+    .bot-btn-mini { padding:6px 9px; border-radius:8px; border:1px solid rgba(0,0,0,.12);
+        background:#fff; cursor:pointer; font-size:.85rem; line-height:1; text-decoration:none; color:inherit; }
+    .bot-btn-mini.bot-btn-del { color:#b91c1c; border-color:rgba(185,28,28,.35); }
+    .bot-btn-mini.bot-btn-del:hover { background:#fef2f2; }
+</style>
+<div class="config-atendimento-page">
+    <section class="page-hero">
+        <div>
+            <span class="section-eyebrow">Configuracoes</span>
+            <h1>Atendimento automatico</h1>
+            <p>Quando alguem inicia a conversa no WhatsApp, o sistema responde com uma saudacao e um menu. Somente superusuarios.</p>
+        </div>
+        <a class="btn secundario" href="{% url 'dashboard' %}">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+            <span class="btn-text">Voltar</span>
+        </a>
+    </section>
+
+    {% if cfg.ativo and not processamento_auto_ligado %}
+    <div class="config-alert">
+        <strong>Atencao:</strong> o "Processamento automatico" da fila esta <b>desligado</b>, entao as respostas do
+        bot ficam na fila e <b>nao sao enviadas</b>. <a href="{% url 'mensagens-processamento' %}">Ligar processamento automatico</a>.
+    </div>
+    {% endif %}
+    {% if cfg.ativo and total_opcoes_ativas == 0 %}
+    <div class="config-alert">
+        O atendimento esta ligado, mas <b>nao ha opcoes ativas</b> no menu. Cadastre ao menos uma opcao abaixo.
+    </div>
+    {% endif %}
+
+    <section class="profile-form-card">
+        <div class="bot-switch-row">
+            <div>
+                <strong>Status do atendimento automatico</strong>
+                <p class="table-muted-text" style="margin:2px 0 0">
+                    {% if cfg.ativo %}Ligado — o bot responde quem inicia a conversa.
+                    {% else %}Desligado — nenhuma resposta automatica.{% endif %}
+                </p>
+            </div>
+            <form method="post" style="margin:0">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="toggle">
+                <button type="submit" class="switch-toggle {% if cfg.ativo %}is-on{% else %}is-off{% endif %}"
+                        role="switch" aria-checked="{% if cfg.ativo %}true{% else %}false{% endif %}"
+                        title="{% if cfg.ativo %}Desligar{% else %}Ligar{% endif %} atendimento automatico">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                    <span class="switch-label">{% if cfg.ativo %}LIGADO{% else %}DESLIGADO{% endif %}</span>
+                </button>
+            </form>
+        </div>
+    </section>
+
+    <section class="profile-form-card">
+        <div class="panel-header"><div>
+            <h2>Textos</h2>
+            <p>A saudacao e enviada junto com o menu. A mensagem de "nao entende" reaparece com o menu quando a resposta nao casa.</p>
+        </div></div>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="textos">
+            <p class="builder-field">
+                <label for="{{ form.mensagem_saudacao.id_for_label }}">Saudacao + intro do menu</label>
+                {{ form.mensagem_saudacao }}
+                {% if form.mensagem_saudacao.errors %}<span class="form-errors">{{ form.mensagem_saudacao.errors.0 }}</span>{% endif %}
+            </p>
+            <p class="builder-field">
+                <label for="{{ form.mensagem_fallback.id_for_label }}">Quando o bot nao entende</label>
+                {{ form.mensagem_fallback }}
+                {% if form.mensagem_fallback.errors %}<span class="form-errors">{{ form.mensagem_fallback.errors.0 }}</span>{% endif %}
+            </p>
+            <div class="action-row">
+                <button type="submit">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                    <span class="btn-text">Salvar textos</span>
+                </button>
+            </div>
+        </form>
+
+        {% if menu_preview %}
+        <div style="margin-top:16px">
+            <p class="table-muted-text" style="margin:0 0 6px">Previa da 1a mensagem que a pessoa recebe:</p>
+            <pre class="bot-preview">{{ cfg.mensagem_saudacao }}
+
+{{ menu_preview }}</pre>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="profile-form-card">
+        <div class="panel-header">
+            <div>
+                <h2>Opcoes do menu</h2>
+                <p>Cada opcao vira um item numerado. A pessoa pode responder o numero ou uma palavra-chave.</p>
+            </div>
+            <a class="btn" href="{% url 'atendimento-opcao-nova' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span class="btn-text">Adicionar opcao</span>
+            </a>
+        </div>
+
+        {% if opcoes %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>#</th><th>Rotulo</th><th>Acao</th><th>Palavras-chave</th><th>Ativa</th><th>Acoes</th></tr>
+                </thead>
+                <tbody>
+                    {% for op in opcoes %}
+                    <tr>
+                        <td>{{ forloop.counter }}</td>
+                        <td>{{ op.rotulo }}</td>
+                        <td>{{ op.get_acao_display }}</td>
+                        <td class="table-muted-text">{{ op.palavras_chave|default:'-'|truncatechars:44 }}</td>
+                        <td>{% if op.ativa %}Sim{% else %}<span class="table-muted-text">Nao</span>{% endif %}</td>
+                        <td>
+                            <div class="bot-opcoes-acoes">
+                                <form method="post" action="{% url 'atendimento-opcao-mover' op.pk %}">{% csrf_token %}<input type="hidden" name="direcao" value="subir"><button class="bot-btn-mini" title="Subir">&uarr;</button></form>
+                                <form method="post" action="{% url 'atendimento-opcao-mover' op.pk %}">{% csrf_token %}<input type="hidden" name="direcao" value="descer"><button class="bot-btn-mini" title="Descer">&darr;</button></form>
+                                <a class="bot-btn-mini" href="{% url 'atendimento-opcao-editar' op.pk %}">Editar</a>
+                                <form method="post" action="{% url 'atendimento-opcao-excluir' op.pk %}" onsubmit="return confirm('Remover esta opcao?');">{% csrf_token %}<button class="bot-btn-mini bot-btn-del">Excluir</button></form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="empty-state">Nenhuma opcao cadastrada ainda. Clique em "Adicionar opcao".</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

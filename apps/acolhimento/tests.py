@@ -8,12 +8,15 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 from django.urls import reverse
 
+from apps.acolhimento import atendimento_bot
 from apps.acolhimento.fila_processor import processar_fila_mensagens
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, PerguntaForm, PrimeiroContatoForm, RelatorioPessoasForm, ResponderQuestionarioForm
 from apps.acolhimento.models import (
+	ConfiguracaoAtendimentoBot,
 	ConviteQuestionario,
 	InteracaoAcolhimento,
 	MensagemContato,
+	OpcaoAtendimentoBot,
 	OpcaoPergunta,
 	PerguntaQuestionario,
 	PrimeiroContato,
@@ -1320,3 +1323,127 @@ class EvolutionGatewayTextoTests(TestCase):
 		)
 		self.assertEqual(envelope['provider'], 'evolution')
 		self.assertEqual(envelope['referencia_externa'], 'EV123')
+
+
+class EvolutionWebhookConfigTests(TestCase):
+	@override_settings(
+		EVOLUTION_INSTANCE='pibvp-prod',
+		EVOLUTION_WEBHOOK_URL='https://acolhimento.simoesti.com.br/acolhimento/mensagens/webhook/evolution/',
+		EVOLUTION_WEBHOOK_EVENTS=['MESSAGES_UPSERT', 'MESSAGES_UPDATE'],
+		EVOLUTION_WEBHOOK_BY_EVENTS=False,
+		EVOLUTION_WEBHOOK_BASE64=False,
+		EVOLUTION_WEBHOOK_SECRET='segredo-test',
+	)
+	def test_configure_webhook_envia_payload_da_instancia(self):
+		from apps.acolhimento import evolution_service
+
+		with patch('apps.acolhimento.evolution_service._post') as post:
+			post.return_value = (201, {'success': True})
+			data = evolution_service.configure_webhook()
+
+		post.assert_called_once_with(
+			'/webhook/set/pibvp-prod',
+			{
+				'enabled': True,
+				'url': 'https://acolhimento.simoesti.com.br/acolhimento/mensagens/webhook/evolution/',
+				'webhookByEvents': False,
+				'webhookBase64': False,
+				'events': ['MESSAGES_UPSERT', 'MESSAGES_UPDATE'],
+				'headers': {'X-Evolution-Webhook-Secret': 'segredo-test'},
+			},
+		)
+		self.assertEqual(data, {'success': True})
+
+	@override_settings(EVOLUTION_WEBHOOK_SECRET='segredo-test')
+	def test_webhook_rejeita_header_invalido(self):
+		resp = self.client.post(
+			reverse('mensagens-webhook-evolution'),
+			data='{}',
+			content_type='application/json',
+		)
+
+		self.assertEqual(resp.status_code, 403)
+
+	@override_settings(EVOLUTION_WEBHOOK_SECRET='segredo-test')
+	def test_webhook_aceita_header_configurado(self):
+		resp = self.client.post(
+			reverse('mensagens-webhook-evolution'),
+			data='{}',
+			content_type='application/json',
+			HTTP_X_EVOLUTION_WEBHOOK_SECRET='segredo-test',
+		)
+
+		self.assertEqual(resp.status_code, 200)
+
+
+class AtendimentoBotTests(TestCase):
+	"""Bot de menu do atendimento automatico (WhatsApp)."""
+
+	def _pessoa(self, telefone='11970002222'):
+		return PrimeiroContato.objects.create(
+			nome='Visitante Bot',
+			telefone_whatsapp=telefone,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.OUTRO,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.PARTICIPAR_DE_ALGO,
+			origem_cadastro=PrimeiroContato.OrigemCadastroChoices.AUTO_CADASTRO,
+			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO,
+		)
+
+	def _saidas(self, pessoa):
+		return MensagemContato.objects.filter(
+			pessoa=pessoa, direcao=MensagemContato.DirecaoChoices.SAIDA
+		)
+
+	def test_encontrar_opcao_por_numero_e_palavra(self):
+		opcoes = atendimento_bot.opcoes_ativas()
+		self.assertEqual(len(opcoes), 2)  # semeadas pela migration 0020
+		self.assertEqual(atendimento_bot.encontrar_opcao('1', opcoes), opcoes[0])
+		self.assertEqual(atendimento_bot.encontrar_opcao('quero o horario', opcoes), opcoes[1])
+		self.assertIsNone(atendimento_bot.encontrar_opcao('xyzabc', opcoes))
+
+	def test_bot_desligado_nao_responde(self):
+		cfg = ConfiguracaoAtendimentoBot.carregar()
+		cfg.ativo = False
+		cfg.save()
+		pessoa = self._pessoa()
+		self.assertFalse(atendimento_bot.processar_entrada(pessoa, 'oi'))
+		self.assertEqual(self._saidas(pessoa).count(), 0)
+
+	def test_bot_saudacao_na_primeira_mensagem(self):
+		cfg = ConfiguracaoAtendimentoBot.carregar()
+		cfg.ativo = True
+		cfg.save()
+		pessoa = self._pessoa()
+		self.assertTrue(atendimento_bot.processar_entrada(pessoa, 'oi'))
+		pessoa.refresh_from_db()
+		self.assertEqual(self._saidas(pessoa).count(), 1)
+		self.assertIn('Falar com alguem', self._saidas(pessoa).first().conteudo)
+		self.assertEqual(pessoa.bot_etapa, PrimeiroContato.BotEtapaChoices.MENU)
+		self.assertEqual(pessoa.status, PrimeiroContato.StatusAcolhimento.ROBO)
+
+	def test_bot_transfere_para_humano(self):
+		cfg = ConfiguracaoAtendimentoBot.carregar()
+		cfg.ativo = True
+		cfg.save()
+		pessoa = self._pessoa()
+		atendimento_bot.processar_entrada(pessoa, 'oi')   # saudacao + menu
+		pessoa.refresh_from_db()
+		atendimento_bot.processar_entrada(pessoa, '1')    # opcao 1 = Falar com alguem (transferir)
+		pessoa.refresh_from_db()
+		self.assertEqual(pessoa.status, PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO)
+		self.assertEqual(pessoa.bot_etapa, PrimeiroContato.BotEtapaChoices.INATIVO)
+		self.assertFalse(atendimento_bot.processar_entrada(pessoa, 'oi de novo'))
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_pagina_config_superusuario_e_403(self):
+		User = get_user_model()
+		User.objects.create_user('bot_super', password='x', is_superuser=True, is_staff=True)
+		User.objects.create_user('bot_comum', password='x')
+		url = reverse('configuracao-atendimento')
+
+		self.client.login(username='bot_super', password='x')
+		self.assertEqual(self.client.get(url).status_code, 200)
+
+		self.client.logout()
+		self.client.login(username='bot_comum', password='x')
+		self.assertEqual(self.client.get(url).status_code, 403)

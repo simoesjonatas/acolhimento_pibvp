@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo|default:'Opcao do atendimento' }}{% endblock %}
+
+{% block content %}
+<div class="opcao-atendimento-form-page">
+    <section class="page-hero">
+        <div>
+            <span class="section-eyebrow">Atendimento automatico</span>
+            <h1>{{ titulo|default:'Opcao do menu' }}</h1>
+            <p>Defina o rotulo (aparece no menu), as palavras-chave que a acionam, a resposta e a acao.</p>
+        </div>
+        <a class="btn secundario" href="{% url 'configuracao-atendimento' %}">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+            <span class="btn-text">Voltar</span>
+        </a>
+    </section>
+
+    <section class="profile-form-card">
+        <form method="post">
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
+
+            <p class="builder-field">
+                <label for="{{ form.rotulo.id_for_label }}">Rotulo no menu</label>
+                {{ form.rotulo }}
+                {% if form.rotulo.errors %}<span class="form-errors">{{ form.rotulo.errors.0 }}</span>{% endif %}
+            </p>
+
+            <p class="builder-field">
+                <label for="{{ form.palavras_chave.id_for_label }}">Palavras-chave</label>
+                {{ form.palavras_chave }}
+                <small class="table-muted-text">Separadas por virgula ou uma por linha. O numero da opcao no menu sempre funciona.</small>
+                {% if form.palavras_chave.errors %}<span class="form-errors">{{ form.palavras_chave.errors.0 }}</span>{% endif %}
+            </p>
+
+            <p class="builder-field">
+                <label for="{{ form.resposta.id_for_label }}">Resposta enviada</label>
+                {{ form.resposta }}
+                {% if form.resposta.errors %}<span class="form-errors">{{ form.resposta.errors.0 }}</span>{% endif %}
+            </p>
+
+            <p class="builder-field">
+                <label for="{{ form.acao.id_for_label }}">Acao</label>
+                {{ form.acao }}
+                <small class="table-muted-text">"Transferir para atendente" muda o status da pessoa para <b>Em acompanhamento</b> e encerra o bot.</small>
+                {% if form.acao.errors %}<span class="form-errors">{{ form.acao.errors.0 }}</span>{% endif %}
+            </p>
+
+            <label class="processar-check" for="{{ form.ativa.id_for_label }}">
+                {{ form.ativa }} Opcao ativa (aparece no menu)
+            </label>
+
+            <div class="action-row">
+                <button type="submit">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                    <span class="btn-text">Salvar opcao</span>
+                </button>
+                <a class="btn secundario" href="{% url 'configuracao-atendimento' %}">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    <span class="btn-text">Cancelar</span>
+                </a>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

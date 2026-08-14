@@ -12,13 +12,16 @@ Outros eventos (connection.update, etc.) sao apenas confirmados com 200.
 from __future__ import annotations
 
 import json
+import secrets
 
+from django.conf import settings
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
+from apps.acolhimento import atendimento_bot
 from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato
 from apps.acolhimento.phone_utils import (
     build_auto_nome_from_phone,
@@ -36,6 +39,14 @@ def _sanitizar(payload: dict) -> dict:
     if not isinstance(payload, dict):
         return {}
     return {chave: valor for chave, valor in payload.items() if chave != 'apikey'}
+
+
+def _webhook_autorizado(request) -> bool:
+    expected = (getattr(settings, 'EVOLUTION_WEBHOOK_SECRET', '') or '').strip()
+    if not expected:
+        return True
+    received = (request.headers.get('X-Evolution-Webhook-Secret') or '').strip()
+    return secrets.compare_digest(received, expected)
 
 
 def _primeiro(data):
@@ -82,6 +93,9 @@ class EvolutionWebhookView(View):
         return JsonResponse({'detail': 'Webhook do WhatsApp ativo. Use POST.'}, status=200)
 
     def post(self, request, *args, **kwargs):
+        if not _webhook_autorizado(request):
+            return JsonResponse({'detail': 'Webhook nao autorizado.'}, status=403)
+
         try:
             payload = json.loads(request.body.decode('utf-8') or '{}')
         except (ValueError, UnicodeDecodeError):
@@ -119,6 +133,8 @@ class EvolutionWebhookView(View):
         push_name = (data.get('pushName') or '').strip()
         payload_safe = _sanitizar(payload)
         agora = timezone.now()
+        # O flip legado (pessoa -> Em acompanhamento na 1a resposta) so vale se o bot NAO assumir.
+        flip_legado_pendente = False
 
         pessoa = find_pessoa_by_phone(numero)
         if not pessoa:
@@ -141,14 +157,8 @@ class EvolutionWebhookView(View):
             )
         elif not pessoa.iniciou_interacao:
             pessoa.iniciou_interacao = True
-            update_fields = ['iniciou_interacao', 'atualizado_em']
-            if pessoa.status in {
-                PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO,
-                PrimeiroContato.StatusAcolhimento.ROBO,
-            }:
-                pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
-                update_fields.append('status')
-            pessoa.save(update_fields=update_fields)
+            pessoa.save(update_fields=['iniciou_interacao', 'atualizado_em'])
+            flip_legado_pendente = True
             InteracaoAcolhimento.objects.create(
                 pessoa=pessoa,
                 tipo=InteracaoAcolhimento.TipoInteracao.RESPOSTA_RECEBIDA,
@@ -195,6 +205,16 @@ class EvolutionWebhookView(View):
                     'atualizado_em',
                 ]
             )
+
+        # Atendimento automatico (bot de menu). Se ele assumir, controla o status;
+        # senao, aplica o flip legado da 1a resposta (pessoa -> Em acompanhamento).
+        handled = atendimento_bot.processar_entrada(pessoa, texto)
+        if not handled and flip_legado_pendente and pessoa.status in {
+            PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO,
+            PrimeiroContato.StatusAcolhimento.ROBO,
+        }:
+            pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
+            pessoa.save(update_fields=['status', 'atualizado_em'])
 
         return JsonResponse({'detail': 'Mensagem de entrada processada.', 'pessoa_id': pessoa.id}, status=200)
 

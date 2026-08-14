@@ -32,6 +32,13 @@ def _split_env_list(var_name: str, default: str) -> list[str]:
     return [item.strip() for item in raw.split(',') if item.strip()]
 
 
+def _env_bool(var_name: str, default: bool = False) -> bool:
+    raw = os.getenv(var_name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {'1', 'true', 'yes', 'on', 'sim'}
+
+
 ALLOWED_HOSTS = _split_env_list(
     'DJANGO_ALLOWED_HOSTS',
     # host.docker.internal: permite que o container do Evolution (Docker) mande
@@ -167,6 +174,8 @@ STORAGES = {
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 
+PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', 'https://acolhimento.simoesti.com.br').rstrip('/')
+
 if not DEBUG:
     SECURE_SSL_REDIRECT = os.getenv('DJANGO_SECURE_SSL_REDIRECT', 'True').lower() == 'true'
     SESSION_COOKIE_SECURE = True
@@ -210,9 +219,23 @@ WHATSAPP_PROVIDER = os.getenv('WHATSAPP_PROVIDER', _default_whatsapp_provider).s
 
 # Evolution API (Baileys / WhatsApp Web). Defaults casam com evolution/docker-compose.yml.
 EVOLUTION_BASE_URL = os.getenv('EVOLUTION_BASE_URL', 'http://localhost:8085').rstrip('/')
+EVOLUTION_PUBLIC_URL = os.getenv('EVOLUTION_PUBLIC_URL', EVOLUTION_BASE_URL).rstrip('/')
 EVOLUTION_API_KEY = os.getenv('EVOLUTION_API_KEY', 'pibvp-teste-2026')
 EVOLUTION_INSTANCE = os.getenv('EVOLUTION_INSTANCE', 'pibvp-teste')
+EVOLUTION_INTEGRATION = os.getenv('EVOLUTION_INTEGRATION', 'WHATSAPP-BAILEYS')
 EVOLUTION_REQUEST_TIMEOUT_SECONDS = int(os.getenv('EVOLUTION_REQUEST_TIMEOUT_SECONDS', '30'))
+EVOLUTION_AUTO_CONFIGURE_WEBHOOK = _env_bool('EVOLUTION_AUTO_CONFIGURE_WEBHOOK', True)
+EVOLUTION_WEBHOOK_URL = os.getenv(
+    'EVOLUTION_WEBHOOK_URL',
+    f'{PUBLIC_BASE_URL}/acolhimento/mensagens/webhook/evolution/',
+).strip()
+EVOLUTION_WEBHOOK_EVENTS = _split_env_list(
+    'EVOLUTION_WEBHOOK_EVENTS',
+    'MESSAGES_UPSERT,MESSAGES_UPDATE',
+)
+EVOLUTION_WEBHOOK_BY_EVENTS = _env_bool('EVOLUTION_WEBHOOK_BY_EVENTS', False)
+EVOLUTION_WEBHOOK_BASE64 = _env_bool('EVOLUTION_WEBHOOK_BASE64', False)
+EVOLUTION_WEBHOOK_SECRET = os.getenv('EVOLUTION_WEBHOOK_SECRET', '').strip()
 # No modo Baileys nao existe template aprovado: as mensagens de "template" da Twilio
 # (opt-in / continuar) viram texto simples. {nome} e substituido pelo nome da pessoa.
 EVOLUTION_TEXTO_OPTIN = os.getenv(

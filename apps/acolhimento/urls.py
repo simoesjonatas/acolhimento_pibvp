@@ -1,5 +1,12 @@
 from django.urls import path
 
+from apps.acolhimento.atendimento_views import (
+    ConfiguracaoAtendimentoBotView,
+    OpcaoAtendimentoBotCreateView,
+    OpcaoAtendimentoBotDeleteView,
+    OpcaoAtendimentoBotMoverView,
+    OpcaoAtendimentoBotUpdateView,
+)
 from apps.acolhimento.evolution_views import ConfiguracaoWhatsappConexaoView
 from apps.acolhimento.evolution_webhooks import EvolutionWebhookView
 from apps.acolhimento.views import (
@@ -48,6 +55,11 @@ urlpatterns = [
     path('mensagens/disparo/', DisparoMensagemMassaView.as_view(), name='mensagens-disparo-massa'),
     path('configuracoes/templates/', ConfiguracaoTemplatesView.as_view(), name='configuracao-templates'),
     path('configuracoes/whatsapp/', ConfiguracaoWhatsappConexaoView.as_view(), name='configuracao-whatsapp'),
+    path('configuracoes/atendimento/', ConfiguracaoAtendimentoBotView.as_view(), name='configuracao-atendimento'),
+    path('configuracoes/atendimento/opcao/nova/', OpcaoAtendimentoBotCreateView.as_view(), name='atendimento-opcao-nova'),
+    path('configuracoes/atendimento/opcao/<int:pk>/editar/', OpcaoAtendimentoBotUpdateView.as_view(), name='atendimento-opcao-editar'),
+    path('configuracoes/atendimento/opcao/<int:pk>/excluir/', OpcaoAtendimentoBotDeleteView.as_view(), name='atendimento-opcao-excluir'),
+    path('configuracoes/atendimento/opcao/<int:pk>/mover/', OpcaoAtendimentoBotMoverView.as_view(), name='atendimento-opcao-mover'),
     path('mensagens/webhook/twilio-status/', TwilioStatusWebhookView.as_view(), name='mensagens-webhook-twilio-status'),
     path('mensagens/webhook/twilio-inbound/', TwilioInboundWebhookView.as_view(), name='mensagens-webhook-twilio-inbound'),
     path('mensagens/webhook/evolution/', EvolutionWebhookView.as_view(), name='mensagens-webhook-evolution'),

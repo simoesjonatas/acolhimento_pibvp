@@ -68,7 +68,41 @@ docker compose up -d --build
 
 Acesse:
 
-- `http://localhost:8000/login/`
+- `http://localhost:8183/login/`
+
+### Evolution API separado
+
+O Evolution roda em um compose proprio, separado do app Django. Isso evita misturar bancos/redis do WhatsApp com a aplicacao e deixa a API pronta para ser usada por outros servicos depois.
+
+```bash
+cp evolution/.env.example evolution/.env
+docker compose --env-file evolution/.env -f evolution/docker-compose.yml up -d
+```
+
+Por padrao a API fica em `127.0.0.1:8085`, sem exposicao direta na internet. Em producao, o app Django entra tambem na rede `pibvp-evolution-net` e chama o Evolution por `EVOLUTION_BASE_URL=http://evolution-api:8080`.
+
+Depois suba o app principal:
+
+```bash
+cp .env.prod.example .env
+docker compose -f docker-compose.yml -f docker-compose.evolution-network.yml up -d --build
+```
+
+Para outro compose falar com o mesmo Evolution, conecte o servico na rede externa `pibvp-evolution-net` e use `http://evolution-api:8080` como base URL:
+
+```yaml
+services:
+  outro-servico:
+    networks:
+      - evolution_shared
+    environment:
+      EVOLUTION_BASE_URL: http://evolution-api:8080
+
+networks:
+  evolution_shared:
+    external: true
+    name: pibvp-evolution-net
+```
 
 ### Ver status e logs
 
@@ -98,6 +132,7 @@ Principais variáveis usadas pelo projeto:
 - `DJANGO_ALLOWED_HOSTS`
 - `DJANGO_CSRF_TRUSTED_ORIGINS`
 - `DJANGO_SECURE_SSL_REDIRECT`
+- `PUBLIC_BASE_URL`
 - `SQLITE_PATH`
 - `APP_PORT`
 - `POSTGRES_DB`
@@ -115,6 +150,17 @@ Principais variáveis usadas pelo projeto:
 - `TWILIO_TEMPLATE_CONTINUAR_SID` (Content SID do template aprovado para continuar conversa)
 - `TWILIO_TEMPLATE_CONTINUAR_VARIABLES` (JSON string com variáveis do template de continuação)
 - `WHATSAPP_PROVIDER` (`twilio` ou `evolution`)
+- `EVOLUTION_BASE_URL` (URL que o Django usa para chamar o Evolution; em producao com a rede compartilhada, use `http://evolution-api:8080`)
+- `EVOLUTION_PUBLIC_URL` (URL exibida para abrir o manager; pode ser local ou uma URL publica protegida)
+- `EVOLUTION_API_KEY`
+- `EVOLUTION_INSTANCE`
+- `EVOLUTION_INTEGRATION` (`WHATSAPP-BAILEYS` por padrao)
+- `EVOLUTION_WEBHOOK_URL`
+- `EVOLUTION_WEBHOOK_EVENTS` (`MESSAGES_UPSERT,MESSAGES_UPDATE`)
+- `EVOLUTION_WEBHOOK_BY_EVENTS`
+- `EVOLUTION_WEBHOOK_BASE64`
+- `EVOLUTION_WEBHOOK_SECRET` (opcional, recomendado em producao)
+- `EVOLUTION_AUTO_CONFIGURE_WEBHOOK`
 - `EVOLUTION_TEXTO_OPTIN` (texto de boas-vindas quando usar Evolution; aceita `{nome}`)
 - `EVOLUTION_TEXTO_CONTINUAR` (texto para continuar conversa quando usar Evolution; aceita `{nome}`)
 

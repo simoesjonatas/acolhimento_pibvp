@@ -1,0 +1,12 @@
+services:
+  web:
+    environment:
+      EVOLUTION_BASE_URL: ${EVOLUTION_BASE_URL:-http://evolution-api:8080}
+    networks:
+      - default
+      - evolution_shared
+
+networks:
+  evolution_shared:
+    external: true
+    name: ${EVOLUTION_DOCKER_NETWORK:-pibvp-evolution-net}

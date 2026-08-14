@@ -5,9 +5,11 @@ from django.utils import timezone
 
 from apps.acolhimento import reports
 from apps.acolhimento.models import (
+    ConfiguracaoAtendimentoBot,
     ConviteQuestionario,
     InteracaoAcolhimento,
     MensagemContato,
+    OpcaoAtendimentoBot,
     OpcaoPergunta,
     PerguntaQuestionario,
     PrimeiroContato,
@@ -418,3 +420,40 @@ class TemplatesWhatsappForm(forms.Form):
         for campo in ('opt_in_texto_evolution', 'continuar_texto_evolution'):
             cleaned[campo] = (cleaned.get(campo) or '').strip()
         return cleaned
+
+
+class ConfiguracaoAtendimentoBotForm(forms.ModelForm):
+    """Textos fixos do atendimento automatico (o liga/desliga fica num botao a parte)."""
+
+    class Meta:
+        model = ConfiguracaoAtendimentoBot
+        fields = ['mensagem_saudacao', 'mensagem_fallback']
+        widgets = {
+            'mensagem_saudacao': forms.Textarea(attrs={
+                'rows': 3,
+                'placeholder': 'Ola! Que bom falar com voce. Com o que posso te ajudar hoje?',
+            }),
+            'mensagem_fallback': forms.Textarea(attrs={
+                'rows': 2,
+                'placeholder': 'Nao entendi. Responda com o numero de uma das opcoes abaixo:',
+            }),
+        }
+
+
+class OpcaoAtendimentoBotForm(forms.ModelForm):
+    """Uma opcao do menu do atendimento automatico."""
+
+    class Meta:
+        model = OpcaoAtendimentoBot
+        fields = ['rotulo', 'palavras_chave', 'resposta', 'acao', 'ativa']
+        widgets = {
+            'rotulo': forms.TextInput(attrs={'placeholder': 'Ex.: Falar com alguem'}),
+            'palavras_chave': forms.Textarea(attrs={
+                'rows': 2,
+                'placeholder': 'atendente, falar, pessoa (o numero da opcao sempre funciona)',
+            }),
+            'resposta': forms.Textarea(attrs={
+                'rows': 4,
+                'placeholder': 'Texto que o bot envia quando a pessoa escolhe esta opcao.',
+            }),
+        }
