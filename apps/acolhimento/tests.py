@@ -1354,6 +1354,36 @@ class EvolutionWebhookConfigTests(TestCase):
 		)
 		self.assertEqual(data, {'success': True})
 
+	@override_settings(
+		EVOLUTION_INSTANCE='pibvp-prod',
+		EVOLUTION_WEBHOOK_URL='https://acolhimento.simoesti.com.br/acolhimento/mensagens/webhook/evolution/',
+		EVOLUTION_WEBHOOK_EVENTS=['MESSAGES_UPSERT'],
+		EVOLUTION_WEBHOOK_BY_EVENTS=False,
+		EVOLUTION_WEBHOOK_BASE64=False,
+		EVOLUTION_WEBHOOK_SECRET='',
+	)
+	def test_configure_webhook_tenta_payload_envelopado_em_build_legada(self):
+		from apps.acolhimento import evolution_service
+
+		erro = evolution_service.EvolutionWhatsAppError(
+			'API de WhatsApp HTTP 400: {\'response\': {\'message\': [[\'instance requires property "webhook"\']]}}'
+		)
+		payload = {
+			'enabled': True,
+			'url': 'https://acolhimento.simoesti.com.br/acolhimento/mensagens/webhook/evolution/',
+			'webhookByEvents': False,
+			'webhookBase64': False,
+			'events': ['MESSAGES_UPSERT'],
+		}
+
+		with patch('apps.acolhimento.evolution_service._post') as post:
+			post.side_effect = [erro, (201, {'success': True})]
+			data = evolution_service.configure_webhook()
+
+		self.assertEqual(post.call_args_list[0].args, ('/webhook/set/pibvp-prod', payload))
+		self.assertEqual(post.call_args_list[1].args, ('/webhook/set/pibvp-prod', {'webhook': payload}))
+		self.assertEqual(data, {'success': True})
+
 	@override_settings(EVOLUTION_WEBHOOK_SECRET='segredo-test')
 	def test_webhook_rejeita_header_invalido(self):
 		resp = self.client.post(

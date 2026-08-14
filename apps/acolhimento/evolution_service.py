@@ -88,7 +88,14 @@ def configure_webhook(*, enabled: bool = True) -> dict[str, Any]:
     if webhook_secret:
         payload['headers'] = {'X-Evolution-Webhook-Secret': webhook_secret}
 
-    _status, data = _post(f'/webhook/set/{instance}', payload)
+    try:
+        _status, data = _post(f'/webhook/set/{instance}', payload)
+    except EvolutionWhatsAppError as exc:
+        # Algumas builds v2.3.x validam este endpoint com um DTO legado e
+        # exigem a configuracao dentro de {"webhook": {...}}.
+        if 'requires property "webhook"' not in str(exc):
+            raise
+        _status, data = _post(f'/webhook/set/{instance}', {'webhook': payload})
     return data if isinstance(data, dict) else {}
 
 
