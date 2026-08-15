@@ -276,3 +276,7 @@ class UsuarioDeleteView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, DeleteV
 
 def forbidden_view(request, exception=None):
 	return render(request, '403.html', status=403)
+
+
+def not_found_view(request, exception=None):
+	return render(request, '404.html', status=404)

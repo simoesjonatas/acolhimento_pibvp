@@ -1,10 +1,19 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from apps.core.forms import PERMISSAO_CONVERSAR_PESSOAS, UsuarioCreateForm
 
 
 User = get_user_model()
+
+TEST_STORAGES = {
+	'default': {
+		'BACKEND': 'django.core.files.storage.FileSystemStorage',
+	},
+	'staticfiles': {
+		'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+	},
+}
 
 
 class LoginPorUsuarioOuEmailTests(TestCase):
@@ -24,6 +33,29 @@ class LoginPorUsuarioOuEmailTests(TestCase):
 
 	def test_login_usuario_inexistente_falha(self):
 		self.assertFalse(self.client.login(username='ninguem', password='segredo123'))
+
+
+class PaginaNaoEncontradaTests(TestCase):
+	@override_settings(DEBUG=False, STORAGES=TEST_STORAGES)
+	def test_404_publico_usa_template_personalizado(self):
+		response = self.client.get('/rota-inexistente/')
+
+		self.assertEqual(response.status_code, 404)
+		self.assertTemplateUsed(response, '404.html')
+		self.assertContains(response, 'Pagina nao encontrada', status_code=404)
+		self.assertContains(response, 'Entrar no sistema', status_code=404)
+
+	@override_settings(DEBUG=False, STORAGES=TEST_STORAGES)
+	def test_404_autenticado_exibe_atalhos_da_aplicacao(self):
+		user = User.objects.create_user(username='ana', password='segredo123')
+		self.client.force_login(user)
+
+		response = self.client.get('/rota-inexistente/')
+
+		self.assertEqual(response.status_code, 404)
+		self.assertTemplateUsed(response, '404.html')
+		self.assertContains(response, 'Ir para dashboard', status_code=404)
+		self.assertContains(response, 'Ver pessoas', status_code=404)
 
 
 class UsernameMinusculoTests(TestCase):

@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block title %}Pagina nao encontrada{% endblock %}
+
+{% block content %}
+<section class="forbidden-wrap">
+    <div class="forbidden-card">
+        <p class="forbidden-code">404</p>
+        <h1>Pagina nao encontrada</h1>
+        <p class="forbidden-text">
+            Nao encontramos o endereco que voce tentou acessar.
+            O link pode ter mudado, expirado ou sido digitado com algum erro.
+        </p>
+        <p class="action-row">
+            {% if user.is_authenticated %}
+            <a class="btn" href="{% url 'dashboard' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+                <span class="btn-text">Ir para dashboard</span>
+            </a>
+            <a class="btn secundario" href="{% url 'pessoas-lista' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a7.5 7.5 0 0 1 13 0"/></svg>
+                <span class="btn-text">Ver pessoas</span>
+            </a>
+            {% else %}
+            <a class="btn" href="{% url 'login' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                <span class="btn-text">Entrar no sistema</span>
+            </a>
+            <a class="btn secundario" href="{% url 'auto-cadastro-publico' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span class="btn-text">Fazer cadastro</span>
+            </a>
+            {% endif %}
+        </p>
+    </div>
+</section>
+{% endblock %}

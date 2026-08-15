@@ -23,7 +23,7 @@ from apps.acolhimento.views import (
     ResponderQuestionarioView,
     ResponderSucessoView,
 )
-from apps.core.views import forbidden_view
+from apps.core.views import forbidden_view, not_found_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -36,3 +36,4 @@ urlpatterns = [
 ]
 
 handler403 = forbidden_view
+handler404 = not_found_view
