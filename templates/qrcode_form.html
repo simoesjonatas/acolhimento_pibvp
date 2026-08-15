@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if object %}Editar QR Code{% else %}Novo QR Code{% endif %}{% endblock %}
+
+{% block content %}
+<section class="form-page">
+    <div class="page-hero">
+        <div>
+            <span class="section-eyebrow">QR Codes</span>
+            <h1>{% if object %}Editar QR Code{% else %}Novo QR Code{% endif %}</h1>
+            <p>O link do QR Code e fixo. Voce pode trocar o destino quando quiser, sem reimprimir.</p>
+        </div>
+    </div>
+
+    <form method="post" class="form-card">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+        <div class="form-errors">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <p>
+            <label for="{{ form.nome.id_for_label }}">Nome</label>
+            {{ form.nome }}
+            {% if form.nome.errors %}<span class="form-errors">{{ form.nome.errors.0 }}</span>{% endif %}
+        </p>
+
+        <p>
+            <label for="{{ form.destino.id_for_label }}">URL de destino</label>
+            {{ form.destino }}
+            <small class="field-hint">Para onde a pessoa vai ao escanear. Ex.: um formulario, o site da igreja, um video, a localizacao no mapa.</small>
+            {% if form.destino.errors %}<span class="form-errors">{{ form.destino.errors.0 }}</span>{% endif %}
+        </p>
+
+        <p>
+            <label for="{{ form.descricao.id_for_label }}">Descricao (opcional)</label>
+            {{ form.descricao }}
+            {% if form.descricao.errors %}<span class="form-errors">{{ form.descricao.errors.0 }}</span>{% endif %}
+        </p>
+
+        <label class="permission-toggle" for="{{ form.ativo.id_for_label }}">
+            {{ form.ativo }}
+            <span>
+                <strong>QR Code ativo</strong>
+                <small>Se desligar, o QR para de redirecionar (mostra pagina de indisponivel).</small>
+            </span>
+        </label>
+        {% if form.ativo.errors %}<span class="form-errors">{{ form.ativo.errors.0 }}</span>{% endif %}
+
+        <p class="action-row">
+            <button type="submit">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                <span class="btn-text">Salvar</span>
+            </button>
+            <a class="btn secundario" href="{% if object %}{% url 'qrcodes-detalhe' object.pk %}{% else %}{% url 'qrcodes-lista' %}{% endif %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <span class="btn-text">Cancelar</span>
+            </a>
+        </p>
+    </form>
+</section>
+
+<style>
+    .field-hint { display:block; margin-top:6px; color:#64756a; font-size:.82rem; }
+    .form-card .permission-toggle { display:flex; gap:12px; align-items:flex-start; margin:4px 0 8px; }
+    .form-card .permission-toggle input[type="checkbox"] { width:auto; margin-top:3px; }
+    .form-card .permission-toggle span strong { display:block; }
+    .form-card .permission-toggle span small { color:#64756a; }
+</style>
+{% endblock %}

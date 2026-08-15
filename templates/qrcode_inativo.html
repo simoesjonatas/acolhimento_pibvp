@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block title %}QR Code indisponivel{% endblock %}
+
+{% block content %}
+<section class="forbidden-wrap">
+    <div class="forbidden-card">
+        <p class="forbidden-code">QR</p>
+        <h1>QR Code indisponivel</h1>
+        <p class="forbidden-text">
+            Este QR Code esta temporariamente desativado.
+            Fale com a equipe da igreja para mais informacoes.
+        </p>
+        {% if user.is_authenticated %}
+        <p class="action-row">
+            <a class="btn" href="{% url 'qrcodes-lista' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                <span class="btn-text">Gerenciar QR Codes</span>
+            </a>
+        </p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

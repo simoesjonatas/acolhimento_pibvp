@@ -125,6 +125,12 @@
                         Usuarios
                     </a>
                     <a
+                        href="{% url 'qrcodes-lista' %}"
+                        class="nav-dropdown-link {% if request.resolver_match.url_name == 'qrcodes-lista' or request.resolver_match.url_name == 'qrcodes-novo' or request.resolver_match.url_name == 'qrcodes-detalhe' or request.resolver_match.url_name == 'qrcodes-editar' or request.resolver_match.url_name == 'qrcodes-excluir' or request.resolver_match.url_name == 'qrcodes-imprimir' %}active{% endif %}"
+                    >
+                        QR Codes
+                    </a>
+                    <a
                         href="{% url 'mensagens-processamento' %}"
                         class="nav-dropdown-link {% if request.resolver_match.url_name == 'mensagens-processamento' %}active{% endif %}"
                     >

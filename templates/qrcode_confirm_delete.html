@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block title %}Excluir QR Code{% endblock %}
+
+{% block content %}
+<h1>Excluir QR Code</h1>
+<p>Tem certeza que deseja excluir o QR Code <strong>{{ qrcode.nome }}</strong>?</p>
+<p class="result-count">
+    Atencao: o link <code>/r/{{ qrcode.codigo }}/</code> vai parar de funcionar.
+    Se ja imprimiu este QR Code em algum lugar, ele deixara de redirecionar.
+</p>
+
+<form method="post" class="action-row">
+    {% csrf_token %}
+    <button type="submit" class="danger">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        <span class="btn-text">Excluir</span>
+    </button>
+    <a class="btn secundario" href="{% url 'qrcodes-detalhe' qrcode.pk %}">
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="btn-text">Cancelar</span>
+    </a>
+</form>
+{% endblock %}

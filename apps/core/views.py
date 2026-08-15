@@ -8,16 +8,19 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db import connection
-from django.db.models import Q
-from django.http import JsonResponse
-from django.shortcuts import redirect, render
-from django.urls import reverse_lazy
-from django.views.generic import CreateView, DeleteView, ListView, TemplateView, UpdateView
+from django.db.models import F, Q
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse, reverse_lazy
+from django.utils import timezone
+from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento import template_config
 from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato, TemplateWhatsapp
 from apps.acolhimento.whatsapp_rules import contar_pessoas_janela_aberta
-from apps.core.forms import PerfilForm, UsuarioCreateForm, UsuarioUpdateForm
+from apps.core.forms import PerfilForm, QrCodeDinamicoForm, UsuarioCreateForm, UsuarioUpdateForm
+from apps.core.models import QrCodeDinamico
+from apps.core.qrcode_utils import gerar_qrcode_png, gerar_qrcode_svg
 
 
 User = get_user_model()
@@ -301,3 +304,140 @@ def forbidden_view(request, exception=None):
 
 def not_found_view(request, exception=None):
 	return render(request, '404.html', status=404)
+
+
+# ---------------------------------------------------------------------------
+# QR Codes dinamicos (link fixo + destino reconfiguravel)
+# ---------------------------------------------------------------------------
+
+class QrCodeAdminMixin(LoginRequiredMixin, UsuarioGestaoPermissaoMixin):
+	"""Restringe a administracao de QR Codes a superusuarios (admins)."""
+
+	model = QrCodeDinamico
+
+
+class QrCodeListView(QrCodeAdminMixin, ListView):
+	template_name = 'qrcodes_lista.html'
+	context_object_name = 'qrcodes'
+	paginate_by = 20
+
+	def get_queryset(self):
+		queryset = super().get_queryset()
+		busca = self.request.GET.get('q', '').strip()
+		if busca:
+			queryset = queryset.filter(
+				Q(nome__icontains=busca)
+				| Q(destino__icontains=busca)
+				| Q(codigo__icontains=busca)
+			)
+		return queryset
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		query_params = self.request.GET.copy()
+		query_params.pop('page', None)
+		context['filtro_query'] = query_params.urlencode()
+		context['busca'] = self.request.GET.get('q', '').strip()
+		context['total_filtrado'] = context['paginator'].count
+		return context
+
+
+class QrCodeCreateView(QrCodeAdminMixin, CreateView):
+	template_name = 'qrcode_form.html'
+	form_class = QrCodeDinamicoForm
+
+	def form_valid(self, form):
+		form.instance.criado_por = self.request.user
+		response = super().form_valid(form)
+		messages.success(self.request, 'QR Code criado com sucesso. Agora e so imprimir.')
+		return response
+
+	def form_invalid(self, form):
+		messages.error(self.request, 'Nao foi possivel salvar o QR Code. Verifique os campos.')
+		return super().form_invalid(form)
+
+	def get_success_url(self):
+		return reverse('qrcodes-detalhe', args=[self.object.pk])
+
+
+class QrCodeUpdateView(QrCodeAdminMixin, UpdateView):
+	template_name = 'qrcode_form.html'
+	form_class = QrCodeDinamicoForm
+
+	def form_valid(self, form):
+		response = super().form_valid(form)
+		messages.success(self.request, 'QR Code atualizado com sucesso.')
+		return response
+
+	def form_invalid(self, form):
+		messages.error(self.request, 'Nao foi possivel salvar o QR Code. Verifique os campos.')
+		return super().form_invalid(form)
+
+	def get_success_url(self):
+		return reverse('qrcodes-detalhe', args=[self.object.pk])
+
+
+class QrCodeDeleteView(QrCodeAdminMixin, DeleteView):
+	template_name = 'qrcode_confirm_delete.html'
+	context_object_name = 'qrcode'
+	success_url = reverse_lazy('qrcodes-lista')
+
+	def form_valid(self, form):
+		messages.success(self.request, 'QR Code excluido com sucesso.')
+		return super().form_valid(form)
+
+
+class QrCodeDetailView(QrCodeAdminMixin, DetailView):
+	template_name = 'qrcode_detalhe.html'
+	context_object_name = 'qrcode'
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		link_publico = self.request.build_absolute_uri(self.object.get_public_path())
+		context['link_publico'] = link_publico
+		context['qrcode_svg'] = gerar_qrcode_svg(link_publico)
+		return context
+
+
+class QrCodeImprimirView(QrCodeAdminMixin, DetailView):
+	template_name = 'qrcode_imprimir.html'
+	context_object_name = 'qrcode'
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		link_publico = self.request.build_absolute_uri(self.object.get_public_path())
+		context['link_publico'] = link_publico
+		context['qrcode_svg'] = gerar_qrcode_svg(link_publico)
+		return context
+
+
+class QrCodePngView(QrCodeAdminMixin, DetailView):
+	"""Download do QR Code em PNG (bom para colar em cartazes/flyers)."""
+
+	def get(self, request, *args, **kwargs):
+		self.object = self.get_object()
+		link_publico = request.build_absolute_uri(self.object.get_public_path())
+		png = gerar_qrcode_png(link_publico)
+		response = HttpResponse(png, content_type='image/png')
+		response['Content-Disposition'] = f'attachment; filename="qrcode-{self.object.codigo}.png"'
+		return response
+
+
+def qr_redirect(request, codigo):
+	"""Endpoint publico do QR Code: consulta o destino atual e redireciona (302).
+
+	Publico e sem login: e a URL fixa que fica impressa dentro do QR Code.
+	"""
+	qrcode_obj = get_object_or_404(QrCodeDinamico, codigo=codigo)
+	if not qrcode_obj.ativo:
+		return render(request, 'qrcode_inativo.html', status=404)
+
+	# F() evita corrida de contagem quando varias pessoas escaneiam ao mesmo tempo.
+	QrCodeDinamico.objects.filter(pk=qrcode_obj.pk).update(
+		total_acessos=F('total_acessos') + 1,
+		ultimo_acesso=timezone.now(),
+	)
+	response = redirect(qrcode_obj.destino)
+	# Sem cache no redirect: trocar o destino tem efeito imediato.
+	response['Cache-Control'] = 'no-store, max-age=0'
+	return response

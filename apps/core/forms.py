@@ -3,6 +3,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import Permission
 
+from apps.core.models import QrCodeDinamico
+
 
 User = get_user_model()
 PERMISSAO_CONVERSAR_PESSOAS = 'acolhimento.pode_conversar_pessoas'
@@ -109,3 +111,29 @@ class PerfilForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ['first_name', 'last_name', 'email']
+
+
+class QrCodeDinamicoForm(forms.ModelForm):
+    """Cadastro/edicao de um QR Code dinamico (link fixo, destino reconfiguravel)."""
+
+    class Meta:
+        model = QrCodeDinamico
+        fields = ['nome', 'destino', 'ativo', 'descricao']
+        widgets = {
+            'nome': forms.TextInput(attrs={
+                'placeholder': 'Ex.: Cartaz da entrada',
+                'autofocus': True,
+            }),
+            'destino': forms.URLInput(attrs={
+                'placeholder': 'https://...',
+                'autocapitalize': 'none',
+                'spellcheck': 'false',
+            }),
+            'descricao': forms.Textarea(attrs={
+                'rows': 3,
+                'placeholder': 'Anotacoes internas (opcional).',
+            }),
+        }
+
+    def clean_destino(self):
+        return (self.cleaned_data.get('destino') or '').strip()
