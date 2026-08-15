@@ -126,6 +126,9 @@ class QrCodeDinamicoTests(TestCase):
 		self.admin = User.objects.create_superuser(
 			username='admin', email='admin@pibvp.com.br', password='segredo123'
 		)
+		self.staff = User.objects.create_user(
+			username='marta', email='marta@pibvp.com.br', password='segredo123', is_staff=True
+		)
 		self.comum = User.objects.create_user(
 			username='joao', email='joao@pibvp.com.br', password='segredo123'
 		)
@@ -188,6 +191,35 @@ class QrCodeDinamicoTests(TestCase):
 		response = self.client.get(reverse('qrcodes-lista'))
 		self.assertEqual(response.status_code, 200)
 		self.assertContains(response, 'Cartaz entrada')
+
+	def test_lista_permite_staff(self):
+		self.client.force_login(self.staff)
+		response = self.client.get(reverse('qrcodes-lista'))
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, 'Cartaz entrada')
+
+	def test_staff_pode_criar_qrcode(self):
+		self.client.force_login(self.staff)
+		response = self.client.post(reverse('qrcodes-novo'), data={
+			'nome': 'Mural jovens',
+			'destino': 'https://example.com/jovens',
+			'ativo': 'on',
+			'descricao': '',
+		})
+		novo = QrCodeDinamico.objects.get(nome='Mural jovens')
+		self.assertRedirects(response, reverse('qrcodes-detalhe', args=[novo.pk]))
+		self.assertEqual(novo.criado_por, self.staff)
+
+	def test_menu_mostra_qrcodes_para_staff_sem_itens_de_superuser(self):
+		self.client.force_login(self.staff)
+		response = self.client.get(reverse('dashboard'))
+		self.assertContains(response, reverse('qrcodes-lista'))
+		self.assertNotContains(response, reverse('usuarios-lista'))
+
+	def test_menu_esconde_qrcodes_de_usuario_comum(self):
+		self.client.force_login(self.comum)
+		response = self.client.get(reverse('dashboard'))
+		self.assertNotContains(response, reverse('qrcodes-lista'))
 
 	def test_create_gera_codigo_e_registra_criador(self):
 		self.client.force_login(self.admin)

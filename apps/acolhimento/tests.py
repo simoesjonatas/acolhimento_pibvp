@@ -649,19 +649,24 @@ class QuestionarioTests(TestCase):
 		self.assertEqual(resp.status_code, 200)
 
 	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
-	def test_menu_configuracoes_aparece_somente_para_superuser(self):
+	def test_menu_configuracoes_staff_ve_apenas_qrcodes(self):
+		# Staff enxerga a engrenagem, mas apenas com QR Codes: os itens de
+		# superuser (Usuarios, Processar fila, Questionarios) continuam ocultos.
 		self.client.force_login(self.staff_admin)
 		resp = self.client.get(reverse('dashboard'))
 		self.assertEqual(resp.status_code, 200)
-		self.assertNotContains(resp, 'settings-navigation')
+		self.assertContains(resp, 'settings-navigation')
+		self.assertContains(resp, 'QR Codes')
 		self.assertNotContains(resp, 'Usuarios')
 		self.assertNotContains(resp, 'Processar fila')
 		self.assertNotContains(resp, 'Questionarios')
 
+		# Superuser continua vendo tudo, inclusive QR Codes.
 		self.client.force_login(self.admin)
 		resp = self.client.get(reverse('dashboard'))
 		self.assertEqual(resp.status_code, 200)
 		self.assertContains(resp, 'settings-navigation')
+		self.assertContains(resp, 'QR Codes')
 		self.assertContains(resp, 'Usuarios')
 		self.assertContains(resp, 'Processar fila')
 		self.assertContains(resp, 'Questionarios')

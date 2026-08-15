@@ -51,6 +51,15 @@ class UsuarioGestaoPermissaoMixin(UserPassesTestMixin):
 		return self.request.user.is_superuser
 
 
+class StaffOuSuperuserPermissaoMixin(UserPassesTestMixin):
+	"""Libera a tela para staff ou superusuario (admins)."""
+
+	raise_exception = True
+
+	def test_func(self):
+		return self.request.user.is_staff or self.request.user.is_superuser
+
+
 class DashboardView(LoginRequiredMixin, TemplateView):
 	template_name = 'dashboard.html'
 
@@ -310,8 +319,8 @@ def not_found_view(request, exception=None):
 # QR Codes dinamicos (link fixo + destino reconfiguravel)
 # ---------------------------------------------------------------------------
 
-class QrCodeAdminMixin(LoginRequiredMixin, UsuarioGestaoPermissaoMixin):
-	"""Restringe a administracao de QR Codes a superusuarios (admins)."""
+class QrCodeAdminMixin(LoginRequiredMixin, StaffOuSuperuserPermissaoMixin):
+	"""Restringe a administracao de QR Codes a staff ou superusuarios (admins)."""
 
 	model = QrCodeDinamico
 

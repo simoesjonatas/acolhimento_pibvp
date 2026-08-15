@@ -56,12 +56,12 @@ ALLOWED_HOSTS = _split_env_list(
     'DJANGO_ALLOWED_HOSTS',
     # host.docker.internal: permite que o container do Evolution (Docker) mande
     # webhooks para o Django rodando no host. Inofensivo em producao.
-    'acolhimento.simoesti.com.br,localhost,127.0.0.1,host.docker.internal',
+    'acolhimento.simoesti.com.br,acolhimento.pibvp.org.br,localhost,127.0.0.1,host.docker.internal',
 )
 
 CSRF_TRUSTED_ORIGINS = _split_env_list(
     'DJANGO_CSRF_TRUSTED_ORIGINS',
-    'https://acolhimento.simoesti.com.br,http://localhost:8000,http://127.0.0.1:8000,http://localhost:8080,http://127.0.0.1:8080',
+    'https://acolhimento.simoesti.com.br,https://acolhimento.pibvp.org.br,http://localhost:8000,http://127.0.0.1:8000,http://localhost:8080,http://127.0.0.1:8080',
 )
 
 

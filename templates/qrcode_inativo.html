@@ -11,7 +11,7 @@
             Este QR Code esta temporariamente desativado.
             Fale com a equipe da igreja para mais informacoes.
         </p>
-        {% if user.is_authenticated %}
+        {% if user.is_staff or user.is_superuser %}
         <p class="action-row">
             <a class="btn" href="{% url 'qrcodes-lista' %}">
                 <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
