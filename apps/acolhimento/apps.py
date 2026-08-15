@@ -8,3 +8,5 @@ class AcolhimentoConfig(AppConfig):
     def ready(self):
         # Registra os signals (processamento automatico da fila).
         from apps.acolhimento import signals  # noqa: F401
+        # Registra os system checks (ex.: webhook sem segredo em producao).
+        from apps.acolhimento import checks  # noqa: F401

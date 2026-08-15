@@ -12,6 +12,7 @@ Outros eventos (connection.update, etc.) sao apenas confirmados com 200.
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 
 from django.conf import settings
@@ -29,6 +30,8 @@ from apps.acolhimento.phone_utils import (
     phone_for_cadastro,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _normalizar_evento(payload: dict) -> str:
     return (payload.get('event') or '').replace('-', '.').strip().lower()
@@ -44,7 +47,16 @@ def _sanitizar(payload: dict) -> dict:
 def _webhook_autorizado(request) -> bool:
     expected = (getattr(settings, 'EVOLUTION_WEBHOOK_SECRET', '') or '').strip()
     if not expected:
-        return True
+        # Sem segredo configurado: em desenvolvimento liberamos (facilita testes),
+        # mas em producao recusamos. Este endpoint cria pessoas/mensagens no banco
+        # e nao pode ficar aberto para qualquer POST.
+        if settings.DEBUG:
+            return True
+        logger.error(
+            'Webhook Evolution recusado: EVOLUTION_WEBHOOK_SECRET nao configurado em '
+            'producao. Defina o segredo no ambiente e reconfigure a instancia do Evolution.'
+        )
+        return False
     received = (request.headers.get('X-Evolution-Webhook-Secret') or '').strip()
     return secrets.compare_digest(received, expected)
 
@@ -94,11 +106,13 @@ class EvolutionWebhookView(View):
 
     def post(self, request, *args, **kwargs):
         if not _webhook_autorizado(request):
+            logger.warning('Webhook Evolution nao autorizado (path=%s).', request.path)
             return JsonResponse({'detail': 'Webhook nao autorizado.'}, status=403)
 
         try:
             payload = json.loads(request.body.decode('utf-8') or '{}')
         except (ValueError, UnicodeDecodeError):
+            logger.warning('Webhook Evolution: corpo recebido nao e JSON valido.')
             return JsonResponse({'detail': 'JSON invalido.'}, status=400)
 
         if not isinstance(payload, dict):
@@ -216,6 +230,8 @@ class EvolutionWebhookView(View):
             pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
             pessoa.save(update_fields=['status', 'atualizado_em'])
 
+        # LGPD: nao logamos telefone nem conteudo da mensagem, apenas identificadores.
+        logger.info('Webhook Evolution: entrada registrada (pessoa=%s, bot_atendeu=%s).', pessoa.id, handled)
         return JsonResponse({'detail': 'Mensagem de entrada processada.', 'pessoa_id': pessoa.id}, status=200)
 
     # ------------------------------------------------------------------- status

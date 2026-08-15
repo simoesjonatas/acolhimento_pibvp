@@ -1,5 +1,6 @@
 import csv
 import json
+import logging
 import threading
 from datetime import timedelta
 
@@ -46,6 +47,8 @@ from apps.acolhimento.whatsapp_rules import (
 
 
 PERMISSAO_CONVERSAR_PESSOAS = 'acolhimento.pode_conversar_pessoas'
+
+logger = logging.getLogger(__name__)
 
 
 class MensagensPermissaoMixin(UserPassesTestMixin):
@@ -388,6 +391,7 @@ def _run_execucao_fila(execucao_id: int):
 		if execucao.status == ExecucaoProcessamentoFila.StatusExecucaoChoices.CONCLUIDA:
 			fila_auto.disparar_auto_se_ligado()
 	except Exception as exc:  # pragma: no cover
+		logger.exception('Falha inesperada ao processar a fila (execucao=%s).', execucao_id)
 		execucao.refresh_from_db()
 		_append_execucao_log(execucao, f'Erro inesperado: {exc}')
 		execucao.status = ExecucaoProcessamentoFila.StatusExecucaoChoices.FALHA

@@ -14,6 +14,8 @@ import os
 import sys
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -22,10 +24,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-@m(yg_o#4y1@j%4tefjhye7j-qwr0!*+8f9$0it2^@xv)^&rr#')
+# O fallback abaixo e SO para desenvolvimento (DEBUG=True). Em producao a chave
+# precisa vir do ambiente (validado logo depois de DEBUG).
+_INSECURE_SECRET_KEY = 'django-insecure-@m(yg_o#4y1@j%4tefjhye7j-qwr0!*+8f9$0it2^@xv)^&rr#'
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', _INSECURE_SECRET_KEY)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() == 'true'
+
+# Em producao nao deixamos subir com a chave de desenvolvimento (publica no repo):
+# sem uma SECRET_KEY forte, sessoes e tokens CSRF ficam vulneraveis.
+if not DEBUG and SECRET_KEY == _INSECURE_SECRET_KEY:
+    raise ImproperlyConfigured(
+        'DJANGO_SECRET_KEY nao configurada: defina uma chave forte e aleatoria no '
+        'ambiente antes de rodar com DJANGO_DEBUG=False.'
+    )
 
 def _split_env_list(var_name: str, default: str) -> list[str]:
     raw = os.getenv(var_name, default)
@@ -176,10 +189,19 @@ USE_X_FORWARDED_HOST = True
 
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', 'https://acolhimento.simoesti.com.br').rstrip('/')
 
+# Cabecalhos de seguranca aplicados em qualquer ambiente. Explicitos de proposito:
+# assim nao dependemos dos defaults do framework (que podem mudar entre versoes).
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+SESSION_COOKIE_HTTPONLY = True
+X_FRAME_OPTIONS = 'DENY'
+
 if not DEBUG:
     SECURE_SSL_REDIRECT = os.getenv('DJANGO_SECURE_SSL_REDIRECT', 'True').lower() == 'true'
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    CSRF_COOKIE_SAMESITE = 'Lax'
     SECURE_HSTS_SECONDS = int(os.getenv('DJANGO_SECURE_HSTS_SECONDS', '31536000'))
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
@@ -251,3 +273,45 @@ EVOLUTION_TEXTO_CONTINUAR = os.getenv(
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# ---------------------------------------------------------------------------
+# Logging
+# Saida para stdout (capturada pelo Docker/Gunicorn). Ajuste o nivel do app por
+# ambiente com DJANGO_LOG_LEVEL (INFO em producao, DEBUG para investigar).
+# ---------------------------------------------------------------------------
+LOG_LEVEL = os.getenv('DJANGO_LOG_LEVEL', 'INFO').upper()
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} {name}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Codigo da aplicacao (apps.core, apps.acolhimento, ...).
+        'apps': {
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+    },
+}

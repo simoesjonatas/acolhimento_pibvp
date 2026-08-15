@@ -1,4 +1,5 @@
 import json
+import logging
 
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
@@ -6,7 +7,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.db import connection
 from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, ListView, TemplateView, UpdateView
@@ -18,6 +21,24 @@ from apps.core.forms import PerfilForm, UsuarioCreateForm, UsuarioUpdateForm
 
 
 User = get_user_model()
+
+logger = logging.getLogger(__name__)
+
+
+def healthz(request):
+	"""Healthcheck leve para proxy/monitor: 200 se o banco responde, 503 se nao.
+
+	Publico e sem estado (nao exige login). Faz um SELECT 1 para garantir que a
+	conexao com o banco esta viva (pega o caso 'app no ar, banco fora').
+	"""
+	try:
+		with connection.cursor() as cursor:
+			cursor.execute('SELECT 1')
+			cursor.fetchone()
+	except Exception:
+		logger.exception('Healthcheck falhou: banco inacessivel.')
+		return JsonResponse({'status': 'error', 'database': 'down'}, status=503)
+	return JsonResponse({'status': 'ok'}, status=200)
 
 
 class UsuarioGestaoPermissaoMixin(UserPassesTestMixin):
