@@ -37,9 +37,9 @@ class TelefoneWhatsappUnicoMixin:
         if pessoa_existente is not None:
             if self.revelar_nome_duplicado:
                 raise forms.ValidationError(
-                    f'Ja existe um cadastro com este numero de WhatsApp ({pessoa_existente.nome}).'
+                    f'Já existe um cadastro com este número de WhatsApp ({pessoa_existente.nome}).'
                 )
-            raise forms.ValidationError('Este numero de WhatsApp ja esta cadastrado.')
+            raise forms.ValidationError('Este número de WhatsApp já está cadastrado.')
 
         return telefone
 
@@ -82,6 +82,12 @@ class AutoCadastroPrimeiroContatoForm(TelefoneWhatsappUnicoMixin, forms.ModelFor
             'como_conheceu',
             'o_que_busca',
         ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Opcionais para agilizar o auto cadastro quando ha um grande fluxo de pessoas.
+        self.fields['como_conheceu'].required = False
+        self.fields['o_que_busca'].required = False
 
 
 class PrimeiroContatoAdminForm(TelefoneWhatsappUnicoMixin, forms.ModelForm):

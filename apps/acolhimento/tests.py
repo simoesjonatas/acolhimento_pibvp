@@ -105,6 +105,16 @@ class TelefoneWhatsappUnicoTests(TestCase):
 		self.assertFalse(form.is_valid())
 		self.assertNotIn('Maria', form.errors['telefone_whatsapp'][0])
 
+	def test_auto_cadastro_sem_como_conheceu_e_o_que_busca(self):
+		dados = _dados_form('31988888888')
+		dados.pop('como_conheceu')
+		dados.pop('o_que_busca')
+		form = AutoCadastroPrimeiroContatoForm(data=dados)
+		self.assertTrue(form.is_valid(), form.errors)
+		pessoa = form.save()
+		self.assertEqual(pessoa.como_conheceu, '')
+		self.assertEqual(pessoa.o_que_busca, '')
+
 
 class StatusEvolutivoTests(TestCase):
 	def setUp(self):

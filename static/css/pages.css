@@ -205,6 +205,31 @@
     font-weight: 700;
 }
 
+/* Erros de validacao de formulario (errorlist do Django) */
+.errorlist {
+    list-style: none;
+    margin: 6px 0 8px;
+    padding: 9px 12px;
+    border: 1px solid #e1aaa5;
+    border-left: 3px solid var(--danger);
+    border-radius: var(--radius);
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.errorlist li {
+    margin: 0;
+}
+
+/* Realca o campo que falhou (o input vem logo apos a errorlist no as_p) */
+.errorlist + p input,
+.errorlist + p select,
+.errorlist + p textarea {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 2px rgba(163, 58, 50, 0.12);
+}
+
 .is-hidden {
     display: none !important;
 }
