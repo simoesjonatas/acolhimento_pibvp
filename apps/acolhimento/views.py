@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.http import HttpResponse
@@ -110,7 +111,11 @@ class PrimeiroContatoQuerysetMixin:
 		origem = self.request.GET.get('origem', '').strip()
 		iniciou_interacao = self.request.GET.get('iniciou_interacao', '').strip()
 		janela = self.request.GET.get('janela', '').strip()
+		meus = self.request.GET.get('meus', '').strip()
 		sort_coluna, direcao = self.get_sort_state()
+
+		if meus == '1':
+			queryset = queryset.filter(responsavel_atual=self.request.user)
 
 		if busca:
 			queryset = queryset.filter(
@@ -185,6 +190,7 @@ class PrimeiroContatoListView(LoginRequiredMixin, PrimeiroContatoQuerysetMixin, 
 		context['origem_atual'] = self.request.GET.get('origem', '').strip()
 		context['iniciou_interacao_atual'] = self.request.GET.get('iniciou_interacao', '').strip()
 		context['janela_atual'] = self.request.GET.get('janela', '').strip()
+		context['meus_atual'] = self.request.GET.get('meus', '').strip()
 		context['origem_choices'] = PrimeiroContato.OrigemCadastroChoices.choices
 		context['sort_coluna_atual'] = sort_coluna_atual
 		context['sort_direcao_atual'] = sort_direcao_atual
@@ -818,6 +824,15 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		context['pode_ver_questionario'] = pode_ver_questionario
 		context['pode_excluir_convite'] = user.is_staff or user.is_superuser
 
+		pode_gerenciar_responsavel = user.is_staff or user.is_superuser
+		context['pode_gerenciar_responsavel'] = pode_gerenciar_responsavel
+		if pode_gerenciar_responsavel:
+			context['usuarios_responsaveis'] = (
+				get_user_model().objects.filter(is_active=True).order_by('first_name', 'username')
+			)
+		else:
+			context['usuarios_responsaveis'] = get_user_model().objects.none()
+
 		if pode_ver_questionario:
 			convites = list(self.object.convites_questionario.select_related('questionario'))
 			for convite in convites:
@@ -872,6 +887,45 @@ class PrimeiroContatoStatusUpdateView(LoginRequiredMixin, View):
 		)
 
 		messages.success(request, f'Status atualizado para "{pessoa.get_status_display()}".')
+		return redirect('pessoas-detalhe', pk=pessoa.pk)
+
+
+class PrimeiroContatoResponsavelUpdateView(LoginRequiredMixin, AdminPermissaoMixin, View):
+	"""Associa ou troca o responsavel atual. Apenas staff/superuser podem alterar."""
+
+	@staticmethod
+	def _rotulo(usuario):
+		if usuario is None:
+			return 'Ninguem'
+		return usuario.get_full_name() or usuario.get_username()
+
+	def post(self, request, pk, *args, **kwargs):
+		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		responsavel_id = (request.POST.get('responsavel_atual') or '').strip()
+
+		if responsavel_id:
+			novo_responsavel = get_user_model().objects.filter(pk=responsavel_id, is_active=True).first()
+			if novo_responsavel is None:
+				messages.error(request, 'Responsavel invalido.')
+				return redirect('pessoas-detalhe', pk=pessoa.pk)
+		else:
+			novo_responsavel = None
+
+		anterior = pessoa.responsavel_atual
+		if novo_responsavel == anterior:
+			messages.info(request, 'Nenhuma alteracao no responsavel.')
+			return redirect('pessoas-detalhe', pk=pessoa.pk)
+
+		pessoa.responsavel_atual = novo_responsavel
+		pessoa.save(update_fields=['responsavel_atual', 'atualizado_em'])
+
+		InteracaoAcolhimento.objects.create(
+			pessoa=pessoa,
+			tipo=InteracaoAcolhimento.TipoInteracao.OBSERVACAO,
+			descricao=f'Responsavel alterado de "{self._rotulo(anterior)}" para "{self._rotulo(novo_responsavel)}".',
+		)
+
+		messages.success(request, f'Responsavel atualizado para "{self._rotulo(novo_responsavel)}".')
 		return redirect('pessoas-detalhe', pk=pessoa.pk)
 
 

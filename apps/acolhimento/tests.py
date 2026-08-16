@@ -1492,3 +1492,80 @@ class AtendimentoBotTests(TestCase):
 		self.client.logout()
 		self.client.login(username='bot_comum', password='x')
 		self.assertEqual(self.client.get(url).status_code, 403)
+
+
+@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+class ResponsavelAtualTests(TestCase):
+	def setUp(self):
+		User = get_user_model()
+		self.staff = User.objects.create_user(username='staff_resp', password='x', is_staff=True, first_name='Ana')
+		self.comum = User.objects.create_user(username='comum_resp', password='x', is_staff=False, first_name='Bia')
+		self.pessoa = PrimeiroContato.objects.create(
+			nome='Contato Um',
+			telefone_whatsapp='31955550001',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+		)
+
+	def test_staff_associa_responsavel(self):
+		self.client.force_login(self.staff)
+		resp = self.client.post(
+			reverse('pessoas-responsavel', args=[self.pessoa.pk]),
+			{'responsavel_atual': self.comum.pk},
+		)
+		self.assertEqual(resp.status_code, 302)
+		self.pessoa.refresh_from_db()
+		self.assertEqual(self.pessoa.responsavel_atual, self.comum)
+		self.assertTrue(
+			self.pessoa.interacoes.filter(descricao__icontains='Responsavel alterado').exists()
+		)
+
+	def test_staff_remove_responsavel(self):
+		self.pessoa.responsavel_atual = self.comum
+		self.pessoa.save(update_fields=['responsavel_atual'])
+		self.client.force_login(self.staff)
+		resp = self.client.post(
+			reverse('pessoas-responsavel', args=[self.pessoa.pk]),
+			{'responsavel_atual': ''},
+		)
+		self.assertEqual(resp.status_code, 302)
+		self.pessoa.refresh_from_db()
+		self.assertIsNone(self.pessoa.responsavel_atual)
+
+	def test_usuario_comum_nao_pode_alterar_responsavel(self):
+		self.client.force_login(self.comum)
+		resp = self.client.post(
+			reverse('pessoas-responsavel', args=[self.pessoa.pk]),
+			{'responsavel_atual': self.comum.pk},
+		)
+		self.assertEqual(resp.status_code, 403)
+		self.pessoa.refresh_from_db()
+		self.assertIsNone(self.pessoa.responsavel_atual)
+
+	def test_detalhe_mostra_form_apenas_para_staff(self):
+		self.client.force_login(self.staff)
+		resp = self.client.get(reverse('pessoas-detalhe', args=[self.pessoa.pk]))
+		self.assertContains(resp, 'Responsavel atual')
+		self.assertContains(resp, 'Associar / trocar responsavel')
+
+		self.client.force_login(self.comum)
+		resp = self.client.get(reverse('pessoas-detalhe', args=[self.pessoa.pk]))
+		self.assertContains(resp, 'Responsavel atual')
+		self.assertNotContains(resp, 'Associar / trocar responsavel')
+
+	def test_filtro_meus_contatos(self):
+		PrimeiroContato.objects.create(
+			nome='Minha Pessoa',
+			telefone_whatsapp='31955550002',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			responsavel_atual=self.comum,
+		)
+		self.client.force_login(self.comum)
+		resp = self.client.get(reverse('pessoas-lista'), {'meus': '1'})
+		self.assertEqual(resp.status_code, 200)
+		nomes = [p.nome for p in resp.context['pessoas']]
+		self.assertIn('Minha Pessoa', nomes)
+		self.assertNotIn('Contato Um', nomes)

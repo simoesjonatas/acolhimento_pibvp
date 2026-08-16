@@ -179,6 +179,33 @@
                 </form>
             </article>
 
+            <article class="person-summary-card responsavel-card">
+                <h2>Responsavel atual</h2>
+                <p class="responsavel-atual-nome">
+                    {% if pessoa.responsavel_atual %}
+                    <strong>{{ pessoa.responsavel_atual.get_full_name|default:pessoa.responsavel_atual.username }}</strong>
+                    {% else %}
+                    <span class="table-muted-text">Ninguem associado ainda.</span>
+                    {% endif %}
+                </p>
+                {% if pode_gerenciar_responsavel %}
+                <form method="post" action="{% url 'pessoas-responsavel' pessoa.pk %}" class="status-change-form">
+                    {% csrf_token %}
+                    <label for="responsavel-select">Associar / trocar responsavel</label>
+                    <select name="responsavel_atual" id="responsavel-select">
+                        <option value="">— Ninguem —</option>
+                        {% for usuario in usuarios_responsaveis %}
+                        <option value="{{ usuario.pk }}" {% if pessoa.responsavel_atual_id == usuario.pk %}selected{% endif %}>{{ usuario.get_full_name|default:usuario.username }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        <span class="btn-text">Salvar responsavel</span>
+                    </button>
+                </form>
+                {% endif %}
+            </article>
+
             {% if pode_ver_questionario %}
             {% if is_participante %}
             <article class="person-summary-card questionario-card">
