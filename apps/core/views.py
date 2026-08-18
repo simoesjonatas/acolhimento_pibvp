@@ -1,6 +1,8 @@
 import json
 import logging
+from datetime import timedelta
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth import get_user_model
@@ -64,9 +66,19 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 	template_name = 'dashboard.html'
 
 	def get_pessoas_boas_vindas_queryset(self):
-		return PrimeiroContato.objects.filter(
-			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO
-		)
+		# Nao manda boas-vindas para quem JA iniciou a conversa (o webhook marca
+		# iniciou_interacao=True quando a pessoa escreve primeiro pelo botao wa.me):
+		# nesse caso o atendimento reativo (bot) ja assume, sem cold outreach.
+		queryset = PrimeiroContato.objects.filter(
+			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO,
+		).exclude(iniciou_interacao=True)
+		# Carencia opt-in-first: da tempo da pessoa iniciar sozinha antes de mandarmos
+		# a 1a mensagem. HORAS_ESPERA_OPTIN=0 (padrao) desliga a carencia.
+		horas_espera = int(getattr(settings, 'HORAS_ESPERA_OPTIN', 0) or 0)
+		if horas_espera > 0:
+			limite = timezone.now() - timedelta(hours=horas_espera)
+			queryset = queryset.filter(criado_em__lte=limite)
+		return queryset
 
 	def post(self, request, *args, **kwargs):
 		if not (request.user.is_staff or request.user.is_superuser):
@@ -142,11 +154,15 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 					direcao=MensagemContato.DirecaoChoices.SAIDA,
 					status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
 					prioridade=5,
-					agendada_para=None,
 					conteudo=conteudo,
 					metadata_envio=metadata_envio,
 				)
 			)
+
+		# Espaca os envios no tempo (staggering) para evitar bloqueio por disparo em
+		# massa: a 1a sai agora e as demais em intervalos aleatorios (config de ritmo).
+		from apps.acolhimento import fila_auto
+		fila_auto.escalonar_agendamento(mensagens)
 
 		MensagemContato.objects.bulk_create(mensagens)
 		PrimeiroContato.objects.filter(
@@ -154,7 +170,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 		).update(status=PrimeiroContato.StatusAcolhimento.ROBO)
 
 		# Processamento automatico: bulk_create nao emite signal, entao dispara aqui.
-		from apps.acolhimento import fila_auto
+		# (O cron deve rodar a cada minuto para drenar os disparos espacados no tempo.)
 		fila_auto.agendar_disparo_auto()
 
 		messages.success(

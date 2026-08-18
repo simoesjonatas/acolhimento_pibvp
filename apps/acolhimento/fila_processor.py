@@ -1,15 +1,22 @@
+import random
 import re
+import time
 from typing import Callable
 
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 
-from apps.acolhimento.models import MensagemContato
+from apps.acolhimento.models import ConfiguracaoProcessamentoFila, MensagemContato
 from apps.acolhimento import whatsapp_gateway as gateway
 
 
 ProgressCallback = Callable[[str], None]
 ShouldStopCallback = Callable[[], bool]
+
+# Pausa (segundos) entre dois envios REAIS na mesma rodada. Guarda secundaria: o
+# espacamento principal vem do `agendada_para` (staggering no enfileiramento);
+# este jitter protege contra rajada quando varias mensagens vencem juntas.
+_PAUSA_ENTRE_ENVIOS_SEG = (2.0, 6.0)
 
 
 def normalize_phone_br(raw_phone: str) -> str:
@@ -72,7 +79,12 @@ def processar_fila_mensagens(
 ) -> dict:
     ids = ids or []
     limit = max(int(limit), 0)
+    agora = timezone.now()
 
+    # So processa o que ja "venceu": mensagens sem agendamento (envio imediato,
+    # ex.: respostas do bot) ou agendadas para <= agora. O staggering no
+    # enfileiramento usa `agendada_para` para espacar os disparos e evitar o
+    # bloqueio por flood (dezenas de mensagens no mesmo instante).
     queryset = (
         MensagemContato.objects.select_related('pessoa')
         .filter(
@@ -80,7 +92,8 @@ def processar_fila_mensagens(
             canal=MensagemContato.CanalChoices.WHATSAPP,
             direcao=MensagemContato.DirecaoChoices.SAIDA,
         )
-        .order_by('prioridade', 'enfileirada_em', 'id')
+        .filter(Q(agendada_para__isnull=True) | Q(agendada_para__lte=agora))
+        .order_by('prioridade', F('agendada_para').asc(nulls_first=True), 'enfileirada_em', 'id')
     )
 
     if ids:
@@ -93,10 +106,25 @@ def processar_fila_mensagens(
         if dry_run:
             progress_callback('Executando em DRY RUN (sem envio real).')
 
+    # Teto diario (0 = ilimitado): trava anti-bloqueio para "esquentar" numeros
+    # novos (comece baixo e aumente aos poucos).
+    cfg = ConfiguracaoProcessamentoFila.carregar()
+    teto_diario = int(cfg.teto_diario or 0)
+    enviadas_hoje = 0
+    if teto_diario > 0:
+        inicio_dia = timezone.localtime(agora).replace(hour=0, minute=0, second=0, microsecond=0)
+        enviadas_hoje = MensagemContato.objects.filter(
+            direcao=MensagemContato.DirecaoChoices.SAIDA,
+            canal=MensagemContato.CanalChoices.WHATSAPP,
+            status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+            enviada_em__gte=inicio_dia,
+        ).count()
+
     sucesso = 0
     falha = 0
     processadas = 0
     interrompido = False
+    pausar_antes_do_proximo = False
 
     for mensagem in mensagens:
         if should_stop and should_stop():
@@ -104,6 +132,20 @@ def processar_fila_mensagens(
             if progress_callback:
                 progress_callback('Processamento interrompido por solicitacao do usuario.')
             break
+
+        if teto_diario > 0 and enviadas_hoje >= teto_diario and not dry_run:
+            if progress_callback:
+                progress_callback(
+                    f'Teto diario atingido ({enviadas_hoje}/{teto_diario}). '
+                    'Parando por hoje (anti-bloqueio).'
+                )
+            break
+
+        # Espacamento entre envios reais (jitter): so pausa quando o item anterior
+        # de fato foi enviado pela rede.
+        if pausar_antes_do_proximo and not dry_run:
+            time.sleep(random.uniform(*_PAUSA_ENTRE_ENVIOS_SEG))
+        pausar_antes_do_proximo = False
 
         bloqueio = gateway.motivo_bloqueio_mensagem(mensagem)
         if bloqueio:
@@ -189,6 +231,7 @@ def processar_fila_mensagens(
             )
             falha += 1
             processadas += 1
+            pausar_antes_do_proximo = True
             if progress_callback:
                 progress_callback(f'[{mensagem.id}] Falha no envio: {exc}')
             continue
@@ -213,6 +256,8 @@ def processar_fila_mensagens(
         )
         sucesso += 1
         processadas += 1
+        enviadas_hoje += 1
+        pausar_antes_do_proximo = True
         if progress_callback:
             progress_callback(
                 f"[{mensagem.id}] {envelope['provider']} status={envelope['status_label']} ref={mensagem.referencia_externa}"

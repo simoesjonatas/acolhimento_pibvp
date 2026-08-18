@@ -1,8 +1,10 @@
 import csv
 import json
 import logging
+import re
 import threading
 from datetime import timedelta
+from urllib.parse import quote
 
 from django.conf import settings
 from django.contrib import messages
@@ -687,6 +689,18 @@ class AutoCadastroCreateView(CreateView):
 
 class AutoCadastroSuccessView(TemplateView):
 	template_name = 'auto_cadastro_sucesso.html'
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		# Opt-in-first (anti-bloqueio): oferece a PESSOA iniciar a conversa. Quando ela
+		# manda a 1a mensagem, o webhook marca iniciou_interacao=True e o atendimento
+		# reativo assume — sem cold outreach (o maior fator de bloqueio do WhatsApp).
+		numero = re.sub(r'\D', '', getattr(settings, 'PIB_WHATSAPP_NUMERO_OPTIN', '') or '')
+		if numero:
+			texto = (getattr(settings, 'PIB_WHATSAPP_OPTIN_TEXTO', '') or '').strip()
+			sufixo = f'?text={quote(texto)}' if texto else ''
+			context['whatsapp_optin_url'] = f'https://wa.me/{numero}{sufixo}'
+		return context
 
 
 class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):

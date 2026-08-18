@@ -25,6 +25,7 @@ import threading
 from datetime import timedelta
 
 from django.db import close_old_connections, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.acolhimento.fila_processor import processar_fila_mensagens
@@ -54,11 +55,47 @@ def ha_execucao_ativa() -> bool:
 
 
 def ha_pendentes_saida() -> bool:
-    return MensagemContato.objects.filter(
-        direcao=MensagemContato.DirecaoChoices.SAIDA,
-        canal=MensagemContato.CanalChoices.WHATSAPP,
-        status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
-    ).exists()
+    """True se ha mensagem PENDENTE ja VENCIDA (pronta para enviar agora).
+
+    Considera vencidas as sem agendamento (`agendada_para` nulo) ou agendadas para
+    <= agora. Mensagens agendadas para o futuro (staggering anti-bloqueio) nao
+    contam aqui: elas so entram quando chega a hora — por isso o cron deve rodar
+    periodicamente (a cada minuto) para drenar os disparos espacados.
+    """
+    agora = timezone.now()
+    return (
+        MensagemContato.objects.filter(
+            direcao=MensagemContato.DirecaoChoices.SAIDA,
+            canal=MensagemContato.CanalChoices.WHATSAPP,
+            status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+        )
+        .filter(Q(agendada_para__isnull=True) | Q(agendada_para__lte=agora))
+        .exists()
+    )
+
+
+def escalonar_agendamento(mensagens, *, base=None):
+    """Distribui `agendada_para` nas mensagens para espacar os envios no tempo.
+
+    Recebe uma lista de instancias `MensagemContato` (ainda NAO salvas), a primeira
+    sai imediatamente (dentro da janela de horario permitido) e cada seguinte fica a
+    um intervalo aleatorio (config) da anterior. Isso evita o bloqueio por disparo em
+    massa (dezenas de mensagens iguais no mesmo instante). Retorna a mesma lista.
+
+    O processador so envia mensagens ja vencidas; o cron (a cada minuto) drena os
+    disparos conforme cada horario chega.
+    """
+    if not mensagens:
+        return mensagens
+    cfg = ConfiguracaoProcessamentoFila.carregar()
+    momento = cfg.proximo_horario_valido(base or timezone.now())
+    for indice, mensagem in enumerate(mensagens):
+        if indice > 0:
+            momento = cfg.proximo_horario_valido(
+                momento + timedelta(seconds=cfg.intervalo_aleatorio_seg())
+            )
+        mensagem.agendada_para = momento
+    return mensagens
 
 
 def _append_execucao_log(execucao: ExecucaoProcessamentoFila, texto: str) -> None:

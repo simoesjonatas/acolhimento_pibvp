@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from apps.acolhimento.forms import PrimeiroContatoAdminForm
-from apps.acolhimento.models import CampanhaComunicacao, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato, TemplateWhatsapp
+from apps.acolhimento.models import CampanhaComunicacao, ConfiguracaoProcessamentoFila, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato, TemplateWhatsapp
 
 
 @admin.register(PrimeiroContato)
@@ -72,3 +72,34 @@ class TemplateWhatsappAdmin(admin.ModelAdmin):
 	list_display = ('tipo', 'content_sid', 'atualizado_em', 'atualizado_por')
 	search_fields = ('tipo', 'content_sid', 'texto_evolution')
 	readonly_fields = ('atualizado_em',)
+
+
+@admin.register(ConfiguracaoProcessamentoFila)
+class ConfiguracaoProcessamentoFilaAdmin(admin.ModelAdmin):
+	list_display = (
+		'__str__',
+		'intervalo_min_seg',
+		'intervalo_max_seg',
+		'teto_diario',
+		'janela_envio_inicio',
+		'janela_envio_fim',
+		'atualizado_em',
+	)
+	readonly_fields = ('atualizado_em',)
+	fieldsets = (
+		(None, {'fields': ('auto_ativo',)}),
+		('Ritmo anti-bloqueio', {
+			'description': (
+				'Espaca os envios para nao parecer disparo em massa. Modo seguro: '
+				'intervalo 60-120s, teto diario baixo ao esquentar um numero novo, '
+				'envio so em horario comercial.'
+			),
+			'fields': (
+				('intervalo_min_seg', 'intervalo_max_seg'),
+				'teto_diario',
+				('janela_envio_inicio', 'janela_envio_fim'),
+				('delay_digitando_min_ms', 'delay_digitando_max_ms'),
+			),
+		}),
+		('Auditoria', {'fields': ('atualizado_por', 'atualizado_em')}),
+	)

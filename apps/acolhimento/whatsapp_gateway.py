@@ -12,8 +12,8 @@ from typing import Any
 from django.conf import settings
 from django.utils import timezone
 
-from apps.acolhimento import evolution_service, template_config, twilio_service
-from apps.acolhimento.models import MensagemContato, TemplateWhatsapp
+from apps.acolhimento import evolution_service, mensagem_variacao, template_config, twilio_service
+from apps.acolhimento.models import ConfiguracaoProcessamentoFila, MensagemContato, TemplateWhatsapp
 from apps.acolhimento import whatsapp_rules
 
 
@@ -41,6 +41,25 @@ def motivo_bloqueio_mensagem(mensagem: MensagemContato):
     return whatsapp_rules.motivo_bloqueio_mensagem(mensagem)
 
 
+def _variar(texto: str, mensagem: MensagemContato) -> str:
+    """Aplica variacao leve e deterministica (anti-bloqueio) ao texto de template.
+
+    Seed = id da mensagem: cada pessoa recebe uma versao distinta do texto, e
+    reenviar a mesma mensagem mantem o resultado estavel.
+    """
+    nome = getattr(mensagem.pessoa, 'nome', '') or ''
+    return mensagem_variacao.variar_texto(texto, nome=nome, seed=mensagem.id)
+
+
+def _delay_digitando_ms(texto: str) -> int:
+    """Tempo de 'digitando...' (composing) antes do envio, conforme a configuracao."""
+    cfg = ConfiguracaoProcessamentoFila.carregar()
+    base = cfg.delay_digitando_ms()
+    # Escala leve pelo tamanho do texto (mais texto = "digita" um pouco mais).
+    extra = min(len(texto or '') * 20, 2000)
+    return base + extra
+
+
 def _texto_para_evolution(mensagem: MensagemContato) -> str:
     """No Baileys nao ha template: 'traduz' as mensagens de template em texto simples."""
     metadata = dict(mensagem.metadata_envio or {})
@@ -58,7 +77,7 @@ def _texto_para_evolution(mensagem: MensagemContato) -> str:
                 'Mensagem de boas-vindas do WhatsApp nao configurada. '
                 'Defina o texto na tela de configuracao de templates.'
             )
-        return texto
+        return _variar(texto, mensagem)
     if tipo == 'continuar_conversa':
         texto = (metadata.get('evolution_texto') or '').strip()
         if not texto:
@@ -71,7 +90,7 @@ def _texto_para_evolution(mensagem: MensagemContato) -> str:
                 'Mensagem de continuacao do WhatsApp nao configurada. '
                 'Defina o texto na tela de configuracao de templates.'
             )
-        return texto
+        return _variar(texto, mensagem)
     # Mensagem livre (ou template de marketing, que no Baileys deve usar modo livre):
     # o proprio conteudo ja e o texto a enviar.
     return mensagem.conteudo or ''
@@ -79,8 +98,11 @@ def _texto_para_evolution(mensagem: MensagemContato) -> str:
 
 def _enviar_evolution(mensagem: MensagemContato, destino: str) -> dict[str, Any]:
     texto = _texto_para_evolution(mensagem)
+    delay_ms = _delay_digitando_ms(texto)
     try:
-        resultado = evolution_service.send_whatsapp_text(to_phone=destino, text=texto)
+        resultado = evolution_service.send_whatsapp_text(
+            to_phone=destino, text=texto, delay_ms=delay_ms
+        )
     except evolution_service.EvolutionWhatsAppError as exc:
         raise WhatsAppSendError(str(exc)) from exc
 

@@ -99,14 +99,22 @@ def configure_webhook(*, enabled: bool = True) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def send_whatsapp_text(*, to_phone: str, text: str) -> dict[str, Any]:
-    """Envia texto simples. Retorna dict normalizado (sid/status/to/raw)."""
+def send_whatsapp_text(*, to_phone: str, text: str, delay_ms: int | None = None) -> dict[str, Any]:
+    """Envia texto simples. Retorna dict normalizado (sid/status/to/raw).
+
+    `delay_ms` (opcional): quando > 0, a Evolution mostra "digitando..." (presenca
+    composing) por esse tempo antes de enviar. Deixa o envio mais humano e ajuda a
+    evitar bloqueio por disparo em massa.
+    """
     if not (text or '').strip():
         raise EvolutionWhatsAppError('Mensagem vazia: informe um texto para enviar.')
 
     instance = settings.EVOLUTION_INSTANCE
     number = _digits(to_phone)
-    status, data = _post(f'/message/sendText/{instance}', {'number': number, 'text': text})
+    payload: dict[str, Any] = {'number': number, 'text': text}
+    if delay_ms and int(delay_ms) > 0:
+        payload['delay'] = int(delay_ms)
+    status, data = _post(f'/message/sendText/{instance}', payload)
 
     if not isinstance(data, dict):
         raise EvolutionWhatsAppError(f'Resposta inesperada da API de WhatsApp: {data!r}')

@@ -269,6 +269,22 @@ EVOLUTION_TEXTO_CONTINUAR = os.getenv(
     'Ola {nome}, tudo bem? Podemos continuar nossa conversa?',
 )
 
+# ---------------------------------------------------------------------------
+# Opt-in-first (anti-bloqueio): faz a PESSOA iniciar a conversa.
+# O maior fator de bloqueio e nos mandarmos a 1a mensagem para quem nunca
+# escreveu. PIB_WHATSAPP_NUMERO_OPTIN e o numero da igreja (com DDI) usado no
+# botao "abrir WhatsApp e falar com a gente" da tela de sucesso do auto-cadastro.
+# Quando vazio, o botao nao aparece.
+# ---------------------------------------------------------------------------
+PIB_WHATSAPP_NUMERO_OPTIN = os.getenv('PIB_WHATSAPP_NUMERO_OPTIN', '').strip()
+PIB_WHATSAPP_OPTIN_TEXTO = os.getenv(
+    'PIB_WHATSAPP_OPTIN_TEXTO',
+    'Oi! Acabei de me cadastrar no acolhimento da PIBVP e gostaria de conversar.',
+)
+# Carencia (em horas) antes de incluir alguem no disparo pausado de boas-vindas:
+# da tempo da pessoa iniciar a conversa sozinha pelo botao acima. 0 = sem carencia.
+HORAS_ESPERA_OPTIN = int(os.getenv('HORAS_ESPERA_OPTIN', '0'))
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 

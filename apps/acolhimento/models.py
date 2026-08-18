@@ -1,4 +1,6 @@
+import random
 import uuid
+from datetime import timedelta
 
 from django.db import models
 from django.core.validators import RegexValidator
@@ -319,9 +321,26 @@ class ExecucaoProcessamentoFila(models.Model):
 
 
 class ConfiguracaoProcessamentoFila(models.Model):
-	"""Singleton (pk=1) com o switch do processamento automatico da fila."""
+	"""Singleton (pk=1): switch + ritmo anti-bloqueio do processamento da fila.
+
+	Os campos de ritmo espalham os envios no tempo para nao parecer disparo em
+	massa (o que faz o WhatsApp bloquear a conta). Defaults calibrados no modo
+	"seguro" (~1 msg a cada 60-120s, em horario comercial, com 'digitando...').
+	"""
 
 	auto_ativo = models.BooleanField(default=False)
+	# Intervalo entre uma mensagem e a proxima, sorteado nesta faixa (segundos).
+	intervalo_min_seg = models.PositiveIntegerField(default=60)
+	intervalo_max_seg = models.PositiveIntegerField(default=120)
+	# Teto de mensagens ENVIADAS por dia (0 = sem limite). Comece baixo (20-30) ao
+	# "esquentar" um numero novo e aumente aos poucos.
+	teto_diario = models.PositiveIntegerField(default=0)
+	# Janela de horario permitido (hora local, 0-23). Evita disparo de madrugada.
+	janela_envio_inicio = models.PositiveSmallIntegerField(default=8)
+	janela_envio_fim = models.PositiveSmallIntegerField(default=21)
+	# "Digitando..." (composing) que a Evolution simula antes de enviar (ms).
+	delay_digitando_min_ms = models.PositiveIntegerField(default=1200)
+	delay_digitando_max_ms = models.PositiveIntegerField(default=3500)
 	atualizado_por = models.ForeignKey(
 		settings.AUTH_USER_MODEL,
 		on_delete=models.SET_NULL,
@@ -346,6 +365,43 @@ class ConfiguracaoProcessamentoFila(models.Model):
 	@classmethod
 	def auto_ligado(cls) -> bool:
 		return cls.objects.filter(pk=1, auto_ativo=True).exists()
+
+	def intervalo_aleatorio_seg(self) -> int:
+		"""Segundos ate a proxima mensagem (jitter aleatorio na faixa configurada)."""
+		minimo = max(int(self.intervalo_min_seg or 0), 0)
+		maximo = max(int(self.intervalo_max_seg or 0), minimo)
+		return random.randint(minimo, maximo)
+
+	def delay_digitando_ms(self) -> int:
+		"""Milissegundos de 'digitando...' antes do envio (jitter aleatorio)."""
+		minimo = max(int(self.delay_digitando_min_ms or 0), 0)
+		maximo = max(int(self.delay_digitando_max_ms or 0), minimo)
+		return random.randint(minimo, maximo)
+
+	def _janela_restringe(self) -> bool:
+		inicio = int(self.janela_envio_inicio or 0)
+		fim = int(self.janela_envio_fim or 0)
+		return 0 <= inicio < fim <= 24
+
+	def proximo_horario_valido(self, dt):
+		"""Empurra `dt` (aware) para dentro da janela de horario permitido (hora local).
+
+		Se a janela estiver desligada/invalida, devolve `dt` sem alterar. Se `dt`
+		cair antes do inicio, adianta para o inicio do mesmo dia; se cair depois do
+		fim, joga para o inicio da janela no dia seguinte.
+		"""
+		if not self._janela_restringe():
+			return dt
+		inicio = int(self.janela_envio_inicio)
+		fim = int(self.janela_envio_fim)
+		local = timezone.localtime(dt)
+		if local.hour < inicio:
+			local = local.replace(hour=inicio, minute=0, second=0, microsecond=0)
+		elif local.hour >= fim:
+			local = (local + timedelta(days=1)).replace(
+				hour=inicio, minute=0, second=0, microsecond=0
+			)
+		return local
 
 
 class Questionario(models.Model):

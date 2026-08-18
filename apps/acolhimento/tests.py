@@ -9,10 +9,12 @@ from django.utils import timezone
 from django.urls import reverse
 
 from apps.acolhimento import atendimento_bot
+from apps.acolhimento import evolution_service, fila_auto, mensagem_variacao, whatsapp_gateway
 from apps.acolhimento.fila_processor import processar_fila_mensagens
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, PerguntaForm, PrimeiroContatoForm, RelatorioPessoasForm, ResponderQuestionarioForm
 from apps.acolhimento.models import (
 	ConfiguracaoAtendimentoBot,
+	ConfiguracaoProcessamentoFila,
 	ConviteQuestionario,
 	InteracaoAcolhimento,
 	MensagemContato,
@@ -1332,10 +1334,15 @@ class EvolutionGatewayTextoTests(TestCase):
 			send.return_value = {'sid': 'EV123', 'status': 'sent'}
 			envelope = whatsapp_gateway.enviar(mensagem, '+5531999990000')
 
-		send.assert_called_once_with(
-			to_phone='+5531999990000',
-			text='Ola Lia, seja bem-vinda!',
-		)
+		# Com a variacao anti-bloqueio a saudacao/emoji podem mudar, mas o corpo
+		# configurado no banco (com o nome substituido) deve ser preservado, e o
+		# delay de "digitando..." deve ser repassado.
+		self.assertEqual(send.call_count, 1)
+		_, kwargs = send.call_args
+		self.assertEqual(kwargs['to_phone'], '+5531999990000')
+		self.assertIn('Lia, seja bem-vinda!', kwargs['text'])
+		self.assertNotIn('{nome}', kwargs['text'])
+		self.assertGreater(kwargs['delay_ms'], 0)
 		self.assertEqual(envelope['provider'], 'evolution')
 		self.assertEqual(envelope['referencia_externa'], 'EV123')
 
@@ -1673,3 +1680,204 @@ class FilaConfiabilidadeTests(TestCase):
 		execucao.refresh_from_db()
 		self.assertEqual(recuperadas, 0)
 		self.assertEqual(execucao.status, ExecucaoProcessamentoFila.StatusExecucaoChoices.EXECUTANDO)
+
+
+def _pessoa(nome='Maria', telefone='31999990000', **extra):
+	return PrimeiroContato.objects.create(
+		nome=nome,
+		telefone_whatsapp=telefone,
+		primeira_vez=True,
+		como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+		o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+		**extra,
+	)
+
+
+class VariacaoMensagemTests(TestCase):
+	"""Variacao automatica do texto (anti-bloqueio): sem duas mensagens byte a byte iguais."""
+
+	def test_substitui_nome_e_remove_placeholder(self):
+		texto = mensagem_variacao.variar_texto('Ola {nome}!', nome='Maria', seed=1, hora=10)
+		self.assertIn('Maria', texto)
+		self.assertNotIn('{nome}', texto)
+
+	def test_sem_nome_usa_fallback(self):
+		texto = mensagem_variacao.variar_texto('Ola {nome}!', nome='', seed=1, hora=10)
+		self.assertIn('amigo(a)', texto)
+
+	def test_deterministico_por_seed(self):
+		base = 'Ola {nome}! Podemos conversar?'
+		a = mensagem_variacao.variar_texto(base, nome='Ana', seed=42, hora=9)
+		b = mensagem_variacao.variar_texto(base, nome='Ana', seed=42, hora=9)
+		self.assertEqual(a, b)
+
+	def test_seeds_diferentes_geram_variacoes(self):
+		base = 'Ola {nome}! Podemos conversar?'
+		variantes = {
+			mensagem_variacao.variar_texto(base, nome='amigo(a)', seed=s, hora=9)
+			for s in range(30)
+		}
+		self.assertGreater(len(variantes), 1)
+
+	def test_saudacao_inicial_varia(self):
+		saudacoes = {
+			mensagem_variacao.variar_texto('Ola {nome}!', nome='Jo', seed=s, hora=9).split()[0]
+			for s in range(30)
+		}
+		self.assertGreater(len(saudacoes), 1)
+
+
+class EscalonamentoAgendamentoTests(TestCase):
+	"""Staggering: o disparo em massa distribui `agendada_para` no tempo."""
+
+	def setUp(self):
+		self.pessoa = _pessoa(telefone='31999990001')
+		cfg = ConfiguracaoProcessamentoFila.carregar()
+		cfg.intervalo_min_seg = 120
+		cfg.intervalo_max_seg = 120
+		cfg.janela_envio_inicio = 0
+		cfg.janela_envio_fim = 24
+		cfg.save()
+
+	def test_agendamento_crescente_e_espacado(self):
+		msgs = [
+			MensagemContato(
+				pessoa=self.pessoa,
+				canal=MensagemContato.CanalChoices.WHATSAPP,
+				direcao=MensagemContato.DirecaoChoices.SAIDA,
+				conteudo=f'msg {i}',
+			)
+			for i in range(5)
+		]
+		fila_auto.escalonar_agendamento(msgs)
+		tempos = [m.agendada_para for m in msgs]
+		self.assertTrue(all(t is not None for t in tempos))
+		for anterior, atual in zip(tempos, tempos[1:]):
+			self.assertEqual((atual - anterior).total_seconds(), 120)
+
+
+@override_settings(WHATSAPP_PROVIDER='evolution')
+class FilaVencidasTests(TestCase):
+	"""O processador so seleciona mensagens ja vencidas (agendada_para nulo ou <= agora)."""
+
+	def setUp(self):
+		self.pessoa = _pessoa(telefone='31988887777')
+
+	def _msg(self, agendada_para):
+		return MensagemContato.objects.create(
+			pessoa=self.pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.SAIDA,
+			status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+			conteudo='oi',
+			agendada_para=agendada_para,
+		)
+
+	def test_so_seleciona_vencidas(self):
+		agora = timezone.now()
+		self._msg(agora - timedelta(minutes=1))  # vencida
+		self._msg(agora + timedelta(hours=2))    # futura (nao deve entrar)
+		self._msg(None)                          # sem agendamento = imediata
+		resultado = processar_fila_mensagens(dry_run=True)
+		self.assertEqual(resultado['total_selecionado'], 2)
+
+
+@override_settings(WHATSAPP_PROVIDER='evolution')
+class TetoDiarioTests(TestCase):
+	"""Teto diario interrompe a rodada ao atingir o limite (warm-up de numero novo)."""
+
+	def setUp(self):
+		self.pessoa = _pessoa(telefone='31977776666')
+		cfg = ConfiguracaoProcessamentoFila.carregar()
+		cfg.teto_diario = 1
+		cfg.save()
+
+	def test_para_ao_atingir_teto(self):
+		for _ in range(3):
+			MensagemContato.objects.create(
+				pessoa=self.pessoa,
+				canal=MensagemContato.CanalChoices.WHATSAPP,
+				direcao=MensagemContato.DirecaoChoices.SAIDA,
+				status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+				conteudo='oi',
+			)
+		envelope = {
+			'provider': 'evolution',
+			'status_fila': MensagemContato.StatusFilaChoices.ENVIADA,
+			'enviada_em': timezone.now(),
+			'referencia_externa': 'ref-1',
+			'status_label': 'PENDING',
+			'metadata_key': 'evolution',
+			'metadata_value': {'sid': 'ref-1'},
+		}
+		with patch('apps.acolhimento.fila_processor.gateway.enviar', return_value=envelope):
+			resultado = processar_fila_mensagens()
+		self.assertEqual(resultado['sucesso'], 1)
+		self.assertEqual(
+			MensagemContato.objects.filter(status_fila=MensagemContato.StatusFilaChoices.ENVIADA).count(),
+			1,
+		)
+		self.assertEqual(
+			MensagemContato.objects.filter(status_fila=MensagemContato.StatusFilaChoices.PENDENTE).count(),
+			2,
+		)
+
+
+class EvolutionDelayPayloadTests(TestCase):
+	"""O envio pela Evolution inclui `delay` (mostra 'digitando...') quando informado."""
+
+	def test_inclui_delay_no_payload(self):
+		capturado = {}
+
+		def fake_post(path, payload, timeout=None):
+			capturado['payload'] = payload
+			return 201, {'key': {'id': 'MSG123'}, 'status': 'PENDING'}
+
+		with patch('apps.acolhimento.evolution_service._post', side_effect=fake_post):
+			evolution_service.send_whatsapp_text(to_phone='5531999998888', text='oi', delay_ms=1500)
+		self.assertEqual(capturado['payload'].get('delay'), 1500)
+		self.assertIn('number', capturado['payload'])
+		self.assertEqual(capturado['payload'].get('text'), 'oi')
+
+	def test_sem_delay_quando_nulo(self):
+		capturado = {}
+
+		def fake_post(path, payload, timeout=None):
+			capturado['payload'] = payload
+			return 201, {'key': {'id': 'MSG123'}}
+
+		with patch('apps.acolhimento.evolution_service._post', side_effect=fake_post):
+			evolution_service.send_whatsapp_text(to_phone='5531999998888', text='oi', delay_ms=None)
+		self.assertNotIn('delay', capturado['payload'])
+
+
+@override_settings(WHATSAPP_PROVIDER='evolution')
+class GatewayEvolutionEnvioTests(TestCase):
+	"""Integracao: o envio opt-in varia o texto e repassa o delay de 'digitando...'."""
+
+	def test_envio_opt_in_varia_texto_e_passa_delay(self):
+		pessoa = _pessoa(nome='Bruna', telefone='31999991111')
+		msg = MensagemContato.objects.create(
+			pessoa=pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.SAIDA,
+			status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+			conteudo='x',
+			metadata_envio={
+				'tipo_template': 'primeiro_contato_opt_in',
+				'evolution_texto': 'Ola {nome}! Podemos conversar?',
+			},
+		)
+		capturado = {}
+
+		def fake_send(*, to_phone, text, delay_ms=None):
+			capturado['text'] = text
+			capturado['delay_ms'] = delay_ms
+			return {'sid': 'X', 'status': 'PENDING', 'to': to_phone, 'raw': {}}
+
+		with patch('apps.acolhimento.evolution_service.send_whatsapp_text', side_effect=fake_send):
+			envelope = whatsapp_gateway.enviar(msg, '5531999991111')
+		self.assertIn('Bruna', capturado['text'])
+		self.assertNotIn('{nome}', capturado['text'])
+		self.assertGreater(capturado['delay_ms'], 0)
+		self.assertEqual(envelope['status_fila'], MensagemContato.StatusFilaChoices.ENVIADA)
