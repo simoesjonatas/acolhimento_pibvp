@@ -1569,3 +1569,107 @@ class ResponsavelAtualTests(TestCase):
 		nomes = [p.nome for p in resp.context['pessoas']]
 		self.assertIn('Minha Pessoa', nomes)
 		self.assertNotIn('Contato Um', nomes)
+
+
+class FilaConfiabilidadeTests(TestCase):
+	"""Sprint 2: claim atomico da fila + recuperacao de execucoes presas."""
+
+	def setUp(self):
+		self.user = get_user_model().objects.create_user(username='fila', password='x', is_staff=True)
+		self.pessoa = PrimeiroContato.objects.create(
+			nome='Visitante',
+			telefone_whatsapp='31955554444',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			status=PrimeiroContato.StatusAcolhimento.ROBO,
+			iniciou_interacao=False,
+		)
+
+	def _msg_pendente(self, **extra):
+		return MensagemContato.objects.create(
+			pessoa=self.pessoa,
+			criado_por=self.user,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.SAIDA,
+			status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+			conteudo='Ola',
+			**extra,
+		)
+
+	def test_reivindicar_mensagem_pendente_assume_e_incrementa(self):
+		from apps.acolhimento.fila_processor import _reivindicar_mensagem
+		msg = self._msg_pendente()
+		self.assertTrue(_reivindicar_mensagem(msg))
+		msg.refresh_from_db()
+		self.assertEqual(msg.status_fila, MensagemContato.StatusFilaChoices.PROCESSANDO)
+		self.assertEqual(msg.tentativas_envio, 1)
+
+	def test_reivindicar_mensagem_ja_assumida_retorna_false(self):
+		from apps.acolhimento.fila_processor import _reivindicar_mensagem
+		msg = self._msg_pendente()
+		# Outro worker ja assumiu (PENDENTE -> PROCESSANDO) direto no banco.
+		MensagemContato.objects.filter(pk=msg.pk).update(
+			status_fila=MensagemContato.StatusFilaChoices.PROCESSANDO
+		)
+		self.assertFalse(_reivindicar_mensagem(msg))
+		msg.refresh_from_db()
+		self.assertEqual(msg.tentativas_envio, 0)
+
+	def test_processador_envia_uma_vez_reivindicando_antes(self):
+		# Mensagem de opt-in (nao bloqueada) chega ao envio; o gateway e mockado.
+		msg = self._msg_pendente(metadata_envio={'tipo_template': 'primeiro_contato_opt_in'})
+		envelope = {
+			'provider': 'twilio',
+			'status_fila': MensagemContato.StatusFilaChoices.ENVIADA,
+			'enviada_em': timezone.now(),
+			'referencia_externa': 'SMFAKE',
+			'status_label': 'sent',
+			'metadata_key': 'twilio',
+			'metadata_value': {'sid': 'SMFAKE'},
+		}
+		with patch('apps.acolhimento.whatsapp_gateway.enviar', return_value=envelope) as mock_enviar:
+			resultado = processar_fila_mensagens(limit=5)
+		mock_enviar.assert_called_once()
+		msg.refresh_from_db()
+		self.assertEqual(resultado['sucesso'], 1)
+		self.assertEqual(msg.status_fila, MensagemContato.StatusFilaChoices.ENVIADA)
+		self.assertEqual(msg.tentativas_envio, 1)
+
+	def test_processador_nao_envia_quando_perde_a_corrida(self):
+		# Se o claim falhar (outro worker assumiu), nao chama o gateway.
+		self._msg_pendente(metadata_envio={'tipo_template': 'primeiro_contato_opt_in'})
+		with patch('apps.acolhimento.fila_processor._reivindicar_mensagem', return_value=False):
+			with patch('apps.acolhimento.whatsapp_gateway.enviar') as mock_enviar:
+				resultado = processar_fila_mensagens(limit=5)
+		mock_enviar.assert_not_called()
+		self.assertEqual(resultado['sucesso'], 0)
+
+	def test_recuperar_execucoes_presas_marca_interrompida(self):
+		from apps.acolhimento import fila_auto
+		from apps.acolhimento.models import ExecucaoProcessamentoFila
+		execucao = ExecucaoProcessamentoFila.objects.create(
+			status=ExecucaoProcessamentoFila.StatusExecucaoChoices.EXECUTANDO,
+			limite=10,
+		)
+		# Simula falta de progresso: atualizado_em antigo (auto_now impede via create).
+		ExecucaoProcessamentoFila.objects.filter(pk=execucao.pk).update(
+			atualizado_em=timezone.now() - timedelta(minutes=30)
+		)
+		recuperadas = fila_auto.recuperar_execucoes_presas(timeout_minutos=15)
+		execucao.refresh_from_db()
+		self.assertEqual(recuperadas, 1)
+		self.assertEqual(execucao.status, ExecucaoProcessamentoFila.StatusExecucaoChoices.INTERROMPIDA)
+		self.assertIsNotNone(execucao.finalizado_em)
+
+	def test_recuperar_ignora_execucao_com_progresso_recente(self):
+		from apps.acolhimento import fila_auto
+		from apps.acolhimento.models import ExecucaoProcessamentoFila
+		execucao = ExecucaoProcessamentoFila.objects.create(
+			status=ExecucaoProcessamentoFila.StatusExecucaoChoices.EXECUTANDO,
+			limite=10,
+		)
+		recuperadas = fila_auto.recuperar_execucoes_presas(timeout_minutos=15)
+		execucao.refresh_from_db()
+		self.assertEqual(recuperadas, 0)
+		self.assertEqual(execucao.status, ExecucaoProcessamentoFila.StatusExecucaoChoices.EXECUTANDO)

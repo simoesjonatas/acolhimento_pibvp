@@ -12,7 +12,7 @@ from django.http import JsonResponse
 from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.db import close_old_connections, transaction
+from django.db import transaction
 from django.db.models import Count, Exists, Max, OuterRef, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -24,8 +24,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
-from apps.acolhimento.fila_processor import processar_fila_mensagens
 from apps.acolhimento import fila_auto, template_config
+from apps.acolhimento.fila_metrics import metricas_entrega
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RelatorioPessoasForm, ResponderQuestionarioForm, TemplatesWhatsappForm
 from apps.acolhimento.models import ConfiguracaoProcessamentoFila, ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario, TemplateWhatsapp
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
@@ -342,71 +342,6 @@ class MensagemFilaListView(LoginRequiredMixin, MensagensPermissaoMixin, Mensagem
 		return context
 
 
-def _append_execucao_log(execucao: ExecucaoProcessamentoFila, texto: str):
-	linha = f'[{timezone.now().strftime("%d/%m/%Y %H:%M:%S")}] {texto}'
-	execucao.log_execucao = f'{execucao.log_execucao}\n{linha}'.strip()
-	execucao.save(update_fields=['log_execucao', 'atualizado_em'])
-
-
-def _run_execucao_fila(execucao_id: int):
-	close_old_connections()
-	execucao = ExecucaoProcessamentoFila.objects.get(pk=execucao_id)
-
-	def _progress(texto: str):
-		nonlocal execucao
-		execucao.refresh_from_db(fields=['id', 'log_execucao', 'atualizado_em'])
-		_append_execucao_log(execucao, texto)
-
-	def _should_stop() -> bool:
-		execucao.refresh_from_db(fields=['solicitar_parada'])
-		return bool(execucao.solicitar_parada)
-
-	try:
-		resultado = processar_fila_mensagens(
-			limit=execucao.limite,
-			ids=[int(i) for i in execucao.ids_filtrados if str(i).isdigit()],
-			dry_run=execucao.dry_run,
-			progress_callback=_progress,
-			should_stop=_should_stop,
-		)
-
-		execucao.refresh_from_db()
-		execucao.total_selecionado = resultado['total_selecionado']
-		execucao.total_processado = resultado['total_processado']
-		execucao.total_sucesso = resultado['sucesso']
-		execucao.total_falha = resultado['falha']
-		execucao.finalizado_em = timezone.now()
-		execucao.status = (
-			ExecucaoProcessamentoFila.StatusExecucaoChoices.INTERROMPIDA
-			if resultado['interrompido']
-			else ExecucaoProcessamentoFila.StatusExecucaoChoices.CONCLUIDA
-		)
-		execucao.save(
-			update_fields=[
-				'total_selecionado',
-				'total_processado',
-				'total_sucesso',
-				'total_falha',
-				'finalizado_em',
-				'status',
-				'atualizado_em',
-			]
-		)
-
-		# Modo automatico: se o switch estiver ligado e sobrou pendente, drena o resto.
-		if execucao.status == ExecucaoProcessamentoFila.StatusExecucaoChoices.CONCLUIDA:
-			fila_auto.disparar_auto_se_ligado()
-	except Exception as exc:  # pragma: no cover
-		logger.exception('Falha inesperada ao processar a fila (execucao=%s).', execucao_id)
-		execucao.refresh_from_db()
-		_append_execucao_log(execucao, f'Erro inesperado: {exc}')
-		execucao.status = ExecucaoProcessamentoFila.StatusExecucaoChoices.FALHA
-		execucao.finalizado_em = timezone.now()
-		execucao.save(update_fields=['status', 'finalizado_em', 'atualizado_em'])
-	finally:
-		close_old_connections()
-
-
 class ProcessamentoFilaControleView(LoginRequiredMixin, SuperAdminPermissaoMixin, TemplateView):
 	template_name = 'mensagens_processamento.html'
 
@@ -477,6 +412,8 @@ class ProcessamentoFilaControleView(LoginRequiredMixin, SuperAdminPermissaoMixin
 
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
+		# Destrava execucoes orfas (processo que morreu no meio) ao abrir a tela.
+		fila_auto.recuperar_execucoes_presas()
 		execucoes_queryset = ExecucaoProcessamentoFila.objects.select_related('solicitado_por')
 		paginator = Paginator(execucoes_queryset, 8)
 		page_obj = paginator.get_page(self.request.GET.get('page'))
@@ -514,6 +451,7 @@ class ProcessamentoFilaControleView(LoginRequiredMixin, SuperAdminPermissaoMixin
 		context['execucao_ativa'] = execucao_ativa
 		context['total_execucoes'] = paginator.count
 		context['fila'] = fila
+		context['entrega'] = metricas_entrega()
 		context['auto_ativo'] = ConfiguracaoProcessamentoFila.auto_ligado()
 		return context
 

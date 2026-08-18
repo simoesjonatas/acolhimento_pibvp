@@ -1,6 +1,7 @@
 import re
 from typing import Callable
 
+from django.db.models import F
 from django.utils import timezone
 
 from apps.acolhimento.models import MensagemContato
@@ -33,6 +34,32 @@ def normalize_phone_br(raw_phone: str) -> str:
         return f'+55{digits}'
 
     raise ValueError('Telefone fora do formato esperado para Brasil.')
+
+
+def _reivindicar_mensagem(mensagem: MensagemContato) -> bool:
+    """Claim atomico PENDENTE -> PROCESSANDO. Retorna True se ESTE processo assumiu.
+
+    Usa um UPDATE condicional (em vez de SELECT ... FOR UPDATE) para se comportar
+    igual em SQLite (dev/testes) e Postgres (producao): numa corrida entre
+    processadores, so um consegue rowcount=1; os demais recebem False e pulam a
+    mensagem, evitando envio duplicado quando ha varios workers/cron ao mesmo tempo.
+    """
+    agora = timezone.now()
+    reivindicada = MensagemContato.objects.filter(
+        pk=mensagem.pk,
+        status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+    ).update(
+        status_fila=MensagemContato.StatusFilaChoices.PROCESSANDO,
+        tentativas_envio=F('tentativas_envio') + 1,
+        atualizado_em=agora,
+    )
+    if not reivindicada:
+        return False
+    # O UPDATE nao mexe na instancia em memoria; refletir para os passos seguintes.
+    mensagem.status_fila = MensagemContato.StatusFilaChoices.PROCESSANDO
+    mensagem.tentativas_envio = (mensagem.tentativas_envio or 0) + 1
+    mensagem.atualizado_em = agora
+    return True
 
 
 def processar_fila_mensagens(
@@ -137,9 +164,12 @@ def processar_fila_mensagens(
                 )
             continue
 
-        mensagem.status_fila = MensagemContato.StatusFilaChoices.PROCESSANDO
-        mensagem.tentativas_envio += 1
-        mensagem.save(update_fields=['status_fila', 'tentativas_envio', 'atualizado_em'])
+        if not _reivindicar_mensagem(mensagem):
+            # Corrida perdida: outro processador ja assumiu esta mensagem.
+            # Nao reenviar (garante 1 envio por mensagem entre workers concorrentes).
+            if progress_callback:
+                progress_callback(f'[{mensagem.id}] Ignorada: assumida por outro processador.')
+            continue
 
         try:
             envelope = gateway.enviar(mensagem, destino)

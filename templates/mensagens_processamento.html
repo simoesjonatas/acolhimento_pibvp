@@ -21,6 +21,15 @@
     .switch-label { font-size:.78rem; letter-spacing:.5px; }
     .switch-toggle.is-on .switch-label { color:#15803d; }
     .switch-toggle.is-off .switch-label { color:#b91c1c; }
+    .entrega-panel { margin-bottom:18px; }
+    .entrega-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+    .entrega-metric { padding:12px 14px; border:1px solid rgba(0,0,0,.08); border-radius:12px;
+        background:rgba(0,0,0,.02); display:flex; flex-direction:column; gap:2px; }
+    .entrega-label { font-size:.72rem; text-transform:uppercase; letter-spacing:.4px; color:#64748b; font-weight:700; }
+    .entrega-value { font-size:1.5rem; font-weight:800; line-height:1.1; }
+    .entrega-hint { font-size:.72rem; color:#94a3b8; }
+    .entrega-metric.entrega-alerta { border-color:#fecaca; background:#fef2f2; }
+    .entrega-metric.entrega-alerta .entrega-value { color:#dc2626; }
 </style>
 <div class="topo-acoes">
     <div>
@@ -59,6 +68,34 @@
         <span class="queue-kpi-value">{{ fila.enviadas_hoje }}</span>
         <span class="queue-kpi-hint">saidas concluidas</span>
     </article>
+</section>
+
+<section class="dashboard-panel entrega-panel">
+    <div class="panel-header">
+        <h2>Entrega (ultimos {{ entrega.dias }} dias)</h2>
+    </div>
+    <div class="entrega-grid">
+        <div class="entrega-metric">
+            <span class="entrega-label">Taxa de sucesso</span>
+            <span class="entrega-value">{% if entrega.taxa_sucesso != None %}{{ entrega.taxa_sucesso }}%{% else %}—{% endif %}</span>
+            <span class="entrega-hint">{{ entrega.enviadas }} enviada(s) · {{ entrega.falhas }} falha(s)</span>
+        </div>
+        <div class="entrega-metric">
+            <span class="entrega-label">Tempo medio na fila</span>
+            <span class="entrega-value">{{ entrega.tempo_medio_texto|default:'—' }}</span>
+            <span class="entrega-hint">do enfileiramento ao envio</span>
+        </div>
+        <div class="entrega-metric">
+            <span class="entrega-label">Canceladas</span>
+            <span class="entrega-value">{{ entrega.canceladas }}</span>
+            <span class="entrega-hint">bloqueadas por regra (janela/opt-in)</span>
+        </div>
+        <div class="entrega-metric {% if entrega.presas %}entrega-alerta{% endif %}">
+            <span class="entrega-label">Presas em processamento</span>
+            <span class="entrega-value">{{ entrega.presas }}</span>
+            <span class="entrega-hint">ha mais de {{ entrega.presas_minutos }} min</span>
+        </div>
+    </div>
 </section>
 
 <section class="dashboard-panel">
