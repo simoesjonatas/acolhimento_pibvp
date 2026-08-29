@@ -49,6 +49,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-troque-esta-senha-no-env}
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      # Opt-in-first: sem repassar estas, o .env do servidor era ignorado e o botao
+      # "falar com a gente" da tela de sucesso do auto-cadastro nunca aparecia.
+      PIB_WHATSAPP_NUMERO_OPTIN: ${PIB_WHATSAPP_NUMERO_OPTIN:-}
+      PIB_WHATSAPP_OPTIN_TEXTO: ${PIB_WHATSAPP_OPTIN_TEXTO:-}
+      HORAS_ESPERA_OPTIN: ${HORAS_ESPERA_OPTIN:-0}
       WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-evolution}
       EVOLUTION_BASE_URL: ${EVOLUTION_BASE_URL:-http://host.docker.internal:8085}
       EVOLUTION_PUBLIC_URL: ${EVOLUTION_PUBLIC_URL:-http://127.0.0.1:8085}
@@ -61,15 +66,23 @@ services:
       EVOLUTION_WEBHOOK_BASE64: ${EVOLUTION_WEBHOOK_BASE64:-False}
       EVOLUTION_WEBHOOK_SECRET: ${EVOLUTION_WEBHOOK_SECRET:-}
       EVOLUTION_AUTO_CONFIGURE_WEBHOOK: ${EVOLUTION_AUTO_CONFIGURE_WEBHOOK:-True}
+      # Sem default aqui de proposito: o texto padrao tem {nome}, e default com
+      # chaves na interpolacao do Compose foi exatamente a origem do bug do {}}.
+      # Vazio => o settings.py aplica o texto padrao.
+      EVOLUTION_TEXTO_OPTIN: ${EVOLUTION_TEXTO_OPTIN:-}
+      EVOLUTION_TEXTO_CONTINUAR: ${EVOLUTION_TEXTO_CONTINUAR:-}
       TWILIO_ENABLED: ${TWILIO_ENABLED:-False}
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
       TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-whatsapp:+14155238886}
       TWILIO_STATUS_CALLBACK_URL: ${TWILIO_STATUS_CALLBACK_URL:-}
       TWILIO_TEMPLATE_OPT_IN_SID: ${TWILIO_TEMPLATE_OPT_IN_SID:-}
-      TWILIO_TEMPLATE_OPT_IN_VARIABLES: ${TWILIO_TEMPLATE_OPT_IN_VARIABLES:-{}}
+      # Sem default com chaves aninhadas (${...:-{}}): o parser de interpolacao do
+      # Compose varia entre versoes e pode deixar um '}' sobrando. Vazio => o
+      # settings.py usa '{}'.
+      TWILIO_TEMPLATE_OPT_IN_VARIABLES: ${TWILIO_TEMPLATE_OPT_IN_VARIABLES:-}
       TWILIO_TEMPLATE_CONTINUAR_SID: ${TWILIO_TEMPLATE_CONTINUAR_SID:-}
-      TWILIO_TEMPLATE_CONTINUAR_VARIABLES: ${TWILIO_TEMPLATE_CONTINUAR_VARIABLES:-{}}
+      TWILIO_TEMPLATE_CONTINUAR_VARIABLES: ${TWILIO_TEMPLATE_CONTINUAR_VARIABLES:-}
     ports:
       - "${APP_PORT:-8183}:8000"
 

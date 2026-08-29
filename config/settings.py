@@ -260,13 +260,11 @@ EVOLUTION_WEBHOOK_BASE64 = _env_bool('EVOLUTION_WEBHOOK_BASE64', False)
 EVOLUTION_WEBHOOK_SECRET = os.getenv('EVOLUTION_WEBHOOK_SECRET', '').strip()
 # No modo Baileys nao existe template aprovado: as mensagens de "template" da Twilio
 # (opt-in / continuar) viram texto simples. {nome} e substituido pelo nome da pessoa.
-EVOLUTION_TEXTO_OPTIN = os.getenv(
-    'EVOLUTION_TEXTO_OPTIN',
-    'Ola {nome}! Aqui e o acolhimento da PIBVP. Podemos conversar por aqui?',
+EVOLUTION_TEXTO_OPTIN = os.getenv('EVOLUTION_TEXTO_OPTIN') or (
+    'Ola {nome}! Aqui e o acolhimento da PIBVP. Podemos conversar por aqui?'
 )
-EVOLUTION_TEXTO_CONTINUAR = os.getenv(
-    'EVOLUTION_TEXTO_CONTINUAR',
-    'Ola {nome}, tudo bem? Podemos continuar nossa conversa?',
+EVOLUTION_TEXTO_CONTINUAR = os.getenv('EVOLUTION_TEXTO_CONTINUAR') or (
+    'Ola {nome}, tudo bem? Podemos continuar nossa conversa?'
 )
 
 # ---------------------------------------------------------------------------
@@ -277,13 +275,12 @@ EVOLUTION_TEXTO_CONTINUAR = os.getenv(
 # Quando vazio, o botao nao aparece.
 # ---------------------------------------------------------------------------
 PIB_WHATSAPP_NUMERO_OPTIN = os.getenv('PIB_WHATSAPP_NUMERO_OPTIN', '').strip()
-PIB_WHATSAPP_OPTIN_TEXTO = os.getenv(
-    'PIB_WHATSAPP_OPTIN_TEXTO',
-    'Oi! Acabei de me cadastrar no acolhimento da PIBVP e gostaria de conversar.',
+PIB_WHATSAPP_OPTIN_TEXTO = os.getenv('PIB_WHATSAPP_OPTIN_TEXTO') or (
+    'Oi! Acabei de me cadastrar no acolhimento da PIBVP e gostaria de conversar.'
 )
 # Carencia (em horas) antes de incluir alguem no disparo pausado de boas-vindas:
 # da tempo da pessoa iniciar a conversa sozinha pelo botao acima. 0 = sem carencia.
-HORAS_ESPERA_OPTIN = int(os.getenv('HORAS_ESPERA_OPTIN', '0'))
+HORAS_ESPERA_OPTIN = int(os.getenv('HORAS_ESPERA_OPTIN') or 0)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

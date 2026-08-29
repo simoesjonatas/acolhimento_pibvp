@@ -5,6 +5,8 @@ cai no valor do .env (settings). Na Twilio os templates usam SID/variaveis; no
 Evolution os mesmos fluxos usam texto simples.
 """
 
+import json
+
 from django.conf import settings
 
 from apps.acolhimento.models import TemplateWhatsapp
@@ -45,12 +47,27 @@ def sid_para(tipo) -> str:
     return (getattr(settings, _FALLBACK[tipo]['sid'], '') or '').strip()
 
 
+def _json_objeto_valido(valor: str) -> bool:
+    try:
+        return isinstance(json.loads(valor), dict)
+    except ValueError:
+        return False
+
+
 def variables_para(tipo) -> str:
-    """Variaveis (string JSON) efetivas do template (banco tem prioridade; senao, o .env)."""
+    """Variaveis (string JSON) efetivas do template (banco tem prioridade; senao, o .env).
+
+    O valor do .env passa por uma checagem de JSON: um valor quebrado no ambiente
+    (ex.: `{}}`) chegava ate a tela de configuracao e reprovava o formulario, travando
+    o salvamento de campos que nao tem nada a ver — e ninguem consegue corrigir um
+    env var pela interface. O valor salvo no banco vai como esta, para que um JSON
+    invalido digitado na tela seja apontado e possa ser corrigido ali mesmo.
+    """
     config = _config(tipo)
     if config and (config.content_variables or '').strip():
         return config.content_variables
-    return getattr(settings, _FALLBACK[tipo]['variables'], '') or '{}'
+    do_env = getattr(settings, _FALLBACK[tipo]['variables'], '') or '{}'
+    return do_env if _json_objeto_valido(do_env) else '{}'
 
 
 def texto_evolution_para(tipo) -> str:
