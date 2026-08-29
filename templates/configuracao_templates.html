@@ -29,6 +29,18 @@
     <form method="post" class="config-templates-form">
         {% csrf_token %}
         {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
+        {% if form.errors %}
+        {# Resumo no topo: os dois cards ficam lado a lado e um erro no card da direita
+           passa despercebido quando a tela nao mostra os dois inteiros. #}
+        <div class="form-errors">
+            <strong>Nao foi possivel salvar.</strong> Corrija:
+            <ul>
+                {% for campo in form %}{% if campo.errors %}
+                <li><a href="#{{ campo.id_for_label }}">{{ campo.label }}</a>: {{ campo.errors.0 }}</li>
+                {% endif %}{% endfor %}
+            </ul>
+        </div>
+        {% endif %}
 
         <div class="config-templates-grid">
             <section class="profile-form-card config-template-card">

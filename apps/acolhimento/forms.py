@@ -269,7 +269,7 @@ class RelatorioPessoasForm(forms.Form):
 class QuestionarioForm(forms.ModelForm):
     class Meta:
         model = Questionario
-        fields = ['titulo', 'descricao', 'ativo']
+        fields = ['titulo', 'descricao', 'ativo', 'padrao_membresia']
         widgets = {
             'descricao': forms.Textarea(attrs={'rows': 3}),
         }
@@ -372,17 +372,17 @@ class TemplatesWhatsappForm(forms.Form):
 
     opt_in_sid = forms.CharField(
         required=False,
-        label='Content Template SID',
+        label='Primeiro contato — Content Template SID',
         widget=forms.TextInput(attrs={'placeholder': 'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}),
     )
     opt_in_variables = forms.CharField(
         required=False,
-        label='Variaveis (JSON)',
+        label='Primeiro contato — Variaveis (JSON)',
         widget=forms.Textarea(attrs={'rows': 2, 'placeholder': '{"1": "{nome}"}'}),
     )
     opt_in_texto_evolution = forms.CharField(
         required=False,
-        label='Mensagem no WhatsApp',
+        label='Primeiro contato — Mensagem de boas-vindas',
         widget=forms.Textarea(attrs={
             'rows': 4,
             'placeholder': 'Ola {nome}! Aqui e o acolhimento da PIBVP. Podemos conversar por aqui?',
@@ -390,17 +390,17 @@ class TemplatesWhatsappForm(forms.Form):
     )
     continuar_sid = forms.CharField(
         required=False,
-        label='Content Template SID',
+        label='Continuar conversa — Content Template SID',
         widget=forms.TextInput(attrs={'placeholder': 'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}),
     )
     continuar_variables = forms.CharField(
         required=False,
-        label='Variaveis (JSON)',
+        label='Continuar conversa — Variaveis (JSON)',
         widget=forms.Textarea(attrs={'rows': 2, 'placeholder': '{}'}),
     )
     continuar_texto_evolution = forms.CharField(
         required=False,
-        label='Mensagem no WhatsApp',
+        label='Continuar conversa — Mensagem de continuacao',
         widget=forms.Textarea(attrs={
             'rows': 4,
             'placeholder': 'Ola {nome}, tudo bem? Podemos continuar nossa conversa?',

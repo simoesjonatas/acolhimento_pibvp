@@ -54,6 +54,43 @@ PERMISSAO_CONVERSAR_PESSOAS = 'acolhimento.pode_conversar_pessoas'
 logger = logging.getLogger(__name__)
 
 
+def pode_ver_questionario(user):
+	return user.is_staff or user.is_superuser or user.has_perm(PERMISSAO_CONVERSAR_PESSOAS)
+
+
+def convite_membresia(pessoa, usuario):
+	"""Garante o convite do questionario de membresia da pessoa.
+
+	Retorna `(convite, criado)`. Reaproveita um convite pendente em vez de duplicar
+	links e devolve `(None, False)` quando nao ha questionario de membresia ativo
+	com perguntas.
+	"""
+	questionario = Questionario.membresia()
+	if questionario is None or not questionario.perguntas.exists():
+		return None, False
+
+	convites = ConviteQuestionario.objects.filter(pessoa=pessoa, questionario=questionario)
+	existente = (
+		convites.filter(status=ConviteQuestionario.StatusConvite.PENDENTE).first()
+		or convites.first()
+	)
+	if existente is not None:
+		return existente, False
+
+	with transaction.atomic():
+		convite = ConviteQuestionario.objects.create(
+			questionario=questionario,
+			pessoa=pessoa,
+			criado_por=usuario,
+		)
+		InteracaoAcolhimento.objects.create(
+			pessoa=pessoa,
+			tipo=InteracaoAcolhimento.TipoInteracao.OBSERVACAO,
+			descricao=f'Link do questionario "{questionario.titulo}" gerado para preenchimento.',
+		)
+	return convite, True
+
+
 class MensagensPermissaoMixin(UserPassesTestMixin):
 	raise_exception = True
 
@@ -776,10 +813,8 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		context['status_fluxo'] = status_fluxo
 
 		user = self.request.user
-		pode_ver_questionario = (
-			user.is_staff or user.is_superuser or user.has_perm(PERMISSAO_CONVERSAR_PESSOAS)
-		)
-		context['pode_ver_questionario'] = pode_ver_questionario
+		ver_questionario = pode_ver_questionario(user)
+		context['pode_ver_questionario'] = ver_questionario
 		context['pode_excluir_convite'] = user.is_staff or user.is_superuser
 
 		pode_gerenciar_responsavel = user.is_staff or user.is_superuser
@@ -791,7 +826,8 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		else:
 			context['usuarios_responsaveis'] = get_user_model().objects.none()
 
-		if pode_ver_questionario:
+		convites = []
+		if ver_questionario:
 			convites = list(self.object.convites_questionario.select_related('questionario'))
 			for convite in convites:
 				convite.link = self.request.build_absolute_uri(
@@ -802,6 +838,17 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		else:
 			context['convites_questionario'] = []
 			context['questionarios_ativos'] = Questionario.objects.none()
+
+		# `?membresia=<pk>` chega do redirect da troca de status: abre o pop-up
+		# perguntando se a equipe quer preencher agora ou enviar o link.
+		convite_destacado = (self.request.GET.get('membresia') or '').strip()
+		context['membresia_convite'] = next(
+			(
+				convite for convite in convites
+				if str(convite.pk) == convite_destacado and not convite.respondido
+			),
+			None,
+		)
 		context['is_participante'] = self.object.status == PrimeiroContato.StatusAcolhimento.PARTICIPANTE
 		return context
 
@@ -845,6 +892,23 @@ class PrimeiroContatoStatusUpdateView(LoginRequiredMixin, View):
 		)
 
 		messages.success(request, f'Status atualizado para "{pessoa.get_status_display()}".')
+
+		# Participante e o gatilho da membresia: ja deixa o link pronto e abre o
+		# pop-up para a equipe escolher entre preencher na hora ou enviar.
+		if novo_status == PrimeiroContato.StatusAcolhimento.PARTICIPANTE:
+			convite, criado = convite_membresia(pessoa, request.user)
+			if pode_ver_questionario(request.user):
+				if convite is None:
+					messages.warning(
+						request,
+						'Nenhum questionario de membresia ativo com perguntas: o link nao foi gerado.',
+					)
+				elif not convite.respondido:
+					if criado:
+						messages.success(request, 'Link do questionario de membresia gerado.')
+					url = reverse('pessoas-detalhe', kwargs={'pk': pessoa.pk})
+					return redirect(f'{url}?membresia={convite.pk}')
+
 		return redirect('pessoas-detalhe', pk=pessoa.pk)
 
 

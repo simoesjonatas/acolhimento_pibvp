@@ -47,6 +47,7 @@ class Command(BaseCommand):
             titulo=TITULO,
             descricao='Formulario de recepcao de novos membros.',
             ativo=True,
+            padrao_membresia=True,
         )
         for ordem, (texto, tipo, obrigatoria, ajuda, opcoes) in enumerate(PERGUNTAS):
             pergunta = PerguntaQuestionario.objects.create(

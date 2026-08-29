@@ -822,6 +822,124 @@ class QuestionarioTests(TestCase):
 		)
 
 
+class MembresiaAutomaticaTests(TestCase):
+	"""Participante gera o link de membresia e abre o pop-up de preencher/enviar."""
+
+	def setUp(self):
+		self.admin = get_user_model().objects.create_user(
+			'admin_membresia', password='x', is_staff=True, is_superuser=True,
+		)
+		self.pessoa = PrimeiroContato.objects.create(
+			nome='Clara',
+			telefone_whatsapp='31988880001',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			status=PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO,
+		)
+		self.membresia = Questionario.objects.create(
+			titulo='Formulario de Membresia', ativo=True, padrao_membresia=True,
+		)
+		PerguntaQuestionario.objects.create(
+			questionario=self.membresia, texto='Seu nome?', tipo='texto_curto', ordem=0,
+		)
+		self.client.force_login(self.admin)
+
+	def _virar_participante(self):
+		return self.client.post(
+			reverse('pessoas-status', args=[self.pessoa.pk]), {'status': 'participante'}
+		)
+
+	def test_participante_gera_convite_e_redireciona_para_o_popup(self):
+		resp = self._virar_participante()
+		convite = ConviteQuestionario.objects.get(pessoa=self.pessoa, questionario=self.membresia)
+		self.assertEqual(convite.status, ConviteQuestionario.StatusConvite.PENDENTE)
+		self.assertEqual(
+			resp['Location'],
+			f"{reverse('pessoas-detalhe', args=[self.pessoa.pk])}?membresia={convite.pk}",
+		)
+		self.assertTrue(
+			self.pessoa.interacoes.filter(descricao__contains='Formulario de Membresia').exists()
+		)
+
+	def test_outro_status_nao_gera_convite(self):
+		resp = self.client.post(
+			reverse('pessoas-status', args=[self.pessoa.pk]), {'status': 'membro'}
+		)
+		self.assertEqual(resp['Location'], reverse('pessoas-detalhe', args=[self.pessoa.pk]))
+		self.assertFalse(ConviteQuestionario.objects.filter(pessoa=self.pessoa).exists())
+
+	def test_convite_pendente_existente_e_reaproveitado(self):
+		existente = ConviteQuestionario.objects.create(
+			questionario=self.membresia, pessoa=self.pessoa, criado_por=self.admin,
+		)
+		resp = self._virar_participante()
+		self.assertEqual(ConviteQuestionario.objects.filter(pessoa=self.pessoa).count(), 1)
+		self.assertEqual(
+			resp['Location'],
+			f"{reverse('pessoas-detalhe', args=[self.pessoa.pk])}?membresia={existente.pk}",
+		)
+
+	def test_convite_ja_respondido_nao_reabre_o_popup(self):
+		ConviteQuestionario.objects.create(
+			questionario=self.membresia,
+			pessoa=self.pessoa,
+			criado_por=self.admin,
+			status=ConviteQuestionario.StatusConvite.RESPONDIDO,
+			respondido_em=timezone.now(),
+		)
+		resp = self._virar_participante()
+		self.assertEqual(ConviteQuestionario.objects.filter(pessoa=self.pessoa).count(), 1)
+		self.assertEqual(resp['Location'], reverse('pessoas-detalhe', args=[self.pessoa.pk]))
+
+	def test_sem_questionario_de_membresia_apenas_troca_o_status(self):
+		self.membresia.delete()
+		resp = self._virar_participante()
+		self.pessoa.refresh_from_db()
+		self.assertEqual(self.pessoa.status, PrimeiroContato.StatusAcolhimento.PARTICIPANTE)
+		self.assertEqual(resp['Location'], reverse('pessoas-detalhe', args=[self.pessoa.pk]))
+		self.assertFalse(ConviteQuestionario.objects.filter(pessoa=self.pessoa).exists())
+
+	def test_questionario_sem_perguntas_nao_gera_convite(self):
+		self.membresia.perguntas.all().delete()
+		self._virar_participante()
+		self.assertFalse(ConviteQuestionario.objects.filter(pessoa=self.pessoa).exists())
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_detalhe_abre_o_popup_com_as_duas_opcoes(self):
+		self._virar_participante()
+		convite = ConviteQuestionario.objects.get(pessoa=self.pessoa)
+		resp = self.client.get(
+			reverse('pessoas-detalhe', args=[self.pessoa.pk]), {'membresia': convite.pk}
+		)
+		self.assertEqual(resp.context['membresia_convite'], convite)
+		conteudo = resp.content.decode()
+		self.assertIn('data-membresia-modal', conteudo)
+		self.assertIn('Preencher agora', conteudo)
+		self.assertIn(reverse('convite-enviar-whatsapp', args=[convite.pk]), conteudo)
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_detalhe_sem_parametro_nao_abre_o_popup(self):
+		self._virar_participante()
+		resp = self.client.get(reverse('pessoas-detalhe', args=[self.pessoa.pk]))
+		self.assertIsNone(resp.context['membresia_convite'])
+		self.assertNotIn('data-membresia-modal', resp.content.decode())
+
+	def test_membresia_por_titulo_quando_ninguem_marcou_a_flag(self):
+		Questionario.objects.filter(pk=self.membresia.pk).update(padrao_membresia=False)
+		self.assertEqual(Questionario.membresia(), self.membresia)
+
+	def test_marcar_novo_padrao_desmarca_o_anterior(self):
+		outro = Questionario.objects.create(titulo='Outro', ativo=True, padrao_membresia=True)
+		self.membresia.refresh_from_db()
+		self.assertFalse(self.membresia.padrao_membresia)
+		self.assertEqual(Questionario.membresia(), outro)
+
+	def test_questionario_inativo_nao_e_usado(self):
+		Questionario.objects.filter(pk=self.membresia.pk).update(ativo=False)
+		self.assertIsNone(Questionario.membresia())
+
+
 class JanelaWhatsappTests(TestCase):
 	def setUp(self):
 		self.user = get_user_model().objects.create_user('equipe_janela', password='x', is_staff=True)
@@ -1310,6 +1428,39 @@ class ConfiguracaoTemplatesTests(TestCase):
 		})
 		self.assertEqual(resp.status_code, 200)
 		self.assertEqual(TemplateWhatsapp.objects.count(), 0)
+
+	@override_settings(
+		STORAGES=SIMPLE_STATIC_STORAGES,
+		TWILIO_TEMPLATE_OPT_IN_VARIABLES='{}}',
+		TWILIO_TEMPLATE_CONTINUAR_VARIABLES='{}}',
+	)
+	def test_variables_quebrado_no_env_nao_trava_a_tela(self):
+		"""JSON quebrado no .env nao pode impedir de salvar o texto da mensagem.
+
+		Em producao o ambiente tinha `{}}`: os campos de variaveis vinham preenchidos
+		com esse valor e reprovavam o formulario, entao nao dava para trocar a mensagem
+		de boas-vindas — e um env var nao tem como ser corrigido pela interface.
+		"""
+		from apps.acolhimento import template_config
+		self.assertEqual(template_config.opt_in_variables(), '{}')
+		self.assertEqual(template_config.continuar_variables(), '{}')
+
+		self.client.force_login(self.super)
+		resp = self.client.post(self.url, {
+			'opt_in_sid': template_config.opt_in_sid(),
+			'opt_in_variables': template_config.opt_in_variables(),
+			'opt_in_texto_evolution': 'Ola {nome}! Graca e Paz!',
+			'continuar_sid': template_config.continuar_sid(),
+			'continuar_variables': template_config.continuar_variables(),
+			'continuar_texto_evolution': 'Continuar {nome}',
+		})
+		self.assertEqual(resp.status_code, 302)
+		self.assertEqual(template_config.opt_in_texto_evolution(), 'Ola {nome}! Graca e Paz!')
+
+	@override_settings(TWILIO_TEMPLATE_OPT_IN_VARIABLES='{"2": "abc"}')
+	def test_variables_valido_no_env_e_preservado(self):
+		from apps.acolhimento import template_config
+		self.assertEqual(template_config.opt_in_variables(), '{"2": "abc"}')
 
 
 class EvolutionGatewayTextoTests(TestCase):

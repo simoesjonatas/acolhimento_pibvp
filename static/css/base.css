@@ -905,7 +905,7 @@ tbody tr:hover td {
     /* Botoes de acao ocupam a largura toda no mobile, exceto os utilitarios
        flutuantes/inline (scroll ate o fim e envio da conversa). */
     .app-main a.btn,
-    .app-main button:not(.toast-close):not(.conversation-scroll-bottom):not(.compose-send):not(.convite-excluir-btn):not(.login-password-toggle),
+    .app-main button:not(.toast-close):not(.conversation-scroll-bottom):not(.compose-send):not(.convite-excluir-btn):not(.login-password-toggle):not(.membresia-modal-close),
     .app-main input[type="submit"] {
         width: 100%;
     }

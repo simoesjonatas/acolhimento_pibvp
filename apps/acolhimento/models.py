@@ -409,9 +409,18 @@ class ConfiguracaoProcessamentoFila(models.Model):
 
 
 class Questionario(models.Model):
+	# Titulo usado pelo comando `popular_questionario_membresia`. Serve de fallback
+	# para achar o questionario de membresia enquanto ninguem marcou a flag.
+	TITULO_MEMBRESIA = 'Formulario de Membresia'
+
 	titulo = models.CharField(max_length=150)
 	descricao = models.TextField(blank=True)
 	ativo = models.BooleanField(default=True)
+	padrao_membresia = models.BooleanField(
+		default=False,
+		verbose_name='Questionario de membresia',
+		help_text='Gerado automaticamente quando a pessoa passa para o status Participante.',
+	)
 	criado_por = models.ForeignKey(
 		settings.AUTH_USER_MODEL,
 		on_delete=models.SET_NULL,
@@ -429,6 +438,23 @@ class Questionario(models.Model):
 
 	def __str__(self):
 		return self.titulo
+
+	def save(self, *args, **kwargs):
+		super().save(*args, **kwargs)
+		if self.padrao_membresia:
+			# So um questionario pode ser o de membresia.
+			Questionario.objects.filter(padrao_membresia=True).exclude(pk=self.pk).update(
+				padrao_membresia=False
+			)
+
+	@classmethod
+	def membresia(cls):
+		"""Questionario gerado no automatico quando a pessoa vira Participante."""
+		ativos = cls.objects.filter(ativo=True)
+		return (
+			ativos.filter(padrao_membresia=True).first()
+			or ativos.filter(titulo=cls.TITULO_MEMBRESIA).first()
+		)
 
 
 class PerguntaQuestionario(models.Model):

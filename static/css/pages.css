@@ -216,7 +216,6 @@
     box-shadow: var(--shadow-soft);
 }
 
-.form-errors,
 .empty-state {
     border: 1px dashed #b8c8b6;
     background: #f7faf3;
@@ -224,6 +223,26 @@
     padding: 12px;
     color: #59685d;
     font-weight: 700;
+}
+
+/* Erro precisa ler como erro: antes dividia o estilo neutro do .empty-state e
+   passava batido no meio do formulario. */
+.form-errors {
+    border: 1px solid #d99a94;
+    background: #fdf3f2;
+    border-radius: var(--radius);
+    padding: 12px;
+    color: #a03329;
+    font-weight: 700;
+}
+
+.form-errors ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+}
+
+.form-errors a {
+    color: inherit;
 }
 
 /* Erros de validacao de formulario (errorlist do Django) */
@@ -844,6 +863,144 @@
     font-size: 0.8rem;
     font-weight: 800;
     color: var(--primary-strong);
+}
+
+/* Pop-up de membresia - abre ao mover a pessoa para o status Participante */
+.membresia-modal {
+    width: min(560px, calc(100vw - 28px));
+    margin: auto;
+    padding: clamp(20px, 4vw, 28px);
+    border: 1px solid var(--line);
+    border-radius: calc(var(--radius) * 1.5);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow);
+    overflow: visible;
+}
+
+.membresia-modal::backdrop {
+    background: rgba(23, 37, 31, 0.55);
+}
+
+.membresia-modal[open] {
+    animation: membresia-modal-in 0.16s ease-out;
+}
+
+@keyframes membresia-modal-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.membresia-modal h2 {
+    margin: 6px 0 8px;
+}
+
+.membresia-modal-texto {
+    margin: 0 0 16px;
+    color: var(--muted);
+}
+
+.membresia-modal-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 18px;
+}
+
+.membresia-modal-link .convite-link {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.membresia-modal-link .btn {
+    flex: 0 0 auto;
+}
+
+.membresia-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.membresia-modal-dispensar {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin-top: 2px;
+    padding: 0;
+    min-height: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-decoration: underline;
+    box-shadow: none;
+}
+
+.membresia-modal-dispensar:hover {
+    color: var(--text);
+    background: none;
+    transform: none;
+    box-shadow: none;
+}
+
+.membresia-modal-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    min-height: 32px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface-soft);
+    color: var(--muted);
+    box-shadow: none;
+}
+
+.membresia-modal-close svg {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.membresia-modal-close:hover {
+    border-color: var(--line-strong);
+    background: var(--surface-tint);
+    color: var(--text);
+    transform: none;
+    box-shadow: none;
+}
+
+@media (max-width: 560px) {
+    .membresia-modal-link {
+        flex-wrap: wrap;
+    }
+
+    .membresia-modal-actions > *,
+    .membresia-modal-actions .btn {
+        width: 100%;
+    }
+
+    .membresia-modal-actions .membresia-modal-dispensar {
+        justify-content: center;
+    }
+
+    .membresia-modal-actions .inline-form {
+        display: flex;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .membresia-modal[open] {
+        animation: none;
+    }
 }
 
 /* Questionarios - pagina publica de resposta */

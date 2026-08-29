@@ -97,6 +97,15 @@
                         </span>
                     </label>
                     {% if form.ativo.errors %}<span class="form-errors">{{ form.ativo.errors.0 }}</span>{% endif %}
+
+                    <label class="permission-toggle questionario-active-toggle" for="{{ form.padrao_membresia.id_for_label }}">
+                        {{ form.padrao_membresia }}
+                        <span>
+                            <strong>Questionario de membresia</strong>
+                            <small>Gerado automaticamente quando a pessoa vira Participante</small>
+                        </span>
+                    </label>
+                    {% if form.padrao_membresia.errors %}<span class="form-errors">{{ form.padrao_membresia.errors.0 }}</span>{% endif %}
                 </div>
 
                 <p class="action-row">
