@@ -183,7 +183,12 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 		context = super().get_context_data(**kwargs)
 
 		total_pessoas = PrimeiroContato.objects.count()
-		total_primeiro_contato = self.get_pessoas_boas_vindas_queryset().count()
+		# KPI do card = todo mundo no status (bate com o filtro ?status=primeiro_contato).
+		# O badge do botao usa total_boas_vindas, que e o subconjunto elegivel ao disparo.
+		total_primeiro_contato = PrimeiroContato.objects.filter(
+			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO
+		).count()
+		total_boas_vindas = self.get_pessoas_boas_vindas_queryset().count()
 		total_robo = PrimeiroContato.objects.filter(
 			status=PrimeiroContato.StatusAcolhimento.ROBO
 		).count()
@@ -204,7 +209,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 			{
 				'total_pessoas': total_pessoas,
 				'total_primeiro_contato': total_primeiro_contato,
-				'total_boas_vindas': total_primeiro_contato,
+				'total_boas_vindas': total_boas_vindas,
 				'total_robo': total_robo,
 				'total_acompanhamento': total_acompanhamento,
 				'total_participante': total_participante,

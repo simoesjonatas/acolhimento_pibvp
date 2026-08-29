@@ -110,6 +110,7 @@ class PrimeiroContatoQuerysetMixin:
 
 	def get_filtered_queryset(self, queryset):
 		busca = self.request.GET.get('q', '').strip()
+		status = self.request.GET.get('status', '').strip()
 		origem = self.request.GET.get('origem', '').strip()
 		iniciou_interacao = self.request.GET.get('iniciou_interacao', '').strip()
 		janela = self.request.GET.get('janela', '').strip()
@@ -126,6 +127,9 @@ class PrimeiroContatoQuerysetMixin:
 				| Q(email__icontains=busca)
 				| Q(religiao__icontains=busca)
 			)
+
+		if status in PrimeiroContato.StatusAcolhimento.values:
+			queryset = queryset.filter(status=status)
 
 		if origem:
 			queryset = queryset.filter(origem_cadastro=origem)
@@ -189,10 +193,12 @@ class PrimeiroContatoListView(LoginRequiredMixin, PrimeiroContatoQuerysetMixin, 
 			sort_links[coluna] = params.urlencode()
 
 		context['busca'] = self.request.GET.get('q', '').strip()
+		context['status_atual'] = self.request.GET.get('status', '').strip()
 		context['origem_atual'] = self.request.GET.get('origem', '').strip()
 		context['iniciou_interacao_atual'] = self.request.GET.get('iniciou_interacao', '').strip()
 		context['janela_atual'] = self.request.GET.get('janela', '').strip()
 		context['meus_atual'] = self.request.GET.get('meus', '').strip()
+		context['status_choices'] = PrimeiroContato.StatusAcolhimento.choices
 		context['origem_choices'] = PrimeiroContato.OrigemCadastroChoices.choices
 		context['sort_coluna_atual'] = sort_coluna_atual
 		context['sort_direcao_atual'] = sort_direcao_atual

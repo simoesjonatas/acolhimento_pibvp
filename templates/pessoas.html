@@ -29,6 +29,15 @@
         <input id="q" name="q" type="text" value="{{ busca }}" placeholder="Nome ou WhatsApp">
     </div>
     <div>
+        <label for="status">Status</label>
+        <select id="status" name="status">
+            <option value="">Todos</option>
+            {% for valor, rotulo in status_choices %}
+            <option value="{{ valor }}" {% if status_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
         <label for="origem">Origem</label>
         <select id="origem" name="origem">
             <option value="">Todos</option>

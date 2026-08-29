@@ -43,30 +43,36 @@
 </div>
 
 <section class="dashboard-cards">
-    <article class="kpi-card">
+    <a class="kpi-card" href="{% url 'pessoas-lista' %}">
         <span class="kpi-label">Total de pessoas</span>
         <strong class="kpi-value">{{ total_pessoas }}</strong>
-    </article>
-    <article class="kpi-card">
+        <span class="kpi-hint">Ver pessoas</span>
+    </a>
+    <a class="kpi-card" href="{% url 'pessoas-lista' %}?status=primeiro_contato">
         <span class="kpi-label">Primeiro contato</span>
         <strong class="kpi-value">{{ total_primeiro_contato }}</strong>
-    </article>
-    <article class="kpi-card">
+        <span class="kpi-hint">Ver pessoas</span>
+    </a>
+    <a class="kpi-card" href="{% url 'pessoas-lista' %}?status=robo">
         <span class="kpi-label">Robo</span>
         <strong class="kpi-value">{{ total_robo }}</strong>
-    </article>
-    <article class="kpi-card">
+        <span class="kpi-hint">Ver pessoas</span>
+    </a>
+    <a class="kpi-card" href="{% url 'pessoas-lista' %}?status=em_acompanhamento">
         <span class="kpi-label">Em acompanhamento</span>
         <strong class="kpi-value">{{ total_acompanhamento }}</strong>
-    </article>
-    <article class="kpi-card">
+        <span class="kpi-hint">Ver pessoas</span>
+    </a>
+    <a class="kpi-card" href="{% url 'pessoas-lista' %}?status=participante">
         <span class="kpi-label">Participantes</span>
         <strong class="kpi-value">{{ total_participante }}</strong>
-    </article>
-    <article class="kpi-card">
+        <span class="kpi-hint">Ver pessoas</span>
+    </a>
+    <a class="kpi-card" href="{% url 'pessoas-lista' %}?status=membro">
         <span class="kpi-label">Membros</span>
         <strong class="kpi-value">{{ total_membros }}</strong>
-    </article>
+        <span class="kpi-hint">Ver pessoas</span>
+    </a>
     <a class="kpi-card kpi-card-janela" href="{% url 'pessoas-lista' %}?janela=aberta">
         <span class="kpi-label">Janela 24h aberta</span>
         <strong class="kpi-value">{{ total_janela_aberta }}</strong>
