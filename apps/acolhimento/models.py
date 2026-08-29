@@ -63,6 +63,10 @@ class PrimeiroContato(models.Model):
 
 	nome = models.CharField(max_length=150)
 	telefone_whatsapp = models.CharField(max_length=20, validators=[telefone_whatsapp_validator])
+	# Identidade LID do WhatsApp (ex.: '48722243260432@lid'). Desde a migracao para LID,
+	# o WhatsApp rejeita (erro 463) envios enderecados ao telefone de quem ja migrou; e
+	# preciso enviar para o LID. Aprendemos o valor no webhook, via `key.remoteJidAlt`.
+	whatsapp_lid = models.CharField(max_length=40, blank=True, db_index=True)
 	primeira_vez = models.BooleanField(default=True)
 	como_conheceu = models.CharField(max_length=20, choices=ComoConheceuChoices.choices)
 	o_que_busca = models.CharField(max_length=25, choices=OQueBuscaChoices.choices)

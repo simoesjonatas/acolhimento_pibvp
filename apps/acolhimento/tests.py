@@ -1,3 +1,4 @@
+import json
 from datetime import time, timedelta
 from unittest.mock import patch
 
@@ -9,7 +10,13 @@ from django.utils import timezone
 from django.urls import reverse
 
 from apps.acolhimento import atendimento_bot
-from apps.acolhimento import evolution_service, fila_auto, mensagem_variacao, whatsapp_gateway
+from apps.acolhimento import (
+	evolution_service,
+	fila_auto,
+	mensagem_variacao,
+	whatsapp_gateway,
+	whatsapp_saude,
+)
 from apps.acolhimento.fila_processor import processar_fila_mensagens
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, PerguntaForm, PrimeiroContatoForm, RelatorioPessoasForm, ResponderQuestionarioForm
 from apps.acolhimento.models import (
@@ -1428,6 +1435,173 @@ class EvolutionWebhookConfigTests(TestCase):
 		self.assertEqual(resp.status_code, 200)
 
 
+class EvolutionEnderecamentoLidTests(TestCase):
+	"""Migracao LID do WhatsApp: quem migrou so recebe pelo LID (telefone volta erro 463)."""
+
+	def _pessoa(self, telefone='21971347985', lid=''):
+		return PrimeiroContato.objects.create(
+			nome='Jonatas Simoes',
+			telefone_whatsapp=telefone,
+			whatsapp_lid=lid,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.OUTRO,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.PARTICIPAR_DE_ALGO,
+			origem_cadastro=PrimeiroContato.OrigemCadastroChoices.AUTO_CADASTRO,
+			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO,
+		)
+
+	def _entrada_lid(self, texto='oi'):
+		"""Payload real de quem ja migrou: remoteJid e o LID, o telefone vem no remoteJidAlt."""
+		return {
+			'event': 'messages.upsert',
+			'instance': 'pibvp-producao',
+			'data': {
+				'key': {
+					'id': '3BB44343A9DB6D0DE6AE',
+					'fromMe': False,
+					'remoteJid': '48722243260432@lid',
+					'remoteJidAlt': '5521971347985@s.whatsapp.net',
+					'addressingMode': 'lid',
+				},
+				'pushName': 'Jonatas Simoes',
+				'message': {'conversation': texto},
+			},
+		}
+
+	def _postar(self, payload):
+		return self.client.post(
+			reverse('mensagens-webhook-evolution'),
+			data=json.dumps(payload),
+			content_type='application/json',
+			HTTP_X_EVOLUTION_WEBHOOK_SECRET='segredo-test',
+		)
+
+	@override_settings(EVOLUTION_WEBHOOK_SECRET='segredo-test', DEBUG=False)
+	def test_entrada_por_lid_reconhece_pessoa_pelo_telefone_alternativo(self):
+		pessoa = self._pessoa()
+
+		resp = self._postar(self._entrada_lid())
+
+		self.assertEqual(resp.status_code, 200)
+		# Sem tratar o LID, o '48722243260432' viraria telefone e criaria uma 2a pessoa.
+		self.assertEqual(PrimeiroContato.objects.count(), 1)
+		pessoa.refresh_from_db()
+		self.assertEqual(pessoa.whatsapp_lid, '48722243260432@lid')
+
+	@override_settings(EVOLUTION_WEBHOOK_SECRET='segredo-test', DEBUG=False)
+	def test_entrada_por_lid_sem_telefone_nao_cria_pessoa_fantasma(self):
+		payload = self._entrada_lid()
+		payload['data']['key'].pop('remoteJidAlt')
+
+		resp = self._postar(payload)
+
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(PrimeiroContato.objects.count(), 0)
+
+	@override_settings(EVOLUTION_WEBHOOK_SECRET='segredo-test', DEBUG=False)
+	def test_entrada_por_lid_encontra_pessoa_pelo_lid_ja_aprendido(self):
+		pessoa = self._pessoa(lid='48722243260432@lid')
+		payload = self._entrada_lid()
+		payload['data']['key'].pop('remoteJidAlt')
+
+		resp = self._postar(payload)
+
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(PrimeiroContato.objects.count(), 1)
+		self.assertEqual(
+			MensagemContato.objects.filter(
+				pessoa=pessoa, direcao=MensagemContato.DirecaoChoices.ENTRADA
+			).count(),
+			1,
+		)
+
+	def test_envio_usa_o_lid_quando_conhecido(self):
+		pessoa = self._pessoa(lid='48722243260432@lid')
+		msg = MensagemContato.objects.create(
+			pessoa=pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.SAIDA,
+			status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+			conteudo='ola',
+		)
+		capturado = {}
+
+		def fake_send(*, to_phone, text, delay_ms=None, lid=''):
+			capturado['lid'] = lid
+			return {'sid': 'X', 'status': 'PENDING', 'to': to_phone, 'raw': {}}
+
+		with override_settings(WHATSAPP_PROVIDER='evolution'):
+			with patch('apps.acolhimento.evolution_service.send_whatsapp_text', side_effect=fake_send):
+				whatsapp_gateway.enviar(msg, '+5521971347985')
+
+		self.assertEqual(capturado['lid'], '48722243260432@lid')
+
+	def test_payload_endereca_o_lid_em_vez_do_telefone(self):
+		with patch('apps.acolhimento.evolution_service._post') as post:
+			post.return_value = (201, {'key': {'id': 'ABC'}, 'status': 'PENDING'})
+			resultado = evolution_service.send_whatsapp_text(
+				to_phone='+5521971347985', text='ola', lid='48722243260432@lid'
+			)
+
+		self.assertEqual(post.call_args.args[1]['number'], '48722243260432@lid')
+		self.assertEqual(resultado['enderecamento'], 'lid')
+
+	def test_sem_lid_continua_enviando_pelo_telefone(self):
+		with patch('apps.acolhimento.evolution_service._post') as post:
+			post.return_value = (201, {'key': {'id': 'ABC'}, 'status': 'PENDING'})
+			resultado = evolution_service.send_whatsapp_text(to_phone='+5521971347985', text='ola')
+
+		self.assertEqual(post.call_args.args[1]['number'], '5521971347985')
+		self.assertEqual(resultado['enderecamento'], 'telefone')
+
+
+class WhatsAppSaudeTests(TestCase):
+	"""Disjuntor: uma sequencia de falhas desliga o disparo automatico."""
+
+	def _pessoa(self):
+		return PrimeiroContato.objects.create(
+			nome='Contato',
+			telefone_whatsapp='21999990000',
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.OUTRO,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.PARTICIPAR_DE_ALGO,
+			origem_cadastro=PrimeiroContato.OrigemCadastroChoices.AUTO_CADASTRO,
+			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO,
+		)
+
+	def _saidas(self, quantidade, status):
+		pessoa = self._pessoa()
+		for _ in range(quantidade):
+			MensagemContato.objects.create(
+				pessoa=pessoa,
+				canal=MensagemContato.CanalChoices.WHATSAPP,
+				direcao=MensagemContato.DirecaoChoices.SAIDA,
+				status_fila=status,
+				conteudo='x',
+			)
+
+	def test_desliga_auto_apos_falhas_consecutivas(self):
+		cfg = ConfiguracaoProcessamentoFila.carregar()
+		cfg.auto_ativo = True
+		cfg.save(update_fields=['auto_ativo'])
+		self._saidas(whatsapp_saude.LIMITE_FALHAS_CONSECUTIVAS, MensagemContato.StatusFilaChoices.FALHA)
+
+		self.assertTrue(whatsapp_saude.avaliar_e_pausar_envio())
+		cfg.refresh_from_db()
+		self.assertFalse(cfg.auto_ativo)
+		# Segunda chamada nao repete o aviso: o disjuntor ja esta aberto.
+		self.assertFalse(whatsapp_saude.avaliar_e_pausar_envio())
+
+	def test_nao_desliga_se_houve_envio_bem_sucedido_no_meio(self):
+		cfg = ConfiguracaoProcessamentoFila.carregar()
+		cfg.auto_ativo = True
+		cfg.save(update_fields=['auto_ativo'])
+		self._saidas(whatsapp_saude.LIMITE_FALHAS_CONSECUTIVAS - 1, MensagemContato.StatusFilaChoices.FALHA)
+		self._saidas(1, MensagemContato.StatusFilaChoices.ENVIADA)
+
+		self.assertFalse(whatsapp_saude.avaliar_e_pausar_envio())
+		cfg.refresh_from_db()
+		self.assertTrue(cfg.auto_ativo)
+
+
 class AtendimentoBotTests(TestCase):
 	"""Bot de menu do atendimento automatico (WhatsApp)."""
 
@@ -1870,9 +2044,10 @@ class GatewayEvolutionEnvioTests(TestCase):
 		)
 		capturado = {}
 
-		def fake_send(*, to_phone, text, delay_ms=None):
+		def fake_send(*, to_phone, text, delay_ms=None, lid=''):
 			capturado['text'] = text
 			capturado['delay_ms'] = delay_ms
+			capturado['lid'] = lid
 			return {'sid': 'X', 'status': 'PENDING', 'to': to_phone, 'raw': {}}
 
 		with patch('apps.acolhimento.evolution_service.send_whatsapp_text', side_effect=fake_send):

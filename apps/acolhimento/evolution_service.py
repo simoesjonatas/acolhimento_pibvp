@@ -27,6 +27,15 @@ def _digits(phone: str) -> str:
     return digits
 
 
+def _normalizar_lid(lid: str) -> str:
+    """Normaliza um LID para '<digitos>@lid'. Devolve '' quando nao ha LID valido."""
+    bruto = (lid or '').strip()
+    if not bruto:
+        return ''
+    digitos = re.sub(r'\D', '', bruto.split('@', 1)[0])
+    return f'{digitos}@lid' if digitos else ''
+
+
 def _request(method: str, path: str, payload: dict | None = None, timeout: int | None = None) -> tuple[int, Any]:
     base = (settings.EVOLUTION_BASE_URL or '').rstrip('/')
     if not base:
@@ -99,18 +108,30 @@ def configure_webhook(*, enabled: bool = True) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def send_whatsapp_text(*, to_phone: str, text: str, delay_ms: int | None = None) -> dict[str, Any]:
+def send_whatsapp_text(
+    *,
+    to_phone: str,
+    text: str,
+    delay_ms: int | None = None,
+    lid: str = '',
+) -> dict[str, Any]:
     """Envia texto simples. Retorna dict normalizado (sid/status/to/raw).
 
     `delay_ms` (opcional): quando > 0, a Evolution mostra "digitando..." (presenca
     composing) por esse tempo antes de enviar. Deixa o envio mais humano e ajuda a
     evitar bloqueio por disparo em massa.
+
+    `lid` (opcional): identidade LID do destinatario (ex.: '48722243260432@lid').
+    Quem ja migrou para o enderecamento LID do WhatsApp so recebe por ele — enviar
+    para o telefone volta com erro 463 e a mensagem nunca chega. Quando o LID e
+    conhecido ele tem prioridade sobre o telefone.
     """
     if not (text or '').strip():
         raise EvolutionWhatsAppError('Mensagem vazia: informe um texto para enviar.')
 
     instance = settings.EVOLUTION_INSTANCE
-    number = _digits(to_phone)
+    destino_lid = _normalizar_lid(lid)
+    number = destino_lid or _digits(to_phone)
     payload: dict[str, Any] = {'number': number, 'text': text}
     if delay_ms and int(delay_ms) > 0:
         payload['delay'] = int(delay_ms)
@@ -129,8 +150,40 @@ def send_whatsapp_text(*, to_phone: str, text: str, delay_ms: int | None = None)
         'sid': sid,
         'status': (data.get('status') or 'PENDING'),
         'to': number,
+        'enderecamento': 'lid' if destino_lid else 'telefone',
         'raw': data,
     }
+
+
+def mapear_lids(*, limite: int = 500) -> dict[str, str]:
+    """Varre o historico da instancia e devolve {telefone_digitos: '<lid>@lid'}.
+
+    Nas mensagens recebidas de quem ja migrou, o WhatsApp manda o LID em
+    `key.remoteJid` e o telefone em `key.remoteJidAlt` (ou o inverso). Esse par e a
+    unica fonte confiavel do mapeamento: o endpoint /chat/whatsappNumbers da v2.3.7
+    devolve a string literal "lid" no lugar do valor.
+    """
+    instance = settings.EVOLUTION_INSTANCE
+    _status, data = _post(f'/chat/findMessages/{instance}', {'limit': int(limite)})
+
+    registros = data.get('messages', data) if isinstance(data, dict) else data
+    if isinstance(registros, dict):
+        registros = registros.get('records', [])
+    if not isinstance(registros, list):
+        return {}
+
+    mapa: dict[str, str] = {}
+    for registro in registros:
+        if not isinstance(registro, dict):
+            continue
+        key = registro.get('key') or {}
+        principal = str(key.get('remoteJid') or '')
+        alternativo = str(key.get('remoteJidAlt') or '')
+        if principal.endswith('@lid') and alternativo.endswith('@s.whatsapp.net'):
+            mapa[alternativo.split('@', 1)[0]] = principal
+        elif alternativo.endswith('@lid') and principal.endswith('@s.whatsapp.net'):
+            mapa[principal.split('@', 1)[0]] = alternativo
+    return mapa
 
 
 # ---------------------------------------------------------------------------

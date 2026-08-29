@@ -45,9 +45,24 @@ def whatsapp_conexao(request):
     else:
         classe, texto = 'off', 'desconectado'
 
+    # A conexao seguir "open" nao quer dizer que as mensagens estao saindo: com o erro
+    # 463 (enderecamento LID / conta restrita) o WhatsApp aceita a conexao e recusa cada
+    # envio. Sem este aviso o indicador fica verde enquanto nada e entregue.
+    falhas = cache.get('wa_falhas_recentes', '__miss__')
+    if falhas == '__miss__':
+        from apps.acolhimento import whatsapp_saude
+
+        falhas = whatsapp_saude.falhas_recentes(horas=24)
+        cache.set('wa_falhas_recentes', falhas, 60)
+
+    if estado == 'open' and falhas:
+        classe = 'wait'
+        texto = f'conectado, mas {falhas} envio(s) falharam em 24h'
+
     return {
         'whatsapp_provider': 'evolution',
         'whatsapp_estado': estado,
         'whatsapp_estado_classe': classe,
         'whatsapp_estado_texto': texto,
+        'whatsapp_falhas_recentes': falhas,
     }

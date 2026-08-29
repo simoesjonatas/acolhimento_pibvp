@@ -99,9 +99,12 @@ def _texto_para_evolution(mensagem: MensagemContato) -> str:
 def _enviar_evolution(mensagem: MensagemContato, destino: str) -> dict[str, Any]:
     texto = _texto_para_evolution(mensagem)
     delay_ms = _delay_digitando_ms(texto)
+    # Quem ja migrou para o LID do WhatsApp so recebe por ele: enviar para o telefone
+    # volta com erro 463 e a mensagem nao chega. O LID e aprendido no webhook.
+    lid = (getattr(mensagem.pessoa, 'whatsapp_lid', '') or '').strip()
     try:
         resultado = evolution_service.send_whatsapp_text(
-            to_phone=destino, text=texto, delay_ms=delay_ms
+            to_phone=destino, text=texto, delay_ms=delay_ms, lid=lid
         )
     except evolution_service.EvolutionWhatsAppError as exc:
         raise WhatsAppSendError(str(exc)) from exc

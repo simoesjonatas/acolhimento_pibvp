@@ -82,6 +82,9 @@ services:
       # Aparencia da sessao (nome que aparece em "Aparelhos conectados" no WhatsApp)
       CONFIG_SESSION_PHONE_CLIENT: ${EVOLUTION_SESSION_PHONE_CLIENT:-PIBVP-Acolhimento}
       CONFIG_SESSION_PHONE_NAME: ${EVOLUTION_SESSION_PHONE_NAME:-Chrome}
+      # Versao do WhatsApp Web usada pelo Baileys. Deixe vazio para a padrao da imagem;
+      # preencha quando a padrao ficar defasada e o WhatsApp comecar a recusar envios.
+      CONFIG_SESSION_PHONE_VERSION: ${EVOLUTION_SESSION_PHONE_VERSION:-}
       QRCODE_LIMIT: ${EVOLUTION_QRCODE_LIMIT:-30}
       LANGUAGE: ${EVOLUTION_LANGUAGE:-pt-BR}
       TELEMETRY_ENABLED: "false"
