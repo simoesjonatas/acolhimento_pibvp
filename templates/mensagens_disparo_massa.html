@@ -8,7 +8,10 @@
         <div>
             <span class="section-eyebrow">Comunicacao</span>
             <h1>Disparo em massa</h1>
-            <p>Dois modos: <strong>mensagem livre</strong> para quem esta com a janela de 24h aberta, ou <strong>template</strong> (marketing) para qualquer pessoa fora do primeiro contato. Pessoas em Primeiro contato nao aparecem aqui.</p>
+            {# TRAVA DESATIVADA (opt-in + janela de 24h) — ver apps/acolhimento/whatsapp_rules.py. #}
+            {# Texto original, restaurar junto com a trava: #}
+            {# <p>Dois modos: <strong>mensagem livre</strong> para quem esta com a janela de 24h aberta, ou <strong>template</strong> (marketing) para qualquer pessoa fora do primeiro contato. Pessoas em Primeiro contato nao aparecem aqui.</p> #}
+            <p>Dois modos: <strong>mensagem livre</strong> (texto direto, para qualquer selecionado) ou <strong>template</strong> (marketing) para qualquer pessoa fora do primeiro contato. Pessoas em Primeiro contato nao aparecem aqui.</p>
         </div>
         <div class="hero-actions">
             <a class="btn secundario" href="{% url 'mensagens-fila' %}">
@@ -257,12 +260,15 @@
         if (composerHint) {
             composerHint.textContent = template
                 ? 'O template aprovado sera enviado a todos os selecionados, mesmo fora da janela de 24h.'
-                : 'A mensagem livre so vai para quem esta com a janela de 24h aberta.';
+                // TRAVA DESATIVADA (opt-in + janela de 24h) — ver apps/acolhimento/whatsapp_rules.py.
+                // Texto original: 'A mensagem livre so vai para quem esta com a janela de 24h aberta.'
+                : 'A mensagem livre vai para todos os selecionados.';
         }
         if (audienceHint) {
             audienceHint.textContent = template
                 ? 'No modo template, todos podem ser selecionados.'
-                : 'No modo livre, quem esta com a janela fechada fica indisponivel.';
+                // Texto original: 'No modo livre, quem esta com a janela fechada fica indisponivel.'
+                : 'No modo livre, todos podem ser selecionados.';
         }
         rows.forEach(function (row) {
             var podeLivre = row.getAttribute('data-pode-livre') === '1';

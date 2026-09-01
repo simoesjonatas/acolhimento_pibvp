@@ -583,9 +583,14 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		for pessoa in queryset_filtrado:
 			ultima = getattr(pessoa, 'ultima_entrada', None)
 			janela_aberta = bool(ultima and ultima >= limite_janela)
-			pode_livre = bool(pessoa.iniciou_interacao and janela_aberta)
-			if pode_livre:
+			# TRAVA DESATIVADA (opt-in + janela de 24h) — ver apps/acolhimento/whatsapp_rules.py.
+			# Para reativar, apague as duas linhas abaixo e descomente as originais.
+			pode_livre = True
+			if janela_aberta:
 				total_janela_aberta += 1
+			# pode_livre = bool(pessoa.iniciou_interacao and janela_aberta)
+			# if pode_livre:
+			# 	total_janela_aberta += 1
 			audiencia.append({'pessoa': pessoa, 'janela_aberta': janela_aberta, 'pode_livre': pode_livre})
 
 		context['busca'] = self.request.GET.get('q', '').strip()

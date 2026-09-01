@@ -21,6 +21,19 @@ def _as_data_uri(qr: str | None) -> str | None:
     return qr if qr.startswith('data:') else f'data:image/png;base64,{qr}'
 
 
+def _pairing_code(data: dict) -> str | None:
+    """Devolve so o codigo de pareamento de verdade (string curta).
+
+    A Evolution tambem devolve `code`, que e o payload bruto do QR (uma string
+    enorme). Mostrar isso na tela estoura o layout e nao serve para o usuario.
+    """
+    codigo = (data or {}).get('pairingCode')
+    if not codigo:
+        return None
+    codigo = str(codigo).strip()
+    return codigo if 0 < len(codigo) <= 16 else None
+
+
 class ConfiguracaoWhatsappConexaoView(LoginRequiredMixin, UserPassesTestMixin, View):
     template_name = 'configuracao_whatsapp.html'
     raise_exception = True
@@ -62,7 +75,7 @@ class ConfiguracaoWhatsappConexaoView(LoginRequiredMixin, UserPassesTestMixin, V
                 evolution_service.create_instance()
                 data = evolution_service.connect_qr()
                 qr_data_uri = _as_data_uri(data.get('base64'))
-                pairing_code = data.get('pairingCode') or data.get('code')
+                pairing_code = _pairing_code(data)
                 if qr_data_uri:
                     messages.info(request, 'QR gerado. Escaneie no WhatsApp em "Aparelhos conectados".')
                 else:
@@ -72,7 +85,7 @@ class ConfiguracaoWhatsappConexaoView(LoginRequiredMixin, UserPassesTestMixin, V
                     evolution_service.configure_webhook()
                 data = evolution_service.connect_qr()
                 qr_data_uri = _as_data_uri(data.get('base64'))
-                pairing_code = data.get('pairingCode') or data.get('code')
+                pairing_code = _pairing_code(data)
                 if not qr_data_uri:
                     messages.info(request, 'Nenhum QR no momento (ja conectado ou aguardando).')
             elif acao == 'desconectar':

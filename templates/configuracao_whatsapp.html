@@ -14,12 +14,17 @@
         .wa-conn-badge.wait .dot { background:#e2550e; }
         .wa-conn-badge.off  { background:rgba(239,68,68,.15);  color:#b91c1c; }
         .wa-conn-badge.off  .dot { background:#ef4444; }
-        .wa-conn-grid { display:grid; grid-template-columns: 320px 1fr; gap:20px; align-items:start; }
-        @media (max-width: 860px){ .wa-conn-grid { grid-template-columns: 1fr; } }
+        .config-whatsapp-page { max-width:100%; overflow-x:hidden; }
+        .wa-conn-grid { display:grid; grid-template-columns: 320px minmax(0, 1fr); gap:20px; align-items:start; }
+        .wa-conn-grid > * { min-width:0; }
+        @media (max-width: 860px){ .wa-conn-grid { grid-template-columns: minmax(0, 1fr); } }
         .wa-qr-box { background:#fff; padding:14px; border-radius:12px; display:inline-block;
-            box-shadow:0 1px 4px rgba(0,0,0,.15); }
-        .wa-qr-box img { width:260px; height:260px; display:block; }
-        .wa-pairing { font-family: ui-monospace, monospace; font-size:1.2rem; letter-spacing:3px; }
+            box-shadow:0 1px 4px rgba(0,0,0,.15); max-width:100%; }
+        .wa-qr-box img { width:min(260px, 100%); height:auto; aspect-ratio:1; display:block; }
+        .wa-pair-row { display:flex; flex-wrap:wrap; gap:22px; align-items:center; margin-top:18px; }
+        .wa-pair-row > * { min-width:0; max-width:100%; }
+        .wa-pairing { font-family: ui-monospace, monospace; font-size:1.2rem; letter-spacing:3px;
+            max-width:100%; overflow-wrap:anywhere; word-break:break-word; }
         .wa-kv { margin:4px 0; }
         .wa-kv b { font-weight:600; }
         .wa-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; }
@@ -99,7 +104,7 @@
             </div>
 
             {% if qr_data_uri %}
-                <div style="display:flex; flex-wrap:wrap; gap:22px; align-items:center; margin-top:18px">
+                <div class="wa-pair-row">
                     <div class="wa-qr-box"><img src="{{ qr_data_uri }}" alt="QR code para parear o WhatsApp"></div>
                     {% if pairing_code %}
                     <div>

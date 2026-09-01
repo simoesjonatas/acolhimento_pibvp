@@ -100,7 +100,7 @@ def evolution_sandbox(request):
             ctx['last_action'], ctx['last_status'], ctx['last_response_json'] = 'Criar instancia', status, data
             qr = (data or {}).get('qrcode') or {}
             ctx['qr_data_uri'] = _as_data_uri(qr.get('base64'))
-            ctx['pairing_code'] = qr.get('pairingCode') or qr.get('code')
+            ctx['pairing_code'] = qr.get('pairingCode')
             # Se a instancia ja existia (ou o create nao devolveu QR), pega o QR pelo connect.
             if not ctx['qr_data_uri']:
                 s2, d2 = _api('GET', f'/instance/connect/{cfg["instance"]}', cfg)

@@ -1,5 +1,6 @@
 import json
 from datetime import time, timedelta
+from unittest import skip
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -224,6 +225,9 @@ class BloqueioWhatsappOptInTests(TestCase):
 		)
 		self.client.force_login(self.user)
 
+	@skip(
+		'Travas de opt-in/janela de 24h desativadas a pedido (2026-09) — ver apps/acolhimento/whatsapp_rules.py. Reativar este teste junto com a trava.'
+	)
 	def test_bloqueia_mensagem_whatsapp_manual_sem_resposta_ao_template(self):
 		url = reverse('pessoas-enfileirar-mensagem', args=[self.pessoa.pk])
 		resp = self.client.post(
@@ -295,6 +299,9 @@ class BloqueioWhatsappOptInTests(TestCase):
 			).exists()
 		)
 
+	@skip(
+		'Travas de opt-in/janela de 24h desativadas a pedido (2026-09) — ver apps/acolhimento/whatsapp_rules.py. Reativar este teste junto com a trava.'
+	)
 	def test_processador_cancela_whatsapp_sem_resposta_ao_template(self):
 		mensagem = MensagemContato.objects.create(
 			pessoa=self.pessoa,
@@ -974,6 +981,9 @@ class JanelaWhatsappTests(TestCase):
 		self._entrada(timezone.now() - timedelta(hours=30))
 		self.assertFalse(janela_atendimento_aberta(self.pessoa))
 
+	@skip(
+		'Travas de opt-in/janela de 24h desativadas a pedido (2026-09) — ver apps/acolhimento/whatsapp_rules.py. Reativar este teste junto com a trava.'
+	)
 	def test_processador_cancela_livre_com_janela_fechada(self):
 		self._entrada(timezone.now() - timedelta(hours=30))
 		mensagem = MensagemContato.objects.create(
@@ -1006,6 +1016,9 @@ class JanelaWhatsappTests(TestCase):
 		self.assertEqual(resultado['total_processado'], 1)
 		self.assertEqual(resultado['falha'], 0)
 
+	@skip(
+		'Travas de opt-in/janela de 24h desativadas a pedido (2026-09) — ver apps/acolhimento/whatsapp_rules.py. Reativar este teste junto com a trava.'
+	)
 	def test_enfileirar_livre_bloqueado_com_janela_fechada(self):
 		self._entrada(timezone.now() - timedelta(hours=30))
 		resp = self.client.post(
@@ -1210,6 +1223,9 @@ class DisparoMassaTests(TestCase):
 			pessoa=pessoa, direcao=MensagemContato.DirecaoChoices.SAIDA
 		)
 
+	@skip(
+		'Travas de opt-in/janela de 24h desativadas a pedido (2026-09) — ver apps/acolhimento/whatsapp_rules.py. Reativar este teste junto com a trava.'
+	)
 	def test_modo_livre_so_envia_para_janela_aberta(self):
 		resp = self.client.post(
 			reverse('mensagens-disparo-massa'),

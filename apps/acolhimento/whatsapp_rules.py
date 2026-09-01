@@ -7,6 +7,26 @@ from django.utils import timezone
 from apps.acolhimento.models import MensagemContato, PrimeiroContato
 
 
+# ---------------------------------------------------------------------------
+# TRAVAS DE ENVIO DESATIVADAS A PEDIDO (2026-09)
+#
+# A equipe precisa mandar mensagem para quem ainda nao respondeu ao template de
+# primeiro contato. Foram desativadas (nao apagadas) as duas travas de envio
+# livre, porque a pedido elas devem voltar depois:
+#
+#   1. opt-in previo  -> pessoa_pode_receber_whatsapp()
+#   2. janela de 24h  -> pode_enviar_livre() e motivo_bloqueio_livre()
+#
+# Para REATIVAR: em cada uma das tres funcoes marcadas com "TRAVA DESATIVADA",
+# apague o return de bypass e descomente o corpo original logo abaixo. Fora
+# deste arquivo, ha dois pontos de UI marcados com o mesmo texto:
+#   - apps/acolhimento/views.py (audiencia do disparo em massa: pode_livre)
+#   - templates/pessoa_mensagens.html e templates/mensagens_disparo_massa.html
+#
+# O que NAO foi desativado: o bloqueio de reenvio do template de continuacao
+# dentro de 24h (evita cobranca duplicada), em motivo_bloqueio_template_continuar().
+# ---------------------------------------------------------------------------
+
 # Janela de atendimento do WhatsApp: apos 24h sem resposta da pessoa, so e
 # possivel reabrir a conversa com um template aprovado pela Meta.
 JANELA_ATENDIMENTO_HORAS = 24
@@ -29,7 +49,10 @@ TEMPLATE_CONTINUAR_TIPO = 'continuar_conversa'
 
 def pessoa_pode_receber_whatsapp(pessoa) -> bool:
     """A pessoa ja deu opt-in (respondeu ao template de primeiro contato) alguma vez."""
-    return bool(getattr(pessoa, 'iniciou_interacao', False))
+    # TRAVA DESATIVADA (opt-in previo): para reativar, apague o `return True` e
+    # descomente a linha original abaixo.
+    return True
+    # return bool(getattr(pessoa, 'iniciou_interacao', False))
 
 
 def ultima_entrada_em(pessoa):
@@ -85,7 +108,10 @@ def contar_pessoas_janela_aberta() -> int:
 
 def pode_enviar_livre(pessoa) -> bool:
     """Pode enviar uma mensagem livre (nao-template) agora: opt-in dado E janela aberta."""
-    return pessoa_pode_receber_whatsapp(pessoa) and janela_atendimento_aberta(pessoa)
+    # TRAVA DESATIVADA (opt-in + janela de 24h): para reativar, apague o
+    # `return True` e descomente a linha original abaixo.
+    return True
+    # return pessoa_pode_receber_whatsapp(pessoa) and janela_atendimento_aberta(pessoa)
 
 
 def precisa_template_continuar(pessoa) -> bool:
@@ -95,11 +121,14 @@ def precisa_template_continuar(pessoa) -> bool:
 
 def motivo_bloqueio_livre(pessoa):
     """(codigo, mensagem) do bloqueio de envio livre, ou None se pode enviar."""
-    if not pessoa_pode_receber_whatsapp(pessoa):
-        return ('whatsapp_sem_interacao_previa', WHATSAPP_OPTIN_REQUIRED_ERROR)
-    if not janela_atendimento_aberta(pessoa):
-        return ('whatsapp_janela_24h_fechada', WHATSAPP_JANELA_FECHADA_ERROR)
+    # TRAVA DESATIVADA (opt-in + janela de 24h): nenhum envio livre e bloqueado.
+    # Para reativar, apague o `return None` e descomente o corpo original abaixo.
     return None
+    # if not pessoa_pode_receber_whatsapp(pessoa):
+    #     return ('whatsapp_sem_interacao_previa', WHATSAPP_OPTIN_REQUIRED_ERROR)
+    # if not janela_atendimento_aberta(pessoa):
+    #     return ('whatsapp_janela_24h_fechada', WHATSAPP_JANELA_FECHADA_ERROR)
+    # return None
 
 
 # status_fila em que o template de continuacao ainda "vale" (nao falhou): enquanto isso,

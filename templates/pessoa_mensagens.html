@@ -81,7 +81,10 @@
             <div class="janela-aviso">
                 <div class="janela-aviso-texto">
                     <strong>Janela de 24h fechada.</strong>
-                    A pessoa nao responde ha mais de 24h — mensagens livres serao bloqueadas (evita o erro 63016).
+                    {# TRAVA DESATIVADA (opt-in + janela de 24h) — ver apps/acolhimento/whatsapp_rules.py. #}
+                    {# Texto original, restaurar junto com a trava: #}
+                    {# A pessoa nao responde ha mais de 24h — mensagens livres serao bloqueadas (evita o erro 63016). #}
+                    A pessoa nao responde ha mais de 24h — o envio livre segue liberado.
 					{% if pode_enviar_template_continuar %}
 						{% if usa_evolution %}Envie a mensagem de continuacao para retomar a conversa.{% else %}Envie o template de continuacao para reabrir a conversa.{% endif %}
 					{% else %}
