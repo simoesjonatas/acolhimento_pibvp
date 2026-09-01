@@ -4,7 +4,7 @@
     {% load static %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#1f513a">
+    <meta name="theme-color" content="#191996">
     <title>{% block title %}Acolhimento PIBVP{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'img/site-icon.svg' %}">
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
@@ -13,13 +13,13 @@
         /* Indicador discreto de conexao do WhatsApp no header. */
         .wa-menu-status { display:inline-flex; align-items:center; gap:7px; padding:6px 11px;
             border-radius: var(--radius); border:1px solid rgba(255,255,255,.14);
-            background:rgba(255,255,255,.06); color:rgba(250,255,249,.82);
+            background:rgba(255,255,255,.06); color:rgba(249, 249, 255,.82);
             font-size:.78rem; font-weight:700; line-height:1; text-decoration:none; white-space:nowrap; }
         a.wa-menu-status:hover { background:rgba(255,255,255,.12); color:#fff; }
         .wa-menu-dot { width:9px; height:9px; border-radius:50%; background:#9ca3af; flex:0 0 auto;
             box-shadow:0 0 0 3px rgba(255,255,255,.08); }
         .wa-menu-status.wa-ok   .wa-menu-dot { background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.20); }
-        .wa-menu-status.wa-wait .wa-menu-dot { background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.20); }
+        .wa-menu-status.wa-wait .wa-menu-dot { background:#e2550e; box-shadow:0 0 0 3px rgba(245,158,11,.20); }
         .wa-menu-status.wa-off  .wa-menu-dot { background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,.20); }
         /* Mobile: o header-right vira grid; o badge fica em linha propria, compacto a
            esquerda (justify-self:start impede o esticao) e nao rouba a coluna do perfil. */
@@ -35,7 +35,7 @@
         <div class="header-left">
             <div class="brand-wrap">
                 <span class="brand-mark" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-6h4v6"/></svg>
+                    <img src="{% static 'img/logo-marca.svg' %}" alt="" width="24" height="23">
                 </span>
                 <span>
                     <strong class="brand">PIBVP Acolhimento</strong>

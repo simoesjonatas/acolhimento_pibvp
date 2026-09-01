@@ -1,11 +1,24 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Entrar{% endblock %}
 
 {% block content %}
 <div class="login-shell">
     <section class="login-copy">
-        <span class="section-eyebrow">PIBVP Acolhimento</span>
+        <div class="brand-lockup">
+            <img class="brand-lockup-mark" src="{% static 'img/logo-marca.svg' %}" alt="" width="58" height="56">
+            <span class="brand-lockup-words">
+                <span class="brand-lockup-name">acolhimento</span>
+                <span class="brand-lockup-org">
+                    PIBVP
+                    <svg class="brand-lockup-arc" viewBox="0 0 16 40" aria-hidden="true">
+                        <path d="M4 5 C13 13 13 27 4 35" fill="none" stroke="currentColor"
+                              stroke-width="7" stroke-linecap="round"/>
+                    </svg>
+                </span>
+            </span>
+        </div>
         <h1>Uma tela simples para cuidar bem de cada chegada.</h1>
         <p>Acesse com seu usuario ou e-mail e a senha para acompanhar cadastros, retornos e proximos passos da equipe.</p>
     </section>

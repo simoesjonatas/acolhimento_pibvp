@@ -1,11 +1,24 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Ministério de Acolhimento{% endblock %}
 
 {% block content %}
 <section class="forbidden-wrap">
     <div class="forbidden-card">
-        <p class="forbidden-code">PIBVP</p>
+        <div class="brand-lockup brand-lockup-centered">
+            <img class="brand-lockup-mark" src="{% static 'img/logo-marca.svg' %}" alt="" width="66" height="63">
+            <span class="brand-lockup-words">
+                <span class="brand-lockup-name">acolhimento</span>
+                <span class="brand-lockup-org">
+                    PIBVP
+                    <svg class="brand-lockup-arc" viewBox="0 0 16 40" aria-hidden="true">
+                        <path d="M4 5 C13 13 13 27 4 35" fill="none" stroke="currentColor"
+                              stroke-width="7" stroke-linecap="round"/>
+                    </svg>
+                </span>
+            </span>
+        </div>
         <h1>Ministério de Acolhimento</h1>
         <p class="forbidden-text">Seja bem-vindo! Ficamos felizes com sua presença. Queremos te conhecer melhor, deixe seu contato!</p>
 
