@@ -75,19 +75,19 @@ class AutoCadastroPrimeiroContatoForm(TelefoneWhatsappUnicoMixin, forms.ModelFor
 
     class Meta:
         model = PrimeiroContato
+        # 'o_que_busca' fica fora do auto cadastro: a equipe preenche depois, no
+        # cadastro interno. O modelo aceita vazio, entao salva como ''.
         fields = [
             'nome',
             'telefone_whatsapp',
             'primeira_vez',
             'como_conheceu',
-            'o_que_busca',
         ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Opcionais para agilizar o auto cadastro quando ha um grande fluxo de pessoas.
+        # Opcional para agilizar o auto cadastro quando ha um grande fluxo de pessoas.
         self.fields['como_conheceu'].required = False
-        self.fields['o_que_busca'].required = False
 
 
 class PrimeiroContatoAdminForm(TelefoneWhatsappUnicoMixin, forms.ModelForm):
