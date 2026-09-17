@@ -69,6 +69,14 @@
                 >
                     Pessoas
                 </a>
+                {% if user.is_staff or user.is_superuser or perms.acolhimento.pode_conversar_pessoas %}
+                <a
+                    href="{% url 'questionarios-respostas' %}"
+                    class="nav-link {% if request.resolver_match.url_name == 'questionarios-respostas' or request.resolver_match.url_name == 'convite-resposta' %}active{% endif %}"
+                >
+                    Respostas
+                </a>
+                {% endif %}
                 {% if user.is_staff or user.is_superuser %}
                 <a
                     href="{% url 'mensagens-fila' %}"

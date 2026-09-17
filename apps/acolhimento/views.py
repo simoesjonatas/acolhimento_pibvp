@@ -15,7 +15,7 @@ from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db import transaction
-from django.db.models import Count, Exists, Max, OuterRef, Q
+from django.db.models import Count, Exists, F, Max, OuterRef, Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
@@ -29,7 +29,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, FormView, L
 from apps.acolhimento import fila_auto, template_config
 from apps.acolhimento.fila_metrics import metricas_entrega
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RelatorioPessoasForm, ResponderQuestionarioForm, TemplatesWhatsappForm
-from apps.acolhimento.models import ConfiguracaoProcessamentoFila, ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario, TemplateWhatsapp
+from apps.acolhimento.models import ConfiguracaoProcessamentoFila, ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario, RespostaPergunta, TemplateWhatsapp
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
 from apps.acolhimento.reports import filtrar_pessoas, gerar_relatorio, resumo_filtros, resumo_pessoas
 from apps.acolhimento.whatsapp_rules import (
@@ -1546,6 +1546,96 @@ class QuestionarioListView(SuperAdminPermissaoMixin, ListView):
 
 	def get_queryset(self):
 		return Questionario.objects.annotate(total_perguntas=Count('perguntas'))
+
+
+class QuestionarioRespostasListView(ConversasPessoasPermissaoMixin, ListView):
+	template_name = 'questionario_respostas.html'
+	model = ConviteQuestionario
+	context_object_name = 'convites'
+	paginate_by = 12
+
+	def get_queryset(self):
+		queryset = (
+			ConviteQuestionario.objects
+			.select_related('pessoa', 'questionario', 'criado_por', 'respondido_por')
+			.prefetch_related(
+				'questionario__perguntas',
+				Prefetch(
+					'respostas',
+					queryset=RespostaPergunta.objects.select_related('pergunta', 'opcao').order_by(
+						'pergunta__ordem', 'pergunta__id'
+					),
+				),
+			)
+		)
+
+		busca = self.request.GET.get('q', '').strip()
+		status = self.request.GET.get('status', '').strip()
+		questionario_id = self.request.GET.get('questionario', '').strip()
+		ordem = self.request.GET.get('ordem', 'recentes').strip()
+
+		if busca:
+			queryset = queryset.filter(
+				Q(pessoa__nome__icontains=busca)
+				| Q(pessoa__telefone_whatsapp__icontains=busca)
+				| Q(respondente_nome__icontains=busca)
+				| Q(questionario__titulo__icontains=busca)
+				| Q(respostas__valor_texto__icontains=busca)
+				| Q(respostas__opcao__texto__icontains=busca)
+			).distinct()
+
+		if status in ConviteQuestionario.StatusConvite.values:
+			queryset = queryset.filter(status=status)
+
+		if questionario_id.isdigit():
+			queryset = queryset.filter(questionario_id=int(questionario_id))
+
+		if ordem == 'antigos':
+			queryset = queryset.order_by('criado_em', 'id')
+		elif ordem == 'respondidos':
+			queryset = queryset.order_by(F('respondido_em').desc(nulls_last=True), '-criado_em', '-id')
+		else:
+			queryset = queryset.order_by('-criado_em', '-id')
+
+		return queryset
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		query_params = self.request.GET.copy()
+		query_params.pop('page', None)
+
+		for convite in context['convites']:
+			respostas = {resposta.pergunta_id: resposta for resposta in convite.respostas.all()}
+			convite.itens_resposta = [
+				{'pergunta': pergunta, 'resposta': respostas.get(pergunta.id)}
+				for pergunta in convite.questionario.perguntas.all()
+			]
+			convite.link = self.request.build_absolute_uri(
+				reverse('responder-questionario', kwargs={'token': convite.token})
+			)
+
+		resumo = ConviteQuestionario.objects.aggregate(
+			total=Count('id'),
+			pendentes=Count(
+				'id',
+				filter=Q(status=ConviteQuestionario.StatusConvite.PENDENTE),
+			),
+			respondidos=Count(
+				'id',
+				filter=Q(status=ConviteQuestionario.StatusConvite.RESPONDIDO),
+			),
+		)
+
+		context['busca'] = self.request.GET.get('q', '').strip()
+		context['status_atual'] = self.request.GET.get('status', '').strip()
+		context['questionario_atual'] = self.request.GET.get('questionario', '').strip()
+		context['ordem_atual'] = self.request.GET.get('ordem', 'recentes').strip()
+		context['status_choices'] = ConviteQuestionario.StatusConvite.choices
+		context['questionarios'] = Questionario.objects.order_by('titulo')
+		context['resumo_convites'] = resumo
+		context['total_filtrado'] = context['paginator'].count
+		context['filtro_query'] = query_params.urlencode()
+		return context
 
 
 class QuestionarioCreateView(SuperAdminPermissaoMixin, CreateView):

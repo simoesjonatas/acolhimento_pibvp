@@ -865,6 +865,178 @@
     color: var(--primary-strong);
 }
 
+/* Questionarios - central de respostas */
+.questionario-respostas-page {
+    display: grid;
+    gap: 14px;
+}
+
+.questionario-respostas-hero {
+    align-items: center;
+}
+
+.questionario-respostas-metrics {
+    gap: 7px;
+}
+
+.resposta-metric {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #ffffff;
+    color: #424354;
+    font-size: 0.8rem;
+    font-weight: 900;
+}
+
+.resposta-metric-ok {
+    border-color: #9bd3b1;
+    background: #ecf8ef;
+    color: #1e6640;
+}
+
+.resposta-metric-wait {
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+}
+
+.questionario-respostas-filters {
+    grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(150px, 1fr)) auto;
+}
+
+.filter-actions {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.filter-actions .btn,
+.filter-actions button {
+    min-height: 40px;
+}
+
+.respostas-list {
+    display: grid;
+    gap: 12px;
+}
+
+.resposta-card {
+    display: grid;
+    gap: 12px;
+    padding: clamp(14px, 2.4vw, 18px);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: var(--shadow-soft);
+}
+
+.resposta-card-respondido {
+    border-left-color: #2f9d5f;
+}
+
+.resposta-card-pendente {
+    border-left-color: var(--accent);
+}
+
+.resposta-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.resposta-card-head h2 {
+    margin-bottom: 4px;
+    font-size: clamp(1.1rem, 1.8vw, 1.35rem);
+}
+
+.resposta-card-head p {
+    margin-bottom: 0;
+    color: #55586b;
+    font-weight: 700;
+}
+
+.resposta-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.resposta-meta-grid > div {
+    min-width: 0;
+    padding: 9px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+}
+
+.resposta-meta-grid span,
+.resposta-answer-item span {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.resposta-meta-grid strong,
+.resposta-answer-item strong {
+    display: block;
+    min-width: 0;
+    color: var(--text);
+    font-size: 0.92rem;
+    font-weight: 900;
+    overflow-wrap: anywhere;
+}
+
+.resposta-answer-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 18px;
+    border-top: 1px solid var(--line);
+}
+
+.resposta-answer-item {
+    min-width: 0;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.resposta-pendente-box {
+    display: grid;
+    grid-template-columns: minmax(180px, 0.9fr) minmax(220px, 1.3fr);
+    gap: 12px;
+    align-items: center;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+}
+
+.resposta-pendente-box strong {
+    display: block;
+    color: var(--text);
+    font-weight: 900;
+}
+
+.resposta-pendente-box p {
+    margin: 2px 0 0;
+}
+
+.resposta-card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.resposta-card-actions .btn {
+    min-height: 34px;
+    padding: 7px 10px;
+}
+
 /* Pop-up de membresia - abre ao mover a pessoa para o status Participante */
 .membresia-modal {
     width: min(560px, calc(100vw - 28px));
@@ -3673,6 +3845,10 @@ a.kpi-card:hover {
     .questionario-editor-layout,
     .pergunta-editor-layout,
     .queue-filter-form,
+    .questionario-respostas-filters,
+    .resposta-meta-grid,
+    .resposta-answer-grid,
+    .resposta-pendente-box,
     .profile-layout,
     .user-editor-layout,
     .broadcast-workspace {
@@ -3735,6 +3911,9 @@ a.kpi-card:hover {
 
     .row-actions a.btn,
     .row-actions button,
+    .filter-actions .btn,
+    .filter-actions button,
+    .resposta-card-actions .btn,
     .panel-header .btn {
         width: 100%;
     }
@@ -3760,6 +3939,7 @@ a.kpi-card:hover {
     .dashboard-panel,
     .stack-form,
     .filters-form,
+    .resposta-card,
     .queue-filter-panel,
     .queue-table-panel,
     .conversation-panel,
@@ -3803,6 +3983,13 @@ a.kpi-card:hover {
     }
 
     .panel-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .resposta-card-head,
+    .filter-actions,
+    .resposta-card-actions {
         flex-direction: column;
         align-items: stretch;
     }

@@ -31,6 +31,7 @@ from apps.acolhimento.models import (
 	PerguntaQuestionario,
 	PrimeiroContato,
 	Questionario,
+	RespostaPergunta,
 	TemplateWhatsapp,
 )
 from apps.acolhimento.views import (
@@ -42,6 +43,7 @@ from apps.acolhimento.views import (
 	PrimeiroContatoMensagensView,
 	ProcessamentoFilaControleView,
 	QuestionarioListView,
+	QuestionarioRespostasListView,
 	RelatorioPessoasView,
 )
 from apps.core.views import UsuarioListView
@@ -673,6 +675,89 @@ class QuestionarioTests(TestCase):
 		request.user = self.admin
 		resp = QuestionarioListView.as_view()(request)
 		self.assertEqual(resp.status_code, 200)
+
+	def _convite_respondido(self):
+		convite = ConviteQuestionario.objects.create(
+			questionario=self.questionario,
+			pessoa=self.pessoa,
+			status=ConviteQuestionario.StatusConvite.RESPONDIDO,
+			respondente_nome='Ana Maria',
+			respondido_em=timezone.now(),
+		)
+		RespostaPergunta.objects.create(
+			convite=convite,
+			pergunta=self.p_texto,
+			valor_texto='Ana respondeu aqui',
+		)
+		RespostaPergunta.objects.create(
+			convite=convite,
+			pergunta=self.p_escolha,
+			opcao=self.op_f,
+		)
+		return convite
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_central_respostas_mostra_respondidos_e_pendentes(self):
+		self._convite_respondido()
+		pessoa_pendente = PrimeiroContato.objects.create(
+			nome='Bruno Pendente',
+			telefone_whatsapp='31999990002',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			status=PrimeiroContato.StatusAcolhimento.PARTICIPANTE,
+		)
+		ConviteQuestionario.objects.create(questionario=self.questionario, pessoa=pessoa_pendente)
+
+		self.client.force_login(self.staff_admin)
+		resp = self.client.get(reverse('questionarios-respostas'))
+
+		self.assertEqual(resp.status_code, 200)
+		self.assertContains(resp, 'Respostas dos questionarios')
+		self.assertContains(resp, 'Ana Maria')
+		self.assertContains(resp, 'Feminino')
+		self.assertContains(resp, 'Bruno Pendente')
+		self.assertContains(resp, 'Aguardando resposta')
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_central_respostas_filtra_pendentes(self):
+		self._convite_respondido()
+		pessoa_pendente = PrimeiroContato.objects.create(
+			nome='Carla Pendente',
+			telefone_whatsapp='31999990003',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			status=PrimeiroContato.StatusAcolhimento.PARTICIPANTE,
+		)
+		ConviteQuestionario.objects.create(questionario=self.questionario, pessoa=pessoa_pendente)
+
+		self.client.force_login(self.staff_admin)
+		resp = self.client.get(
+			reverse('questionarios-respostas'),
+			{'status': ConviteQuestionario.StatusConvite.PENDENTE},
+		)
+
+		self.assertEqual(resp.status_code, 200)
+		self.assertContains(resp, 'Carla Pendente')
+		self.assertNotContains(resp, 'Ana Maria')
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_central_respostas_busca_no_conteudo_da_resposta(self):
+		self._convite_respondido()
+		self.client.force_login(self.staff_admin)
+
+		resp = self.client.get(reverse('questionarios-respostas'), {'q': 'Ana respondeu'})
+
+		self.assertEqual(resp.status_code, 200)
+		self.assertContains(resp, 'Ana Maria')
+		self.assertContains(resp, 'Ana respondeu aqui')
+
+	def test_central_respostas_exige_permissao_de_conversa(self):
+		request = RequestFactory().get(reverse('questionarios-respostas'))
+		request.user = self.comum
+		with self.assertRaises(PermissionDenied):
+			QuestionarioRespostasListView.as_view()(request)
 
 	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
 	def test_menu_configuracoes_staff_ve_apenas_qrcodes(self):

@@ -1,0 +1,169 @@
+{% extends 'base.html' %}
+
+{% block title %}Respostas dos questionarios{% endblock %}
+
+{% block content %}
+<div class="questionario-respostas-page">
+    <section class="page-hero questionario-respostas-hero">
+        <div>
+            <span class="section-eyebrow">Questionarios</span>
+            <h1>Respostas dos questionarios</h1>
+            <p>Veja em um so lugar quem ja respondeu, quem ainda esta pendente e o conteudo das respostas.</p>
+            <div class="hero-badges questionario-respostas-metrics">
+                <span class="resposta-metric resposta-metric-total">{{ resumo_convites.total|default:"0" }} enviados</span>
+                <span class="resposta-metric resposta-metric-ok">{{ resumo_convites.respondidos|default:"0" }} respondidos</span>
+                <span class="resposta-metric resposta-metric-wait">{{ resumo_convites.pendentes|default:"0" }} pendentes</span>
+            </div>
+        </div>
+        <div class="hero-actions">
+            {% if user.is_superuser %}
+            <a class="btn secundario" href="{% url 'questionarios-lista' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/></svg>
+                <span class="btn-text">Questionarios</span>
+            </a>
+            {% endif %}
+        </div>
+    </section>
+
+    <form method="get" class="filters-form questionario-respostas-filters">
+        <div>
+            <label for="respostas-q">Buscar</label>
+            <input
+                type="search"
+                name="q"
+                id="respostas-q"
+                value="{{ busca }}"
+                placeholder="Pessoa, telefone, formulario ou resposta"
+            >
+        </div>
+        <div>
+            <label for="respostas-status">Status</label>
+            <select name="status" id="respostas-status">
+                <option value="">Todos</option>
+                {% for valor, rotulo in status_choices %}
+                <option value="{{ valor }}" {% if valor == status_atual %}selected{% endif %}>{{ rotulo }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="respostas-questionario">Questionario</label>
+            <select name="questionario" id="respostas-questionario">
+                <option value="">Todos</option>
+                {% for questionario in questionarios %}
+                <option value="{{ questionario.pk }}" {% if questionario.pk|stringformat:'s' == questionario_atual %}selected{% endif %}>{{ questionario.titulo }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="respostas-ordem">Ordem</label>
+            <select name="ordem" id="respostas-ordem">
+                <option value="recentes" {% if ordem_atual == 'recentes' %}selected{% endif %}>Mais recentes</option>
+                <option value="respondidos" {% if ordem_atual == 'respondidos' %}selected{% endif %}>Ultimas respostas</option>
+                <option value="antigos" {% if ordem_atual == 'antigos' %}selected{% endif %}>Mais antigos</option>
+            </select>
+        </div>
+        <div class="filter-actions">
+            <button type="submit">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span class="btn-text">Filtrar</span>
+            </button>
+            <a class="btn secundario" href="{% url 'questionarios-respostas' %}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+                <span class="btn-text">Limpar</span>
+            </a>
+        </div>
+    </form>
+
+    <p class="result-count">{{ total_filtrado }} convite(s) encontrado(s)</p>
+
+    {% if convites %}
+    <div class="respostas-list">
+        {% for convite in convites %}
+        <article class="resposta-card resposta-card-{{ convite.status }}">
+            <div class="resposta-card-head">
+                <div>
+                    <span class="section-eyebrow">{{ convite.questionario.titulo }}</span>
+                    <h2>{{ convite.pessoa.nome }}</h2>
+                    <p>
+                        {{ convite.pessoa.telefone_whatsapp }}
+                        {% if convite.respondente_nome %} - preenchido por {{ convite.respondente_nome }}{% endif %}
+                    </p>
+                </div>
+                {% if convite.respondido %}
+                <span class="exec-status exec-status-concluida"><span class="exec-status-dot"></span> Respondido</span>
+                {% else %}
+                <span class="exec-status exec-status-executando"><span class="exec-status-dot"></span> Pendente</span>
+                {% endif %}
+            </div>
+
+            <div class="resposta-meta-grid">
+                <div>
+                    <span>Enviado</span>
+                    <strong>{{ convite.criado_em|date:'d/m/Y H:i' }}</strong>
+                </div>
+                <div>
+                    <span>Respondido</span>
+                    <strong>{% if convite.respondido_em %}{{ convite.respondido_em|date:'d/m/Y H:i' }}{% else %}-{% endif %}</strong>
+                </div>
+                <div>
+                    <span>Criado por</span>
+                    <strong>{% if convite.criado_por %}{{ convite.criado_por.get_full_name|default:convite.criado_por.username }}{% else %}-{% endif %}</strong>
+                </div>
+            </div>
+
+            {% if convite.respondido %}
+            <div class="resposta-answer-grid">
+                {% for item in convite.itens_resposta %}
+                <div class="resposta-answer-item">
+                    <span>{{ item.pergunta.texto }}</span>
+                    <strong>{% if item.resposta and item.resposta.valor_exibicao %}{{ item.resposta.valor_exibicao }}{% else %}-{% endif %}</strong>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="resposta-pendente-box">
+                <div>
+                    <strong>Aguardando resposta</strong>
+                    <p>Link gerado, mas o questionario ainda nao foi preenchido.</p>
+                </div>
+                <input class="convite-link" type="text" value="{{ convite.link }}" readonly onclick="this.select()" aria-label="Link do questionario pendente">
+            </div>
+            {% endif %}
+
+            <div class="resposta-card-actions">
+                <a class="btn secundario" href="{% url 'pessoas-detalhe' convite.pessoa.pk %}">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span class="btn-text">Abrir pessoa</span>
+                </a>
+                {% if convite.respondido %}
+                <a class="btn secundario" href="{% url 'convite-resposta' convite.pk %}">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+                    <span class="btn-text">Detalhe</span>
+                </a>
+                {% else %}
+                <a class="btn secundario" href="{{ convite.link }}" target="_blank" rel="noopener">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                    <span class="btn-text">Preencher</span>
+                </a>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+
+    {% if is_paginated %}
+    <nav class="pagination" aria-label="Paginacao de respostas">
+        {% if page_obj.has_previous %}
+        <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ page_obj.previous_page_number }}">Anterior</a>
+        {% endif %}
+        <span>Pagina {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+        <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ page_obj.next_page_number }}">Proxima</a>
+        {% endif %}
+    </nav>
+    {% endif %}
+    {% else %}
+    <p class="empty-state">Nenhum convite encontrado com os filtros atuais.</p>
+    {% endif %}
+</div>
+{% endblock %}

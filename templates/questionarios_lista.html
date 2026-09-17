@@ -9,10 +9,16 @@
         <h1>Questionarios</h1>
         <p>Crie e edite os questionarios usados no acolhimento e na membresia.</p>
     </div>
-    <a class="btn" href="{% url 'questionarios-novo' %}">
-        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <span class="btn-text">Novo questionario</span>
-    </a>
+    <div class="hero-actions">
+        <a class="btn secundario" href="{% url 'questionarios-respostas' %}">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+            <span class="btn-text">Ver respostas</span>
+        </a>
+        <a class="btn" href="{% url 'questionarios-novo' %}">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span class="btn-text">Novo questionario</span>
+        </a>
+    </div>
 </div>
 
 {% if questionarios %}
