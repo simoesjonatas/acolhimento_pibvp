@@ -31,7 +31,7 @@ from apps.acolhimento.fila_metrics import metricas_entrega
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RelatorioPessoasForm, ResponderQuestionarioForm, TemplatesWhatsappForm
 from apps.acolhimento.models import ConfiguracaoProcessamentoFila, ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario, RespostaPergunta, TemplateWhatsapp
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
-from apps.acolhimento.reports import filtrar_pessoas, gerar_relatorio, resumo_filtros, resumo_pessoas
+from apps.acolhimento.reports import filtrar_pessoas, gerar_exportacao_respostas, gerar_relatorio, resumo_filtros, resumo_pessoas
 from apps.acolhimento.whatsapp_rules import (
 	JANELA_ATENDIMENTO_HORAS,
 	WHATSAPP_OPTIN_REQUIRED_ERROR,
@@ -1548,13 +1548,10 @@ class QuestionarioListView(SuperAdminPermissaoMixin, ListView):
 		return Questionario.objects.annotate(total_perguntas=Count('perguntas'))
 
 
-class QuestionarioRespostasListView(ConversasPessoasPermissaoMixin, ListView):
-	template_name = 'questionario_respostas.html'
-	model = ConviteQuestionario
-	context_object_name = 'convites'
-	paginate_by = 12
+class ConviteRespostasQuerysetMixin:
+	"""Filtros da central de respostas: a listagem e a exportacao usam os mesmos."""
 
-	def get_queryset(self):
+	def get_filtered_queryset(self):
 		queryset = (
 			ConviteQuestionario.objects
 			.select_related('pessoa', 'questionario', 'criado_por', 'respondido_por')
@@ -1599,6 +1596,21 @@ class QuestionarioRespostasListView(ConversasPessoasPermissaoMixin, ListView):
 
 		return queryset
 
+	def link_convite(self, convite):
+		return self.request.build_absolute_uri(
+			reverse('responder-questionario', kwargs={'token': convite.token})
+		)
+
+
+class QuestionarioRespostasListView(ConversasPessoasPermissaoMixin, ConviteRespostasQuerysetMixin, ListView):
+	template_name = 'questionario_respostas.html'
+	model = ConviteQuestionario
+	context_object_name = 'convites'
+	paginate_by = 12
+
+	def get_queryset(self):
+		return self.get_filtered_queryset()
+
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
 		query_params = self.request.GET.copy()
@@ -1610,9 +1622,7 @@ class QuestionarioRespostasListView(ConversasPessoasPermissaoMixin, ListView):
 				{'pergunta': pergunta, 'resposta': respostas.get(pergunta.id)}
 				for pergunta in convite.questionario.perguntas.all()
 			]
-			convite.link = self.request.build_absolute_uri(
-				reverse('responder-questionario', kwargs={'token': convite.token})
-			)
+			convite.link = self.link_convite(convite)
 
 		resumo = ConviteQuestionario.objects.aggregate(
 			total=Count('id'),
@@ -1636,6 +1646,17 @@ class QuestionarioRespostasListView(ConversasPessoasPermissaoMixin, ListView):
 		context['total_filtrado'] = context['paginator'].count
 		context['filtro_query'] = query_params.urlencode()
 		return context
+
+
+class QuestionarioRespostasExportView(ConversasPessoasPermissaoMixin, ConviteRespostasQuerysetMixin, View):
+	"""Exporta (Excel ou CSV) todos os convites do filtro aplicado, sem paginacao."""
+
+	def get(self, request, *args, **kwargs):
+		return gerar_exportacao_respostas(
+			list(self.get_filtered_queryset()),
+			request.GET.get('formato', 'xlsx'),
+			self.link_convite,
+		)
 
 
 class QuestionarioCreateView(SuperAdminPermissaoMixin, CreateView):

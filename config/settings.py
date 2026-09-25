@@ -187,7 +187,12 @@ STORAGES = {
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 
-PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', 'https://acolhimento.simoesti.com.br').rstrip('/')
+# Usado para montar o EVOLUTION_WEBHOOK_URL. Em dev o default NAO pode ser o
+# dominio de producao: a instancia local do Evolution acabaria mandando os
+# eventos do WhatsApp para o servidor real (que os recusa com 403 por falta do
+# X-Evolution-Webhook-Secret, poluindo o log de producao).
+_default_public_base_url = 'http://localhost:8000' if DEBUG else 'https://acolhimento.simoesti.com.br'
+PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', _default_public_base_url).rstrip('/')
 
 # Cabecalhos de seguranca aplicados em qualquer ambiente. Explicitos de proposito:
 # assim nao dependemos dos defaults do framework (que podem mudar entre versoes).

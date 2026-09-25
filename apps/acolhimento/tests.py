@@ -1,7 +1,11 @@
+import csv
+import io
 import json
 from datetime import time, timedelta
 from unittest import skip
 from unittest.mock import patch
+
+from openpyxl import load_workbook
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -43,6 +47,7 @@ from apps.acolhimento.views import (
 	PrimeiroContatoMensagensView,
 	ProcessamentoFilaControleView,
 	QuestionarioListView,
+	QuestionarioRespostasExportView,
 	QuestionarioRespostasListView,
 	RelatorioPessoasView,
 )
@@ -758,6 +763,108 @@ class QuestionarioTests(TestCase):
 		request.user = self.comum
 		with self.assertRaises(PermissionDenied):
 			QuestionarioRespostasListView.as_view()(request)
+
+	def _convite_pendente(self):
+		pessoa = PrimeiroContato.objects.create(
+			nome='Carla Pendente',
+			telefone_whatsapp='31999990003',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			status=PrimeiroContato.StatusAcolhimento.PARTICIPANTE,
+		)
+		return ConviteQuestionario.objects.create(questionario=self.questionario, pessoa=pessoa)
+
+	def _exportar(self, **params):
+		self.client.force_login(self.staff_admin)
+		return self.client.get(reverse('questionarios-respostas-exportar'), params)
+
+	def _linhas_csv(self, resp):
+		return list(csv.reader(io.StringIO(resp.content.decode('utf-8-sig'))))
+
+	def test_exportar_xlsx_traz_uma_coluna_por_pergunta(self):
+		self._convite_respondido()
+
+		resp = self._exportar(formato='xlsx')
+
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(
+			resp['Content-Type'],
+			'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+		)
+		self.assertIn('attachment; filename="respostas_questionarios_', resp['Content-Disposition'])
+		ws = load_workbook(io.BytesIO(resp.content))['Q1']
+		cabecalho, linha = [[cell.value for cell in row] for row in ws.iter_rows()]
+		self.assertEqual(cabecalho[-2:], ['Seu nome?', 'Sexo?'])
+		self.assertEqual(linha[0], 'Ana')
+		self.assertEqual(linha[-2:], ['Ana respondeu aqui', 'Feminino'])
+
+	def test_exportar_csv_respeita_filtro_aplicado(self):
+		self._convite_respondido()
+		pendente = self._convite_pendente()
+
+		resp = self._exportar(formato='csv', status=ConviteQuestionario.StatusConvite.PENDENTE)
+
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp['Content-Type'], 'text/csv; charset=utf-8')
+		cabecalho, *linhas = self._linhas_csv(resp)
+		self.assertEqual(len(linhas), 1)
+		exportado = dict(zip(cabecalho, linhas[0]))
+		self.assertEqual(exportado['Pessoa'], 'Carla Pendente')
+		self.assertEqual(exportado['Status'], 'Pendente')
+		self.assertIn(str(pendente.token), exportado['Link para responder'])
+
+	def test_exportar_csv_busca_no_conteudo_da_resposta(self):
+		self._convite_respondido()
+		self._convite_pendente()
+
+		cabecalho, *linhas = self._linhas_csv(self._exportar(formato='csv', q='Ana respondeu'))
+
+		self.assertEqual([linha[0] for linha in linhas], ['Ana'])
+		self.assertEqual(dict(zip(cabecalho, linhas[0]))['Link para responder'], '')
+
+	def test_exportar_varios_questionarios_separa_perguntas(self):
+		self._convite_respondido()
+		batismo = Questionario.objects.create(titulo='Batismo', ativo=True)
+		PerguntaQuestionario.objects.create(questionario=batismo, texto='Seu nome?', tipo='texto_curto', ordem=0)
+		ConviteQuestionario.objects.create(questionario=batismo, pessoa=self.pessoa)
+
+		planilha = load_workbook(io.BytesIO(self._exportar(formato='xlsx').content))
+		self.assertEqual(planilha.sheetnames, ['Batismo', 'Q1'])
+
+		# No CSV (arquivo unico) o titulo do questionario diferencia perguntas iguais.
+		cabecalho = self._linhas_csv(self._exportar(formato='csv'))[0]
+		self.assertEqual(cabecalho[-3:], ['Batismo - Seu nome?', 'Q1 - Seu nome?', 'Q1 - Sexo?'])
+
+	def test_exportar_xlsx_grava_texto_livre_sem_virar_formula(self):
+		convite = self._convite_respondido()
+		convite.respostas.filter(pergunta=self.p_texto).update(valor_texto='=) obrigado\x0b')
+
+		ws = load_workbook(io.BytesIO(self._exportar(formato='xlsx').content))['Q1']
+
+		celula = ws.cell(row=2, column=ws.max_column - 1)
+		self.assertEqual(celula.value, '=) obrigado')
+		self.assertEqual(celula.data_type, 's')
+
+	def test_exportar_exige_permissao_de_conversa(self):
+		request = RequestFactory().get(reverse('questionarios-respostas-exportar'))
+		request.user = self.comum
+		with self.assertRaises(PermissionDenied):
+			QuestionarioRespostasExportView.as_view()(request)
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_central_respostas_botoes_de_exportar_levam_filtro_aplicado(self):
+		self._convite_respondido()
+		self.client.force_login(self.staff_admin)
+		url_exportar = reverse('questionarios-respostas-exportar')
+
+		resp = self.client.get(reverse('questionarios-respostas'), {'status': 'respondido', 'page': 1})
+		self.assertContains(resp, f'{url_exportar}?status=respondido&amp;formato=xlsx')
+		self.assertContains(resp, f'{url_exportar}?status=respondido&amp;formato=csv')
+
+		# Sem resultado no filtro, nao ha o que exportar.
+		resp = self.client.get(reverse('questionarios-respostas'), {'status': 'pendente'})
+		self.assertNotContains(resp, url_exportar)
 
 	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
 	def test_menu_configuracoes_staff_ve_apenas_qrcodes(self):

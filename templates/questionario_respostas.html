@@ -74,7 +74,21 @@
         </div>
     </form>
 
-    <p class="result-count">{{ total_filtrado }} convite(s) encontrado(s)</p>
+    <div class="respostas-toolbar">
+        <p class="result-count">{{ total_filtrado }} convite(s) encontrado(s)</p>
+        {% if total_filtrado %}
+        <div class="respostas-export">
+            <a class="btn secundario" href="{% url 'questionarios-respostas-exportar' %}?{% if filtro_query %}{{ filtro_query }}&amp;{% endif %}formato=xlsx" title="Baixa os {{ total_filtrado }} convite(s) do filtro atual (todas as paginas), uma aba por questionario" data-no-loading>
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span class="btn-text">Exportar Excel</span>
+            </a>
+            <a class="btn secundario" href="{% url 'questionarios-respostas-exportar' %}?{% if filtro_query %}{{ filtro_query }}&amp;{% endif %}formato=csv" title="Baixa os {{ total_filtrado }} convite(s) do filtro atual (todas as paginas) em CSV" data-no-loading>
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span class="btn-text">Exportar CSV</span>
+            </a>
+        </div>
+        {% endif %}
+    </div>
 
     {% if convites %}
     <div class="respostas-list">

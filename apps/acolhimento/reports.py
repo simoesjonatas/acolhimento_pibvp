@@ -1,4 +1,5 @@
 import csv
+import re
 from collections import OrderedDict
 
 from django.db.models import Q
@@ -8,15 +9,22 @@ from django.utils import timezone
 from apps.acolhimento.models import PrimeiroContato
 
 
-def _responsavel_nome(pessoa):
-	responsavel = pessoa.responsavel_atual
-	if not responsavel:
+def _usuario_nome(usuario):
+	if not usuario:
 		return ''
-	return responsavel.get_full_name() or responsavel.get_username()
+	return usuario.get_full_name() or usuario.get_username()
+
+
+def _responsavel_nome(pessoa):
+	return _usuario_nome(pessoa.responsavel_atual)
 
 
 def _data_br(valor):
 	return valor.strftime('%d/%m/%Y') if valor else ''
+
+
+def _data_hora_br(valor):
+	return timezone.localtime(valor).strftime('%d/%m/%Y %H:%M') if valor else ''
 
 
 # Registro canonico de colunas: chave -> (rotulo, funcao de leitura).
@@ -163,8 +171,8 @@ def resumo_filtros(dados):
 	return ' | '.join(partes)
 
 
-def _nome_arquivo(extensao):
-	return f'relatorio_pessoas_{timezone.localtime():%Y%m%d_%H%M}.{extensao}'
+def _nome_arquivo(extensao, prefixo='relatorio_pessoas'):
+	return f'{prefixo}_{timezone.localtime():%Y%m%d_%H%M}.{extensao}'
 
 
 def _matriz(pessoas, colunas):
@@ -173,10 +181,9 @@ def _matriz(pessoas, colunas):
 	return cabecalho, linhas
 
 
-def gerar_csv(pessoas, colunas):
-	cabecalho, linhas = _matriz(pessoas, colunas)
+def _resposta_csv(cabecalho, linhas, nome_arquivo):
 	response = HttpResponse(content_type='text/csv; charset=utf-8')
-	response['Content-Disposition'] = f'attachment; filename="{_nome_arquivo("csv")}"'
+	response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
 	response.write('﻿')  # BOM: garante acentos corretos ao abrir no Excel
 	writer = csv.writer(response)
 	writer.writerow(cabecalho)
@@ -185,17 +192,31 @@ def gerar_csv(pessoas, colunas):
 	return response
 
 
-def gerar_xlsx(pessoas, colunas):
-	from openpyxl import Workbook
+def _preencher_aba(ws, cabecalho, linhas, quebrar_texto=False):
+	from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 	from openpyxl.styles import Alignment, Font, PatternFill
 	from openpyxl.utils import get_column_letter
 
-	cabecalho, linhas = _matriz(pessoas, colunas)
+	def celula(valor):
+		if valor is None:
+			return ''
+		if isinstance(valor, str):
+			# Caracteres de controle (ex.: texto colado do Word) sao recusados pelo openpyxl.
+			return ILLEGAL_CHARACTERS_RE.sub('', valor)
+		return valor
 
-	wb = Workbook()
-	ws = wb.active
-	ws.title = 'Pessoas'
-	ws.append(cabecalho)
+	for linha in [cabecalho, *linhas]:
+		ws.append([celula(valor) for valor in linha])
+
+	alinhamento_dados = Alignment(vertical='top', wrap_text=True)
+	for numero, linha_planilha in enumerate(ws.iter_rows(), start=1):
+		for cell in linha_planilha:
+			# O openpyxl transforma texto iniciado por "=" em formula (um "=)" digitado
+			# num formulario corromperia o arquivo): grava sempre como texto.
+			if isinstance(cell.value, str):
+				cell.data_type = 's'
+			if quebrar_texto and numero > 1:
+				cell.alignment = alinhamento_dados
 
 	header_fill = PatternFill('solid', fgColor='276749')
 	header_font = Font(bold=True, color='FFFFFF')
@@ -204,24 +225,40 @@ def gerar_xlsx(pessoas, colunas):
 		cell.font = header_font
 		cell.alignment = Alignment(vertical='center')
 
-	for linha in linhas:
-		ws.append(['' if valor is None else valor for valor in linha])
-
 	ws.freeze_panes = 'A2'
-	ws.auto_filter.ref = f'A1:{get_column_letter(len(colunas))}1'
+	ws.auto_filter.ref = f'A1:{get_column_letter(len(cabecalho))}1'
 
-	for indice, chave in enumerate(colunas, start=1):
-		largura = len(str(COLUNAS_RELATORIO[chave][0]))
+	for indice, titulo in enumerate(cabecalho, start=1):
+		largura = len(str(titulo))
 		for linha in linhas:
 			largura = max(largura, len(str(linha[indice - 1] if linha[indice - 1] is not None else '')))
 		ws.column_dimensions[get_column_letter(indice)].width = min(max(largura + 2, 10), 55)
 
+
+def _resposta_xlsx(wb, nome_arquivo):
 	response = HttpResponse(
 		content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 	)
-	response['Content-Disposition'] = f'attachment; filename="{_nome_arquivo("xlsx")}"'
+	response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
 	wb.save(response)
 	return response
+
+
+def gerar_csv(pessoas, colunas):
+	cabecalho, linhas = _matriz(pessoas, colunas)
+	return _resposta_csv(cabecalho, linhas, _nome_arquivo('csv'))
+
+
+def gerar_xlsx(pessoas, colunas):
+	from openpyxl import Workbook
+
+	cabecalho, linhas = _matriz(pessoas, colunas)
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = 'Pessoas'
+	_preencher_aba(ws, cabecalho, linhas)
+	return _resposta_xlsx(wb, _nome_arquivo('xlsx'))
 
 
 def _pdf_safe(texto):
@@ -298,3 +335,104 @@ def gerar_relatorio(queryset, colunas, formato, resumo=''):
 	if formato == 'xlsx':
 		return gerar_xlsx(pessoas, colunas)
 	return gerar_pdf(pessoas, colunas, resumo)
+
+
+# ----------------------------------------------------------------------------
+# Respostas dos questionarios (exportacao da central de respostas)
+# ----------------------------------------------------------------------------
+
+CABECALHO_CONVITE = [
+	'Pessoa',
+	'WhatsApp',
+	'Questionario',
+	'Status',
+	'Preenchido por',
+	'Enviado em',
+	'Respondido em',
+	'Criado por',
+	'Link para responder',
+]
+
+
+def _questionarios_dos_convites(convites):
+	"""Questionarios presentes nos convites, por titulo (mesma ordem do filtro da tela)."""
+	questionarios = {convite.questionario_id: convite.questionario for convite in convites}
+	return sorted(questionarios.values(), key=lambda questionario: (questionario.titulo.lower(), questionario.pk))
+
+
+def _matriz_respostas(convites, colunas_perguntas, link_convite):
+	"""Uma linha por convite: dados do convite + uma coluna por pergunta.
+
+	`colunas_perguntas` e uma lista de (rotulo, pergunta_id). Pendentes levam o
+	link para responder; respondidos, o conteudo das respostas.
+	"""
+	cabecalho = CABECALHO_CONVITE + [rotulo for rotulo, _ in colunas_perguntas]
+	linhas = []
+	for convite in convites:
+		respostas = {resposta.pergunta_id: resposta.valor_exibicao for resposta in convite.respostas.all()}
+		linhas.append([
+			convite.pessoa.nome,
+			convite.pessoa.telefone_whatsapp,
+			convite.questionario.titulo,
+			convite.get_status_display(),
+			convite.respondente_nome,
+			_data_hora_br(convite.criado_em),
+			_data_hora_br(convite.respondido_em),
+			_usuario_nome(convite.criado_por),
+			'' if convite.respondido else link_convite(convite),
+			*[respostas.get(pergunta_id, '') for _, pergunta_id in colunas_perguntas],
+		])
+	return cabecalho, linhas
+
+
+def _titulo_aba(titulo, usados):
+	# Excel: ate 31 caracteres, sem \ / ? * [ ] :, sem apostrofo nas pontas e
+	# sem repetir (ignorando caixa).
+	base = re.sub(r'[\\/?*\[\]:]', ' ', titulo).strip(" '")[:31].strip(" '") or 'Questionario'
+	nome, contador = base, 2
+	while nome.lower() in usados:
+		sufixo = f' ({contador})'
+		nome = base[:31 - len(sufixo)].rstrip() + sufixo
+		contador += 1
+	usados.add(nome.lower())
+	return nome
+
+
+def gerar_csv_respostas(convites, link_convite):
+	questionarios = _questionarios_dos_convites(convites)
+	# Arquivo unico: com mais de um questionario, o titulo entra no cabecalho
+	# para distinguir perguntas de mesmo texto.
+	prefixar = len(questionarios) > 1
+	colunas = [
+		(f'{questionario.titulo} - {pergunta.texto}' if prefixar else pergunta.texto, pergunta.id)
+		for questionario in questionarios
+		for pergunta in questionario.perguntas.all()
+	]
+	cabecalho, linhas = _matriz_respostas(convites, colunas, link_convite)
+	return _resposta_csv(cabecalho, linhas, _nome_arquivo('csv', 'respostas_questionarios'))
+
+
+def gerar_xlsx_respostas(convites, link_convite):
+	from openpyxl import Workbook
+
+	wb = Workbook()
+	wb.remove(wb.active)
+	usados = set()
+	# Uma aba por questionario, cada uma com as perguntas dele como colunas.
+	for questionario in _questionarios_dos_convites(convites):
+		do_questionario = [convite for convite in convites if convite.questionario_id == questionario.pk]
+		colunas = [(pergunta.texto, pergunta.id) for pergunta in questionario.perguntas.all()]
+		cabecalho, linhas = _matriz_respostas(do_questionario, colunas, link_convite)
+		ws = wb.create_sheet(_titulo_aba(questionario.titulo, usados))
+		_preencher_aba(ws, cabecalho, linhas, quebrar_texto=True)
+
+	if not wb.worksheets:
+		_preencher_aba(wb.create_sheet('Respostas'), CABECALHO_CONVITE, [])
+	return _resposta_xlsx(wb, _nome_arquivo('xlsx', 'respostas_questionarios'))
+
+
+def gerar_exportacao_respostas(convites, formato, link_convite):
+	"""`link_convite(convite)` monta a URL publica para responder (depende do request)."""
+	if formato == 'csv':
+		return gerar_csv_respostas(convites, link_convite)
+	return gerar_xlsx_respostas(convites, link_convite)
