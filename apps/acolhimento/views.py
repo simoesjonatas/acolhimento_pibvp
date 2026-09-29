@@ -27,6 +27,17 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento import fila_auto, template_config
+from apps.acolhimento.aguardando_resposta import (
+	DIAS_PESSOA_NOVA,
+	DIAS_RESPONDIDAS,
+	ORIGEM_DISPARO_MASSA,
+	anotar_conversa,
+	corte_pessoa_nova,
+	detalhar_aguardando,
+	detalhar_respondidas,
+	filtrar_aguardando,
+	filtrar_respondidas,
+)
 from apps.acolhimento.fila_metrics import metricas_entrega
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RelatorioPessoasForm, ResponderQuestionarioForm, TemplatesWhatsappForm
 from apps.acolhimento.models import ConfiguracaoProcessamentoFila, ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario, RespostaPergunta, TemplateWhatsapp
@@ -54,8 +65,12 @@ PERMISSAO_CONVERSAR_PESSOAS = 'acolhimento.pode_conversar_pessoas'
 logger = logging.getLogger(__name__)
 
 
-def pode_ver_questionario(user):
+def pode_conversar_pessoas(user):
 	return user.is_staff or user.is_superuser or user.has_perm(PERMISSAO_CONVERSAR_PESSOAS)
+
+
+def pode_ver_questionario(user):
+	return pode_conversar_pessoas(user)
 
 
 def convite_membresia(pessoa, usuario):
@@ -121,8 +136,7 @@ class ConversasPessoasPermissaoMixin(UserPassesTestMixin):
 	raise_exception = True
 
 	def test_func(self):
-		user = self.request.user
-		return user.is_staff or user.is_superuser or user.has_perm(PERMISSAO_CONVERSAR_PESSOAS)
+		return pode_conversar_pessoas(self.request.user)
 
 
 class PrimeiroContatoQuerysetMixin:
@@ -688,6 +702,8 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 				prioridade=5,
 				agendada_para=None,
 				conteudo=conteudo,
+				# Envio em lote: nao conta como resposta na tela "Aguardando resposta".
+				metadata_envio={'origem': ORIGEM_DISPARO_MASSA},
 			)
 			for pessoa in pessoas
 		]
@@ -1071,6 +1087,109 @@ class PrimeiroContatoMensagensMaisView(LoginRequiredMixin, ConversasPessoasPermi
 				'next_before': mensagens[0].id if mensagens and has_more else '',
 			}
 		)
+
+
+class AguardandoRespostaView(LoginRequiredMixin, ListView):
+	"""Quem mandou mensagem no WhatsApp e ainda espera resposta da equipe.
+
+	Aberta a todos os usuarios (a equipe acompanha pelo celular). O texto das
+	mensagens so aparece para quem pode conversar com as pessoas, a mesma regra
+	da tela de conversa.
+	"""
+
+	template_name = 'aguardando_resposta.html'
+	context_object_name = 'pessoas'
+	paginate_by = 20
+
+	def get_aba(self):
+		return 'respondidas' if self.request.GET.get('aba') == 'respondidas' else 'aguardando'
+
+	def filtrar(self, queryset):
+		busca = self.request.GET.get('q', '').strip()
+		responsavel = self.request.GET.get('responsavel', '').strip()
+		nova = self.request.GET.get('nova', '').strip()
+		status = self.request.GET.get('status', '').strip()
+
+		if busca:
+			queryset = queryset.filter(Q(nome__icontains=busca) | Q(telefone_whatsapp__icontains=busca))
+
+		if responsavel == 'meus':
+			queryset = queryset.filter(responsavel_atual=self.request.user)
+		elif responsavel == 'sem':
+			queryset = queryset.filter(responsavel_atual__isnull=True)
+		elif responsavel.isdigit():
+			queryset = queryset.filter(responsavel_atual_id=int(responsavel))
+
+		if nova == 'sim':
+			queryset = queryset.filter(data_primeiro_contato__gte=corte_pessoa_nova())
+		elif nova == 'nao':
+			queryset = queryset.filter(data_primeiro_contato__lt=corte_pessoa_nova())
+
+		if status in PrimeiroContato.StatusAcolhimento.values:
+			queryset = queryset.filter(status=status)
+
+		return queryset
+
+	def get_queryset(self):
+		queryset = self.filtrar(anotar_conversa(PrimeiroContato.objects.select_related('responsavel_atual')))
+		if self.get_aba() == 'respondidas':
+			return filtrar_respondidas(queryset).order_by('-ultima_resposta', '-pk')
+
+		queryset = filtrar_aguardando(queryset)
+		if self.request.GET.get('ordem') == 'espera':
+			return queryset.order_by('aguardando_desde', 'pk')
+		return queryset.order_by('-ultima_entrada', '-pk')
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		user = self.request.user
+		aba = self.get_aba()
+		corte_nova = corte_pessoa_nova()
+
+		pessoas = context['pessoas']
+		if aba == 'respondidas':
+			detalhar_respondidas(pessoas)
+		else:
+			detalhar_aguardando(pessoas)
+		for pessoa in pessoas:
+			pessoa.eh_nova = pessoa.data_primeiro_contato >= corte_nova
+
+		# Atalhos do topo: retrato de toda a fila, independente dos filtros.
+		context['resumo'] = filtrar_aguardando(anotar_conversa(PrimeiroContato.objects.all())).aggregate(
+			total=Count('pk'),
+			sem_responsavel=Count('pk', filter=Q(responsavel_atual__isnull=True)),
+			novas=Count('pk', filter=Q(data_primeiro_contato__gte=corte_nova)),
+			meus=Count('pk', filter=Q(responsavel_atual=user)),
+		)
+		filtradas = self.filtrar(anotar_conversa(PrimeiroContato.objects.all()))
+		context['total_aguardando'] = filtrar_aguardando(filtradas).count()
+		context['total_respondidas'] = filtrar_respondidas(filtradas).count()
+
+		params = self.request.GET.copy()
+		params.pop('page', None)
+		context['filtro_query'] = params.urlencode()
+		params.pop('aba', None)
+		context['abas_query'] = params.urlencode()
+
+		context['aba'] = aba
+		context['busca'] = self.request.GET.get('q', '').strip()
+		context['responsavel_selecionado'] = self.request.GET.get('responsavel', '').strip()
+		context['nova_atual'] = self.request.GET.get('nova', '').strip()
+		context['status_atual'] = self.request.GET.get('status', '').strip()
+		context['ordem_atual'] = self.request.GET.get('ordem', '').strip()
+		context['filtros_ativos'] = sum(
+			1 for chave in ('q', 'responsavel', 'nova', 'status') if self.request.GET.get(chave, '').strip()
+		)
+		context['responsaveis'] = (
+			get_user_model().objects.filter(primeiros_contatos_responsaveis__isnull=False)
+			.distinct()
+			.order_by('first_name', 'username')
+		)
+		context['status_choices'] = PrimeiroContato.StatusAcolhimento.choices
+		context['pode_conversar'] = pode_conversar_pessoas(user)
+		context['dias_pessoa_nova'] = DIAS_PESSOA_NOVA
+		context['dias_respondidas'] = DIAS_RESPONDIDAS
+		return context
 
 
 class PrimeiroContatoEnfileirarMensagemView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, View):

@@ -65,7 +65,7 @@
                 </a>
                 <a
                     href="{% url 'pessoas-lista' %}"
-                    class="nav-link {% if request.resolver_match.url_name == 'pessoas-lista' or request.resolver_match.url_name == 'pessoas-novo' or request.resolver_match.url_name == 'pessoas-detalhe' or request.resolver_match.url_name == 'pessoas-mensagens' or request.resolver_match.url_name == 'pessoas-editar' or request.resolver_match.url_name == 'pessoas-excluir' %}active{% endif %}"
+                    class="nav-link {% if request.resolver_match.url_name == 'pessoas-lista' or request.resolver_match.url_name == 'pessoas-novo' or request.resolver_match.url_name == 'pessoas-detalhe' or request.resolver_match.url_name == 'pessoas-mensagens' or request.resolver_match.url_name == 'pessoas-editar' or request.resolver_match.url_name == 'pessoas-excluir' or request.resolver_match.url_name == 'aguardando-resposta' %}active{% endif %}"
                 >
                     Pessoas
                 </a>

@@ -10,6 +10,7 @@ from apps.acolhimento.atendimento_views import (
 from apps.acolhimento.evolution_views import ConfiguracaoWhatsappConexaoView
 from apps.acolhimento.evolution_webhooks import EvolutionWebhookView
 from apps.acolhimento.views import (
+    AguardandoRespostaView,
     AutoCadastroCreateView,
     AutoCadastroSuccessView,
     ConfiguracaoTemplatesView,
@@ -79,6 +80,7 @@ urlpatterns = [
     path('pessoas/<int:pk>/editar/', PrimeiroContatoUpdateView.as_view(), name='pessoas-editar'),
     path('pessoas/<int:pk>/excluir/', PrimeiroContatoDeleteView.as_view(), name='pessoas-excluir'),
     path('pessoas/exportar-csv/', PrimeiroContatoExportCsvView.as_view(), name='pessoas-exportar-csv'),
+    path('aguardando-resposta/', AguardandoRespostaView.as_view(), name='aguardando-resposta'),
     path('pessoas/<int:pk>/gerar-convite/', GerarConviteQuestionarioView.as_view(), name='pessoas-gerar-convite'),
     path('questionarios/respostas/', QuestionarioRespostasListView.as_view(), name='questionarios-respostas'),
     path('questionarios/respostas/exportar/', QuestionarioRespostasExportView.as_view(), name='questionarios-respostas-exportar'),

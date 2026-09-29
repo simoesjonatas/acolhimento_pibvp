@@ -15,6 +15,7 @@ from django.utils import timezone
 from django.urls import reverse
 
 from apps.acolhimento import atendimento_bot
+from apps.acolhimento.aguardando_resposta import DIAS_PESSOA_NOVA, ORIGEM_DISPARO_MASSA, tempo_espera
 from apps.acolhimento import (
 	evolution_service,
 	fila_auto,
@@ -2415,3 +2416,236 @@ class GatewayEvolutionEnvioTests(TestCase):
 		self.assertNotIn('{nome}', capturado['text'])
 		self.assertGreater(capturado['delay_ms'], 0)
 		self.assertEqual(envelope['status_fila'], MensagemContato.StatusFilaChoices.ENVIADA)
+
+
+@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+class AguardandoRespostaTests(TestCase):
+	"""Tela "Aguardando resposta": quem mandou mensagem e ainda espera a equipe."""
+
+	def setUp(self):
+		usuarios = get_user_model()
+		self.equipe = usuarios.objects.create_user(
+			'equipe_aguardando', password='x', is_staff=True, first_name='Ana', last_name='Souza',
+		)
+		self.voluntario = usuarios.objects.create_user('voluntario_aguardando', password='x')
+		self.url = reverse('aguardando-resposta')
+		self.agora = timezone.now()
+
+	def _pessoa(self, nome, telefone, **extra):
+		dados = {
+			'primeira_vez': True,
+			'como_conheceu': PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			'o_que_busca': PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			'status': PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO,
+		}
+		dados.update(extra)
+		return PrimeiroContato.objects.create(nome=nome, telefone_whatsapp=telefone, **dados)
+
+	def _cadastrada_ha(self, pessoa, dias):
+		PrimeiroContato.objects.filter(pk=pessoa.pk).update(
+			data_primeiro_contato=timezone.localdate() - timedelta(days=dias)
+		)
+
+	def _mensagem(self, pessoa, minutos_atras, direcao, **extra):
+		mensagem = MensagemContato.objects.create(
+			pessoa=pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=direcao,
+			status_fila=extra.pop('status_fila', MensagemContato.StatusFilaChoices.ENVIADA),
+			conteudo=extra.pop('conteudo', 'oi'),
+			**extra,
+		)
+		# enfileirada_em e auto_now_add: ajusta depois para montar a linha do tempo.
+		MensagemContato.objects.filter(pk=mensagem.pk).update(
+			enfileirada_em=self.agora - timedelta(minutes=minutos_atras)
+		)
+		return mensagem
+
+	def _entrada(self, pessoa, minutos_atras, conteudo='oi'):
+		return self._mensagem(pessoa, minutos_atras, MensagemContato.DirecaoChoices.ENTRADA, conteudo=conteudo)
+
+	def _resposta(self, pessoa, minutos_atras, **extra):
+		extra.setdefault('criado_por', self.equipe)
+		return self._mensagem(pessoa, minutos_atras, MensagemContato.DirecaoChoices.SAIDA, **extra)
+
+	def _aguardando(self, **params):
+		self.client.force_login(self.equipe)
+		resp = self.client.get(self.url, params)
+		self.assertEqual(resp.status_code, 200)
+		return resp
+
+	def _nomes(self, resp):
+		return [pessoa.nome for pessoa in resp.context['pessoas']]
+
+	def test_varias_mensagens_da_pessoa_aparecem_uma_vez(self):
+		maria = self._pessoa('Maria', '31911110001')
+		self._entrada(maria, 30, 'Oi')
+		self._entrada(maria, 20, 'Tudo bem?')
+		self._entrada(maria, 10, 'Qual o horario do culto?')
+
+		resp = self._aguardando()
+
+		self.assertEqual(self._nomes(resp), ['Maria'])
+		pessoa = resp.context['pessoas'][0]
+		self.assertEqual(pessoa.qtd_aguardando, 3)
+		self.assertEqual(pessoa.ultima_mensagem, 'Qual o horario do culto?')
+		self.assertContains(resp, '3 mensagens sem resposta')
+
+	def test_sai_da_lista_quando_a_equipe_responde_e_volta_com_nova_mensagem(self):
+		maria = self._pessoa('Maria', '31911110001')
+		self._entrada(maria, 30, 'Oi')
+		self._resposta(maria, 20)
+
+		self.assertEqual(self._nomes(self._aguardando()), [])
+		self.assertEqual(self._nomes(self._aguardando(aba='respondidas')), ['Maria'])
+
+		self._entrada(maria, 5, 'Obrigada! E o endereco?')
+		pessoa = self._aguardando().context['pessoas'][0]
+		# So conta o que chegou depois da resposta.
+		self.assertEqual(pessoa.qtd_aguardando, 1)
+		self.assertEqual(pessoa.ultima_mensagem, 'Obrigada! E o endereco?')
+
+	def test_robo_envios_em_lote_e_falha_nao_contam_como_resposta(self):
+		maria = self._pessoa('Maria', '31911110001')
+		self._entrada(maria, 30)
+		self._resposta(maria, 25, criado_por=None, metadata_envio={'origem': 'bot_atendimento'})
+		self._resposta(maria, 24, metadata_envio={'origem': ORIGEM_DISPARO_MASSA})
+		self._resposta(maria, 23, metadata_envio={'tipo_template': 'marketing_massa'})
+		self._resposta(maria, 22, metadata_envio={'tipo_template': TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO})
+		self._resposta(maria, 21, status_fila=MensagemContato.StatusFilaChoices.FALHA)
+
+		self.assertEqual(self._nomes(self._aguardando()), ['Maria'])
+
+		# Template de continuacao mandado por alguem da equipe vale como resposta.
+		self._resposta(maria, 10, metadata_envio={'tipo_template': TemplateWhatsapp.Tipo.CONTINUAR})
+		self.assertEqual(self._nomes(self._aguardando()), [])
+
+	def test_mostra_responsavel_pessoa_nova_e_link_para_a_pessoa(self):
+		nova = self._pessoa('Nova Pessoa', '31911110001', responsavel_atual=self.equipe)
+		conhecida = self._pessoa('Pessoa Conhecida', '31911110002')
+		self._cadastrada_ha(conhecida, DIAS_PESSOA_NOVA + 1)
+		self._entrada(nova, 10)
+		self._entrada(conhecida, 5)
+
+		resp = self._aguardando()
+
+		pessoas = {pessoa.nome: pessoa for pessoa in resp.context['pessoas']}
+		self.assertTrue(pessoas['Nova Pessoa'].eh_nova)
+		self.assertFalse(pessoas['Pessoa Conhecida'].eh_nova)
+		self.assertContains(resp, '>Pessoa nova</span>', count=1)
+		self.assertContains(resp, 'Responsável: <strong>Ana Souza</strong>')
+		self.assertContains(resp, '<span>Sem responsável</span>')
+		self.assertContains(resp, reverse('pessoas-detalhe', args=[nova.pk]))
+
+	def test_filtros_e_atalhos(self):
+		minha = self._pessoa('Minha', '31911110001', responsavel_atual=self.equipe)
+		sem_dono = self._pessoa('Sem Dono', '31911110002')
+		membro = self._pessoa(
+			'Membro Antigo',
+			'31911110003',
+			status=PrimeiroContato.StatusAcolhimento.MEMBRO,
+			responsavel_atual=self.voluntario,
+		)
+		self._cadastrada_ha(membro, 400)
+		for minutos, pessoa in enumerate([minha, sem_dono, membro], start=1):
+			self._entrada(pessoa, minutos)
+
+		self.assertEqual(self._nomes(self._aguardando(responsavel='meus')), ['Minha'])
+		self.assertEqual(self._nomes(self._aguardando(responsavel='sem')), ['Sem Dono'])
+		self.assertEqual(self._nomes(self._aguardando(responsavel=str(self.voluntario.pk))), ['Membro Antigo'])
+		self.assertEqual(self._nomes(self._aguardando(nova='sim')), ['Minha', 'Sem Dono'])
+		self.assertEqual(self._nomes(self._aguardando(nova='nao')), ['Membro Antigo'])
+		self.assertEqual(self._nomes(self._aguardando(status=PrimeiroContato.StatusAcolhimento.MEMBRO)), ['Membro Antigo'])
+		self.assertEqual(self._nomes(self._aguardando(q='sem d')), ['Sem Dono'])
+		self.assertEqual(self._nomes(self._aguardando(q='10003')), ['Membro Antigo'])
+
+		# Os atalhos do topo retratam a fila inteira, mesmo com filtro aplicado.
+		resumo = self._aguardando(responsavel='meus').context['resumo']
+		self.assertEqual(resumo, {'total': 3, 'sem_responsavel': 1, 'novas': 2, 'meus': 1})
+
+	def test_ordem_por_mensagem_recente_ou_por_tempo_de_espera(self):
+		recente = self._pessoa('Recente', '31911110001')
+		espera_longa = self._pessoa('Espera Longa', '31911110002')
+		voltou = self._pessoa('Voltou a Escrever', '31911110003')
+		self._entrada(recente, 60)
+		self._entrada(espera_longa, 60 * 30)
+		# Falou ha 5h, foi respondida e escreveu de novo ha 30 min: a espera conta dos 30 min.
+		self._entrada(voltou, 300)
+		self._resposta(voltou, 240)
+		self._entrada(voltou, 30)
+
+		resp = self._aguardando()
+		self.assertEqual(self._nomes(resp), ['Voltou a Escrever', 'Recente', 'Espera Longa'])
+		self.assertContains(resp, 'aguardando-card is-atrasada', count=1)
+
+		self.assertEqual(
+			self._nomes(self._aguardando(ordem='espera')),
+			['Espera Longa', 'Recente', 'Voltou a Escrever'],
+		)
+
+	def test_aba_respondidas_mostra_quem_respondeu_nos_ultimos_dias(self):
+		maria = self._pessoa('Maria', '31911110001')
+		self._entrada(maria, 30)
+		self._resposta(maria, 20)
+		joao = self._pessoa('Joao', '31911110002')
+		self._entrada(joao, 60 * 24 * 10)
+		self._resposta(joao, 60 * 24 * 9)
+
+		resp = self._aguardando(aba='respondidas')
+
+		self.assertEqual(self._nomes(resp), ['Maria'])
+		self.assertContains(resp, 'Respondida por <strong>Ana Souza</strong>')
+
+	def test_todos_logados_veem_a_lista_mas_o_texto_so_com_permissao(self):
+		maria = self._pessoa('Maria', '31911110001')
+		self._entrada(maria, 10, 'Mensagem pessoal da Maria')
+
+		self.client.force_login(self.voluntario)
+		resp = self.client.get(self.url)
+		self.assertEqual(resp.status_code, 200)
+		self.assertContains(resp, reverse('pessoas-detalhe', args=[maria.pk]))
+		self.assertNotContains(resp, 'Mensagem pessoal da Maria')
+		self.assertNotContains(resp, reverse('pessoas-mensagens', args=[maria.pk]))
+
+		resp = self._aguardando()
+		self.assertContains(resp, 'Mensagem pessoal da Maria')
+		self.assertContains(resp, reverse('pessoas-mensagens', args=[maria.pk]))
+
+	def test_exige_login(self):
+		resp = self.client.get(self.url)
+		self.assertEqual(resp.status_code, 302)
+		self.assertIn('/login/', resp['Location'])
+
+	def test_acesso_fica_na_tela_de_pessoas_e_nao_no_menu(self):
+		# Botao ao lado de "Relatorios" (que e so de admin), mas visivel para todos.
+		self.client.force_login(self.voluntario)
+		resp = self.client.get(reverse('pessoas-lista'))
+		self.assertContains(resp, f'href="{self.url}"', count=1)
+		self.assertNotContains(resp, reverse('pessoas-relatorios'))
+
+		# Sem item proprio no menu: na tela, quem fica destacado e "Pessoas".
+		conteudo = self._aguardando().content.decode()
+		self.assertEqual(conteudo.count('class="nav-link active"'), 1)
+		ativo = conteudo.index('class="nav-link active"')
+		self.assertIn('Pessoas', conteudo[ativo:ativo + 80])
+
+	def test_disparo_em_massa_livre_nao_conta_como_resposta(self):
+		maria = self._pessoa('Maria', '31911110001', iniciou_interacao=True)
+		self._entrada(maria, 10)
+		self.client.force_login(self.equipe)
+
+		resp = self.client.post(
+			reverse('mensagens-disparo-massa'),
+			{'modo': 'livre', 'conteudo': 'Culto hoje as 19h', 'pessoas': [maria.pk]},
+		)
+
+		self.assertEqual(resp.status_code, 302)
+		saida = MensagemContato.objects.get(pessoa=maria, direcao=MensagemContato.DirecaoChoices.SAIDA)
+		self.assertEqual(saida.metadata_envio.get('origem'), ORIGEM_DISPARO_MASSA)
+		self.assertEqual(self._nomes(self._aguardando()), ['Maria'])
+
+	def test_tempo_de_espera_curto_para_o_card(self):
+		agora = timezone.now()
+		self.assertEqual(tempo_espera(agora - timedelta(seconds=20), agora), 'agora')
+		self.assertEqual(tempo_espera(agora - timedelta(minutes=5), agora), 'há 5\xa0minutos')
+		self.assertEqual(tempo_espera(agora - timedelta(hours=26), agora), 'há 1\xa0dia')

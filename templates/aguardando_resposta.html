@@ -1,0 +1,254 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if resumo.total %}({{ resumo.total }}) {% endif %}Aguardando resposta{% endblock %}
+
+{% block content %}
+<div class="aguardando-page">
+    <section class="page-hero aguardando-hero" data-live="topo">
+        <div>
+            <span class="section-eyebrow">WhatsApp</span>
+            <h1>Aguardando resposta</h1>
+            <p>Quem mandou mensagem e ainda não teve resposta da equipe. Cada pessoa aparece uma vez só e sai da lista quando alguém responde.</p>
+            <nav class="aguardando-atalhos" aria-label="Atalhos de filtro">
+                <a class="aguardando-atalho" href="{% url 'aguardando-resposta' %}">
+                    <strong>{{ resumo.total }}</strong> aguardando
+                </a>
+                <a class="aguardando-atalho is-alerta" href="{% url 'aguardando-resposta' %}?responsavel=sem">
+                    <strong>{{ resumo.sem_responsavel }}</strong> sem responsável
+                </a>
+                <a class="aguardando-atalho is-nova" href="{% url 'aguardando-resposta' %}?nova=sim">
+                    <strong>{{ resumo.novas }}</strong> pessoa{{ resumo.novas|pluralize }} nova{{ resumo.novas|pluralize }}
+                </a>
+                <a class="aguardando-atalho" href="{% url 'aguardando-resposta' %}?responsavel=meus">
+                    <strong>{{ resumo.meus }}</strong> meus contatos
+                </a>
+            </nav>
+        </div>
+        <div class="aguardando-atualizado">
+            <span class="aguardando-ao-vivo" title="A lista se atualiza sozinha a cada minuto">
+                <span class="aguardando-ao-vivo-dot" aria-hidden="true"></span>
+                Atualizado às {% now "H:i" %}
+            </span>
+            <a class="btn secundario" href="{{ request.get_full_path }}">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <span class="btn-text">Atualizar</span>
+            </a>
+        </div>
+    </section>
+
+    <nav class="aguardando-abas" aria-label="Situação das conversas" data-live="abas">
+        <a class="aguardando-aba{% if aba == 'aguardando' %} is-ativa{% endif %}" href="?{{ abas_query }}"{% if aba == 'aguardando' %} aria-current="page"{% endif %}>
+            Aguardando <span class="aguardando-aba-total">{{ total_aguardando }}</span>
+        </a>
+        <a class="aguardando-aba{% if aba == 'respondidas' %} is-ativa{% endif %}" href="?{% if abas_query %}{{ abas_query }}&amp;{% endif %}aba=respondidas"{% if aba == 'respondidas' %} aria-current="page"{% endif %}>
+            Respondidas <span class="aguardando-aba-total">{{ total_respondidas }}</span>
+        </a>
+    </nav>
+
+    <details class="aguardando-filtros" data-filtros>
+        <summary>
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="3 4 21 4 14 12 14 19 10 21 10 12 3 4"/></svg>
+            Filtros
+            {% if filtros_ativos %}<span class="aguardando-filtros-total">{{ filtros_ativos }} ativo{{ filtros_ativos|pluralize }}</span>{% endif %}
+        </summary>
+        <form method="get" class="filters-form aguardando-filtros-form">
+            {% if aba == 'respondidas' %}<input type="hidden" name="aba" value="respondidas">{% endif %}
+            <div>
+                <label for="aguardando-q">Buscar</label>
+                <input type="search" name="q" id="aguardando-q" value="{{ busca }}" placeholder="Nome ou WhatsApp">
+            </div>
+            <div>
+                <label for="aguardando-responsavel">Responsável</label>
+                <select name="responsavel" id="aguardando-responsavel">
+                    <option value="">Todos</option>
+                    <option value="meus" {% if responsavel_selecionado == 'meus' %}selected{% endif %}>Meus contatos</option>
+                    <option value="sem" {% if responsavel_selecionado == 'sem' %}selected{% endif %}>Sem responsável</option>
+                    {% for usuario in responsaveis %}
+                    <option value="{{ usuario.pk }}" {% if usuario.pk|stringformat:'s' == responsavel_selecionado %}selected{% endif %}>{{ usuario.get_full_name|default:usuario.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="aguardando-nova">Pessoa nova</label>
+                <select name="nova" id="aguardando-nova">
+                    <option value="">Todas</option>
+                    <option value="sim" {% if nova_atual == 'sim' %}selected{% endif %}>Só novas (até {{ dias_pessoa_nova }} dias)</option>
+                    <option value="nao" {% if nova_atual == 'nao' %}selected{% endif %}>Só quem já conhecemos</option>
+                </select>
+            </div>
+            <div>
+                <label for="aguardando-status">Status</label>
+                <select name="status" id="aguardando-status">
+                    <option value="">Todos</option>
+                    {% for valor, rotulo in status_choices %}
+                    <option value="{{ valor }}" {% if valor == status_atual %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if aba == 'aguardando' %}
+            <div>
+                <label for="aguardando-ordem">Ordem</label>
+                <select name="ordem" id="aguardando-ordem">
+                    <option value="">Mais recentes</option>
+                    <option value="espera" {% if ordem_atual == 'espera' %}selected{% endif %}>Maior espera</option>
+                </select>
+            </div>
+            {% endif %}
+            <div class="filter-actions">
+                <button type="submit">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <span class="btn-text">Filtrar</span>
+                </button>
+                <a class="btn secundario" href="?{% if aba == 'respondidas' %}aba=respondidas{% endif %}">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+                    <span class="btn-text">Limpar</span>
+                </a>
+            </div>
+        </form>
+    </details>
+
+    <div class="aguardando-resultado" data-live="lista">
+        {% if aba == 'respondidas' %}
+        <p class="aguardando-dica">Pessoas respondidas pela equipe nos últimos {{ dias_respondidas }} dias.</p>
+        {% endif %}
+
+        {% if pessoas %}
+        <ul class="aguardando-lista">
+            {% for pessoa in pessoas %}
+            <li class="aguardando-card{% if aba == 'respondidas' %} is-respondida{% elif pessoa.espera_longa %} is-atrasada{% endif %}">
+                <div class="aguardando-card-topo">
+                    <div class="aguardando-badges">
+                        {% if pessoa.eh_nova %}
+                        <span class="aguardando-badge is-nova" title="Cadastrada em {{ pessoa.data_primeiro_contato|date:'d/m/Y' }}">Pessoa nova</span>
+                        {% endif %}
+                        {% if aba == 'aguardando' and pessoa.tem_nao_lida %}
+                        <span class="aguardando-badge is-nao-lida" title="Ninguém da equipe abriu a conversa ainda">Não lida</span>
+                        {% endif %}
+                        <span class="aguardando-badge">{{ pessoa.get_status_display }}</span>
+                    </div>
+                    {% if aba == 'aguardando' %}
+                    <span class="aguardando-tempo" title="Esperando desde {{ pessoa.aguardando_desde|date:'d/m/Y H:i' }}">{{ pessoa.espera }}</span>
+                    {% else %}
+                    <span class="aguardando-tempo" title="Respondida em {{ pessoa.ultima_resposta|date:'d/m/Y H:i' }}">{{ pessoa.espera }}</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <h2 class="aguardando-nome"><a href="{% url 'pessoas-detalhe' pessoa.pk %}">{{ pessoa.nome }}</a></h2>
+                    <p class="aguardando-telefone">{{ pessoa.telefone_whatsapp }}</p>
+                </div>
+
+                {% if aba == 'aguardando' %}
+                {% if pode_conversar and pessoa.ultima_mensagem %}
+                <p class="aguardando-previa">{{ pessoa.ultima_mensagem }}</p>
+                {% endif %}
+                <p class="aguardando-meta">
+                    {{ pessoa.qtd_aguardando }} mensage{{ pessoa.qtd_aguardando|pluralize:'m,ns' }} sem resposta · última em {{ pessoa.ultima_entrada|date:'d/m H:i' }}
+                </p>
+                {% else %}
+                <p class="aguardando-meta">
+                    Respondida{% if pessoa.respondida_por %} por <strong>{{ pessoa.respondida_por }}</strong>{% endif %} em {{ pessoa.ultima_resposta|date:'d/m H:i' }}
+                </p>
+                {% endif %}
+
+                <p class="aguardando-responsavel{% if not pessoa.responsavel_atual %} is-sem{% endif %}">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    {% if pessoa.responsavel_atual %}
+                    <span>Responsável: <strong>{{ pessoa.responsavel_atual.get_full_name|default:pessoa.responsavel_atual.username }}</strong></span>
+                    {% else %}
+                    <span>Sem responsável</span>
+                    {% endif %}
+                </p>
+
+                <div class="aguardando-acoes">
+                    {% if pode_conversar %}
+                    <a class="btn{% if aba == 'respondidas' %} secundario{% endif %}" href="{% url 'pessoas-mensagens' pessoa.pk %}">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        <span class="btn-text">{% if aba == 'aguardando' %}Responder{% else %}Ver conversa{% endif %}</span>
+                    </a>
+                    {% endif %}
+                    <a class="btn secundario" href="{% url 'pessoas-detalhe' pessoa.pk %}">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        <span class="btn-text">Ver pessoa</span>
+                    </a>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+
+        {% if is_paginated %}
+        <nav class="pagination aguardando-paginacao" aria-label="Paginação">
+            {% if page_obj.has_previous %}
+            <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Anterior</a>
+            {% endif %}
+            <span>Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Próxima</a>
+            {% endif %}
+        </nav>
+        {% endif %}
+        {% else %}
+        <p class="empty-state">
+            {% if filtros_ativos %}
+            Ninguém encontrado com esses filtros.
+            {% elif aba == 'aguardando' %}
+            Tudo em dia: ninguém aguardando resposta.
+            {% else %}
+            Nenhuma resposta da equipe nos últimos {{ dias_respondidas }} dias.
+            {% endif %}
+        </p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+(function () {
+    // No celular os filtros ficam recolhidos (a lista vem primeiro); no computador, abertos.
+    const filtros = document.querySelector('[data-filtros]');
+    if (filtros && window.matchMedia('(min-width: 900px)').matches) {
+        filtros.open = true;
+    }
+
+    // A equipe deixa esta tela aberta no celular: ela se atualiza sozinha a cada minuto
+    // (e ao voltar para a aba), trocando so os blocos marcados com data-live.
+    const INTERVALO_MS = 60000;
+    let ultimaAtualizacao = Date.now();
+    let atualizando = false;
+
+    async function atualizar() {
+        const emFoco = document.activeElement;
+        if (atualizando || document.hidden || (emFoco && emFoco.closest('[data-filtros]'))) {
+            return;
+        }
+        atualizando = true;
+        try {
+            const resposta = await fetch(window.location.href, { credentials: 'same-origin' });
+            // Redirecionou (ex.: sessao expirou e caiu no login): mantem o que esta na tela.
+            if (!resposta.ok || resposta.redirected) {
+                return;
+            }
+            const pagina = new DOMParser().parseFromString(await resposta.text(), 'text/html');
+            document.querySelectorAll('[data-live]').forEach(function (atual) {
+                const novo = pagina.querySelector('[data-live="' + atual.dataset.live + '"]');
+                if (novo) {
+                    atual.replaceWith(novo);
+                }
+            });
+            document.title = pagina.title;
+            ultimaAtualizacao = Date.now();
+        } catch (erro) {
+            // Sem conexao: tenta de novo no proximo ciclo.
+        } finally {
+            atualizando = false;
+        }
+    }
+
+    window.setInterval(atualizar, INTERVALO_MS);
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && Date.now() - ultimaAtualizacao > 15000) {
+            atualizar();
+        }
+    });
+})();
+</script>
+{% endblock %}
