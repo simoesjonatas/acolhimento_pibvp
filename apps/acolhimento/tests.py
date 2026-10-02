@@ -146,7 +146,10 @@ class AutoCadastroSobrenomeTests(TestCase):
 	def test_cadastro_interno_salva_nome_completo(self):
 		form = PrimeiroContatoForm(data=_dados_form('31988888888', nome='Joao', sobrenome='Silva'))
 		self.assertTrue(form.is_valid(), form.errors)
-		self.assertEqual(form.save().nome, 'Joao Silva')
+		pessoa = form.save()
+		self.assertEqual(pessoa.nome, 'Joao Silva')
+		self.assertNotIn('o_que_busca', form.fields)
+		self.assertEqual(pessoa.o_que_busca, '')
 
 	def test_edicao_interna_nao_pede_sobrenome(self):
 		pessoa = PrimeiroContato.objects.create(
@@ -155,6 +158,7 @@ class AutoCadastroSobrenomeTests(TestCase):
 		)
 		form = PrimeiroContatoForm(data=_dados_form('31977777777', nome='Joao Silva', sobrenome=''), instance=pessoa)
 		self.assertNotIn('sobrenome', form.fields)
+		self.assertIn('o_que_busca', form.fields)
 		self.assertTrue(form.is_valid(), form.errors)
 		self.assertEqual(form.save().nome, 'Joao Silva')
 

@@ -109,9 +109,14 @@ class PrimeiroContatoForm(SobrenomeMixin, ComoConheceuOpcoesMixin, TelefoneWhats
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._configurar_como_conheceu()
-        # Na edicao o `nome` ja traz o nome completo; o sobrenome so e pedido no cadastro novo.
+        # O cadastro novo segue o auto cadastro: pede sobrenome e nao pergunta 'o_que_busca'
+        # (o modelo aceita salvar ''). Na edicao o `nome` ja traz o nome completo e a
+        # equipe pode preencher 'o_que_busca'.
         if not self.instance.pk:
             self._configurar_sobrenome()
+            del self.fields['o_que_busca']
+        else:
+            self.fields['o_que_busca'].required = False
 
 
 class AutoCadastroPrimeiroContatoForm(SobrenomeMixin, ComoConheceuOpcoesMixin, TelefoneWhatsappUnicoMixin, forms.ModelForm):
