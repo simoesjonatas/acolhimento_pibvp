@@ -10,6 +10,7 @@ from apps.acolhimento.models import (
     InteracaoAcolhimento,
     MensagemContato,
     OpcaoAtendimentoBot,
+    OpcaoComoConheceu,
     OpcaoPergunta,
     PerguntaQuestionario,
     PrimeiroContato,
@@ -44,7 +45,48 @@ class TelefoneWhatsappUnicoMixin:
         return telefone
 
 
-class PrimeiroContatoForm(TelefoneWhatsappUnicoMixin, forms.ModelForm):
+class ComoConheceuOpcoesMixin:
+    """Troca `como_conheceu` por um select com as opcoes ativas cadastradas pelo administrador."""
+
+    como_conheceu_obrigatorio = True
+
+    def _configurar_como_conheceu(self):
+        atual = self.instance.como_conheceu if self.instance and self.instance.pk else ''
+        choices = OpcaoComoConheceu.choices_ativas(incluir_valor=atual)
+        if not choices:
+            # Sem nenhuma opcao ativa nao ha o que perguntar; o modelo aceita salvar ''.
+            del self.fields['como_conheceu']
+            return
+        self.fields['como_conheceu'] = forms.ChoiceField(
+            label='Como conheceu',
+            choices=[('', '---------')] + choices,
+            required=self.como_conheceu_obrigatorio,
+        )
+
+
+class SobrenomeMixin:
+    """Pede o sobrenome num campo proprio (obrigatorio) e grava o nome completo em `nome`."""
+
+    def _configurar_sobrenome(self):
+        self.fields['sobrenome'] = forms.CharField(label='Sobrenome', max_length=100)
+        self.order_fields(['nome', 'sobrenome'])
+
+    def clean(self):
+        cleaned_data = super().clean()
+        nome = (cleaned_data.get('nome') or '').strip()
+        sobrenome = (cleaned_data.get('sobrenome') or '').strip()
+        if nome and sobrenome:
+            # O modelo guarda o nome completo num campo so.
+            nome_completo = f'{nome} {sobrenome}'
+            limite = PrimeiroContato._meta.get_field('nome').max_length
+            if len(nome_completo) > limite:
+                self.add_error('sobrenome', f'Nome e sobrenome juntos devem ter no maximo {limite} caracteres.')
+            else:
+                cleaned_data['nome'] = nome_completo
+        return cleaned_data
+
+
+class PrimeiroContatoForm(SobrenomeMixin, ComoConheceuOpcoesMixin, TelefoneWhatsappUnicoMixin, forms.ModelForm):
     revelar_nome_duplicado = True
 
     primeira_vez = forms.TypedChoiceField(
@@ -64,8 +106,18 @@ class PrimeiroContatoForm(TelefoneWhatsappUnicoMixin, forms.ModelForm):
             'o_que_busca',
         ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._configurar_como_conheceu()
+        # Na edicao o `nome` ja traz o nome completo; o sobrenome so e pedido no cadastro novo.
+        if not self.instance.pk:
+            self._configurar_sobrenome()
 
-class AutoCadastroPrimeiroContatoForm(TelefoneWhatsappUnicoMixin, forms.ModelForm):
+
+class AutoCadastroPrimeiroContatoForm(SobrenomeMixin, ComoConheceuOpcoesMixin, TelefoneWhatsappUnicoMixin, forms.ModelForm):
+    # Opcional para agilizar o auto cadastro quando ha um grande fluxo de pessoas.
+    como_conheceu_obrigatorio = False
+
     primeira_vez = forms.TypedChoiceField(
         label='Primeira vez?',
         choices=((True, 'Sim'), (False, 'Nao')),
@@ -86,16 +138,21 @@ class AutoCadastroPrimeiroContatoForm(TelefoneWhatsappUnicoMixin, forms.ModelFor
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Opcional para agilizar o auto cadastro quando ha um grande fluxo de pessoas.
-        self.fields['como_conheceu'].required = False
+        self._configurar_como_conheceu()
+        self._configurar_sobrenome()
 
 
-class PrimeiroContatoAdminForm(TelefoneWhatsappUnicoMixin, forms.ModelForm):
+class PrimeiroContatoAdminForm(ComoConheceuOpcoesMixin, TelefoneWhatsappUnicoMixin, forms.ModelForm):
     revelar_nome_duplicado = True
 
     class Meta:
         model = PrimeiroContato
         fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'como_conheceu' in self.fields:
+            self._configurar_como_conheceu()
 
 
 class InteracaoAcolhimentoForm(forms.ModelForm):
@@ -463,3 +520,21 @@ class OpcaoAtendimentoBotForm(forms.ModelForm):
                 'placeholder': 'Texto que o bot envia quando a pessoa escolhe esta opcao.',
             }),
         }
+
+
+class OpcaoComoConheceuForm(forms.ModelForm):
+    """Uma opcao do campo "Como conheceu" do cadastro."""
+
+    class Meta:
+        model = OpcaoComoConheceu
+        fields = ['rotulo', 'ativa']
+        widgets = {
+            'rotulo': forms.TextInput(attrs={'placeholder': 'Ex.: Instagram'}),
+        }
+
+    def clean_rotulo(self):
+        rotulo = self.cleaned_data['rotulo'].strip()
+        duplicada = OpcaoComoConheceu.objects.filter(rotulo__iexact=rotulo).exclude(pk=self.instance.pk)
+        if duplicada.exists():
+            raise forms.ValidationError('Ja existe uma opcao com este nome.')
+        return rotulo

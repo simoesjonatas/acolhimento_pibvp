@@ -29,6 +29,7 @@ from apps.acolhimento.models import (
 	ConfiguracaoAtendimentoBot,
 	ConfiguracaoProcessamentoFila,
 	ConviteQuestionario,
+	OpcaoComoConheceu,
 	InteracaoAcolhimento,
 	MensagemContato,
 	OpcaoAtendimentoBot,
@@ -65,9 +66,10 @@ SIMPLE_STATIC_STORAGES = {
 }
 
 
-def _dados_form(telefone, nome='Fulano'):
+def _dados_form(telefone, nome='Fulano', sobrenome='Silva'):
 	return {
 		'nome': nome,
+		'sobrenome': sobrenome,
 		'telefone_whatsapp': telefone,
 		'primeira_vez': 'True',
 		'como_conheceu': PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
@@ -119,12 +121,12 @@ class TelefoneWhatsappUnicoTests(TestCase):
 		self.assertIn('Maria', form.errors['telefone_whatsapp'][0])
 
 	def test_auto_cadastro_nao_revela_nome_do_duplicado(self):
-		form = AutoCadastroPrimeiroContatoForm(data=_dados_form('31999999999'))
+		form = AutoCadastroPrimeiroContatoForm(data=_dados_form('31999999999', sobrenome='Silva'))
 		self.assertFalse(form.is_valid())
 		self.assertNotIn('Maria', form.errors['telefone_whatsapp'][0])
 
 	def test_auto_cadastro_sem_como_conheceu_e_o_que_busca(self):
-		dados = _dados_form('31988888888')
+		dados = _dados_form('31988888888', sobrenome='Silva')
 		dados.pop('como_conheceu')
 		dados.pop('o_que_busca')
 		form = AutoCadastroPrimeiroContatoForm(data=dados)
@@ -132,6 +134,116 @@ class TelefoneWhatsappUnicoTests(TestCase):
 		pessoa = form.save()
 		self.assertEqual(pessoa.como_conheceu, '')
 		self.assertEqual(pessoa.o_que_busca, '')
+
+
+class AutoCadastroSobrenomeTests(TestCase):
+	def test_sobrenome_obrigatorio(self):
+		for form_class in (AutoCadastroPrimeiroContatoForm, PrimeiroContatoForm):
+			form = form_class(data=_dados_form('31988888888', sobrenome=''))
+			self.assertFalse(form.is_valid())
+			self.assertIn('sobrenome', form.errors)
+
+	def test_cadastro_interno_salva_nome_completo(self):
+		form = PrimeiroContatoForm(data=_dados_form('31988888888', nome='Joao', sobrenome='Silva'))
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertEqual(form.save().nome, 'Joao Silva')
+
+	def test_edicao_interna_nao_pede_sobrenome(self):
+		pessoa = PrimeiroContato.objects.create(
+			nome='Joao Silva', telefone_whatsapp='31977777777', como_conheceu='instagram',
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+		)
+		form = PrimeiroContatoForm(data=_dados_form('31977777777', nome='Joao Silva', sobrenome=''), instance=pessoa)
+		self.assertNotIn('sobrenome', form.fields)
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertEqual(form.save().nome, 'Joao Silva')
+
+	def test_salva_nome_completo(self):
+		form = AutoCadastroPrimeiroContatoForm(data=_dados_form('31988888888', nome=' Joao ', sobrenome=' Silva '))
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertEqual(form.save().nome, 'Joao Silva')
+
+	def test_sobrenome_vem_logo_apos_o_nome(self):
+		campos = list(AutoCadastroPrimeiroContatoForm().fields)
+		self.assertEqual(campos[:2], ['nome', 'sobrenome'])
+
+
+class OpcaoComoConheceuTests(TestCase):
+	def setUp(self):
+		self.admin = get_user_model().objects.create_superuser(username='admin', password='x')
+		self.instagram = OpcaoComoConheceu.objects.get(valor='instagram')
+
+	def _valores(self, form):
+		return [valor for valor, _ in form.fields['como_conheceu'].choices if valor]
+
+	def test_opcao_inativa_some_dos_formularios(self):
+		self.instagram.ativa = False
+		self.instagram.save()
+		self.assertNotIn('instagram', self._valores(AutoCadastroPrimeiroContatoForm()))
+		self.assertNotIn('instagram', self._valores(PrimeiroContatoForm()))
+		form = AutoCadastroPrimeiroContatoForm(data=_dados_form('31988888888', sobrenome='Silva'))
+		self.assertFalse(form.is_valid())
+		self.assertIn('como_conheceu', form.errors)
+
+	def test_opcao_nova_aparece_e_e_salva(self):
+		opcao = OpcaoComoConheceu.objects.create(rotulo='Radio da cidade', ordem=9)
+		self.assertEqual(opcao.valor, 'radio_da_cidade')
+		dados = _dados_form('31988888888', sobrenome='Silva')
+		dados['como_conheceu'] = opcao.valor
+		form = AutoCadastroPrimeiroContatoForm(data=dados)
+		self.assertTrue(form.is_valid(), form.errors)
+		pessoa = form.save()
+		self.assertEqual(pessoa.get_como_conheceu_display(), 'Radio da cidade')
+
+	def test_renomear_mantem_valor_e_atualiza_rotulo_dos_cadastros(self):
+		pessoa = PrimeiroContato.objects.create(
+			nome='Maria', telefone_whatsapp='31999999999', como_conheceu='instagram',
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+		)
+		self.instagram.rotulo = 'Redes sociais'
+		self.instagram.save()
+		self.assertEqual(self.instagram.valor, 'instagram')
+		self.assertEqual(pessoa.get_como_conheceu_display(), 'Redes sociais')
+
+	def test_edicao_interna_mantem_opcao_inativa_ja_escolhida(self):
+		pessoa = PrimeiroContato.objects.create(
+			nome='Maria', telefone_whatsapp='31999999999', como_conheceu='instagram',
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+		)
+		self.instagram.ativa = False
+		self.instagram.save()
+		self.assertIn('instagram', self._valores(PrimeiroContatoForm(instance=pessoa)))
+
+	def test_sem_opcoes_ativas_campo_some_do_auto_cadastro(self):
+		OpcaoComoConheceu.objects.update(ativa=False)
+		self.assertNotIn('como_conheceu', AutoCadastroPrimeiroContatoForm().fields)
+
+	def test_crud_exige_superusuario(self):
+		equipe = get_user_model().objects.create_user(username='equipe', password='x', is_staff=True)
+		self.client.force_login(equipe)
+		self.assertEqual(self.client.get(reverse('configuracao-como-conheceu')).status_code, 403)
+
+	def test_lista_cria_e_alterna(self):
+		self.client.force_login(self.admin)
+		self.assertContains(self.client.get(reverse('configuracao-como-conheceu')), 'Instagram')
+		self.client.post(reverse('como-conheceu-opcao-nova'), {'rotulo': 'Panfleto', 'ativa': 'on'})
+		nova = OpcaoComoConheceu.objects.get(rotulo='Panfleto')
+		self.assertTrue(nova.ativa)
+		self.client.post(reverse('como-conheceu-opcao-ativar', args=[nova.pk]))
+		nova.refresh_from_db()
+		self.assertFalse(nova.ativa)
+
+	def test_nao_exclui_opcao_em_uso(self):
+		PrimeiroContato.objects.create(
+			nome='Maria', telefone_whatsapp='31999999999', como_conheceu='instagram',
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+		)
+		self.client.force_login(self.admin)
+		self.client.post(reverse('como-conheceu-opcao-excluir', args=[self.instagram.pk]))
+		self.assertTrue(OpcaoComoConheceu.objects.filter(pk=self.instagram.pk).exists())
+		evento = OpcaoComoConheceu.objects.get(valor='evento')
+		self.client.post(reverse('como-conheceu-opcao-excluir', args=[evento.pk]))
+		self.assertFalse(OpcaoComoConheceu.objects.filter(pk=evento.pk).exists())
 
 
 class StatusEvolutivoTests(TestCase):

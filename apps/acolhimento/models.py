@@ -6,6 +6,7 @@ from django.db import models
 from django.core.validators import RegexValidator
 from django.conf import settings
 from django.utils import timezone
+from django.utils.text import slugify
 
 
 def hora_local_atual():
@@ -68,7 +69,10 @@ class PrimeiroContato(models.Model):
 	# preciso enviar para o LID. Aprendemos o valor no webhook, via `key.remoteJidAlt`.
 	whatsapp_lid = models.CharField(max_length=40, blank=True, db_index=True)
 	primeira_vez = models.BooleanField(default=True)
-	como_conheceu = models.CharField(max_length=20, choices=ComoConheceuChoices.choices)
+	# As opcoes validas vem de OpcaoComoConheceu (cadastro do administrador); aqui
+	# guardamos o `valor` da opcao escolhida. ComoConheceuChoices ficou so como
+	# constantes para o codigo e rotulo de reserva.
+	como_conheceu = models.CharField(max_length=60)
 	o_que_busca = models.CharField(max_length=25, choices=OQueBuscaChoices.choices)
 	origem_cadastro = models.CharField(
 		max_length=20,
@@ -121,6 +125,10 @@ class PrimeiroContato(models.Model):
 
 	def __str__(self):
 		return f'{self.nome} ({self.get_status_display()})'
+
+	def get_como_conheceu_display(self):
+		# Substitui o get_FOO_display automatico (o campo nao tem mais `choices`).
+		return OpcaoComoConheceu.rotulo_de(self.como_conheceu)
 
 
 class CampanhaComunicacao(models.Model):
@@ -697,3 +705,59 @@ class OpcaoAtendimentoBot(models.Model):
 		import re
 		bruto = re.split(r'[,\n;]+', self.palavras_chave or '')
 		return [item.strip().lower() for item in bruto if item.strip()]
+
+
+class OpcaoComoConheceu(models.Model):
+	"""Uma opcao do campo "Como conheceu" (cadastro pelo superusuario).
+
+	So as opcoes ativas aparecem no auto cadastro e no cadastro interno. O `valor`
+	e o que fica gravado em PrimeiroContato.como_conheceu; ele e gerado na criacao
+	e nao muda mais, entao renomear o rotulo nao quebra cadastros antigos.
+	"""
+
+	ordem = models.PositiveIntegerField(default=1)
+	rotulo = models.CharField('Opcao', max_length=60)
+	valor = models.CharField(max_length=60, unique=True, editable=False)
+	ativa = models.BooleanField(default=True)
+	atualizado_em = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		ordering = ['ordem', 'id']
+		verbose_name = 'Opcao de "Como conheceu"'
+		verbose_name_plural = 'Opcoes de "Como conheceu"'
+
+	def __str__(self):
+		return self.rotulo
+
+	def save(self, *args, **kwargs):
+		if not self.valor:
+			self.valor = self._gerar_valor()
+		super().save(*args, **kwargs)
+
+	def _gerar_valor(self) -> str:
+		base = slugify(self.rotulo).replace('-', '_')[:50] or 'opcao'
+		valor, sufixo = base, 2
+		while OpcaoComoConheceu.objects.filter(valor=valor).exists():
+			valor = f'{base}_{sufixo}'
+			sufixo += 1
+		return valor
+
+	def em_uso(self) -> bool:
+		return PrimeiroContato.objects.filter(como_conheceu=self.valor).exists()
+
+	@classmethod
+	def choices_ativas(cls, incluir_valor: str = '') -> list[tuple[str, str]]:
+		"""Opcoes ativas como choices; `incluir_valor` mantem a opcao atual de quem ja a tem."""
+		choices = list(cls.objects.filter(ativa=True).values_list('valor', 'rotulo'))
+		if incluir_valor and incluir_valor not in dict(choices):
+			choices.append((incluir_valor, cls.rotulo_de(incluir_valor)))
+		return choices
+
+	@classmethod
+	def rotulo_de(cls, valor: str) -> str:
+		if not valor:
+			return ''
+		rotulo = cls.objects.filter(valor=valor).values_list('rotulo', flat=True).first()
+		if rotulo:
+			return rotulo
+		return dict(PrimeiroContato.ComoConheceuChoices.choices).get(valor, valor)

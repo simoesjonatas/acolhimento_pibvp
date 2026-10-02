@@ -7,6 +7,14 @@ from apps.acolhimento.atendimento_views import (
     OpcaoAtendimentoBotMoverView,
     OpcaoAtendimentoBotUpdateView,
 )
+from apps.acolhimento.como_conheceu_views import (
+    OpcaoComoConheceuCreateView,
+    OpcaoComoConheceuDeleteView,
+    OpcaoComoConheceuListView,
+    OpcaoComoConheceuMoverView,
+    OpcaoComoConheceuToggleView,
+    OpcaoComoConheceuUpdateView,
+)
 from apps.acolhimento.evolution_views import ConfiguracaoWhatsappConexaoView
 from apps.acolhimento.evolution_webhooks import EvolutionWebhookView
 from apps.acolhimento.views import (
@@ -64,6 +72,12 @@ urlpatterns = [
     path('configuracoes/atendimento/opcao/<int:pk>/editar/', OpcaoAtendimentoBotUpdateView.as_view(), name='atendimento-opcao-editar'),
     path('configuracoes/atendimento/opcao/<int:pk>/excluir/', OpcaoAtendimentoBotDeleteView.as_view(), name='atendimento-opcao-excluir'),
     path('configuracoes/atendimento/opcao/<int:pk>/mover/', OpcaoAtendimentoBotMoverView.as_view(), name='atendimento-opcao-mover'),
+    path('configuracoes/como-conheceu/', OpcaoComoConheceuListView.as_view(), name='configuracao-como-conheceu'),
+    path('configuracoes/como-conheceu/opcao/nova/', OpcaoComoConheceuCreateView.as_view(), name='como-conheceu-opcao-nova'),
+    path('configuracoes/como-conheceu/opcao/<int:pk>/editar/', OpcaoComoConheceuUpdateView.as_view(), name='como-conheceu-opcao-editar'),
+    path('configuracoes/como-conheceu/opcao/<int:pk>/ativar/', OpcaoComoConheceuToggleView.as_view(), name='como-conheceu-opcao-ativar'),
+    path('configuracoes/como-conheceu/opcao/<int:pk>/excluir/', OpcaoComoConheceuDeleteView.as_view(), name='como-conheceu-opcao-excluir'),
+    path('configuracoes/como-conheceu/opcao/<int:pk>/mover/', OpcaoComoConheceuMoverView.as_view(), name='como-conheceu-opcao-mover'),
     path('mensagens/webhook/twilio-status/', TwilioStatusWebhookView.as_view(), name='mensagens-webhook-twilio-status'),
     path('mensagens/webhook/twilio-inbound/', TwilioInboundWebhookView.as_view(), name='mensagens-webhook-twilio-inbound'),
     path('mensagens/webhook/evolution/', EvolutionWebhookView.as_view(), name='mensagens-webhook-evolution'),
