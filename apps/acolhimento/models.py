@@ -20,10 +20,13 @@ class PrimeiroContato(models.Model):
 
 	class StatusAcolhimento(models.TextChoices):
 		# A ordem de declaracao representa a ordem evolutiva do acolhimento.
+		# ROBO e PARTICIPANTE mudaram so o nome na tela (Visitante / Ingressante): o
+		# valor gravado no banco continua o mesmo, por isso nao ha migracao de dados.
 		PRIMEIRO_CONTATO = 'primeiro_contato', 'Primeiro contato'
-		ROBO = 'robo', 'Robo'
+		ROBO = 'robo', 'Visitante'
 		EM_ACOMPANHAMENTO = 'em_acompanhamento', 'Em acompanhamento'
-		PARTICIPANTE = 'participante', 'Participante'
+		PARTICIPANTE = 'participante', 'Ingressante'
+		APROVADO = 'aprovado', 'Aprovado'
 		MEMBRO = 'membro', 'Membro'
 
 	class GeneroChoices(models.TextChoices):
@@ -427,7 +430,7 @@ class Questionario(models.Model):
 	padrao_membresia = models.BooleanField(
 		default=False,
 		verbose_name='Questionario de membresia',
-		help_text='Gerado automaticamente quando a pessoa passa para o status Participante.',
+		help_text='Gerado automaticamente quando a pessoa passa para o status Ingressante.',
 	)
 	criado_por = models.ForeignKey(
 		settings.AUTH_USER_MODEL,

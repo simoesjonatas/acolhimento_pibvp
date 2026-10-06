@@ -215,8 +215,8 @@ class Command(BaseCommand):
     def _criar_pessoas(self, total, responsaveis_pool, staff):
         offset = PrimeiroContato.objects.filter(observacoes__contains=SEED_TOKEN).count()
         status_opcoes = [c[0] for c in PrimeiroContato.StatusAcolhimento.choices]
-        # ordem: primeiro_contato, robo, em_acompanhamento, participante, membro
-        status_pesos = [38, 20, 20, 14, 8]  # mais no inicio do funil, menos membros
+        # ordem: primeiro_contato, robo, em_acompanhamento, participante, aprovado, membro
+        status_pesos = [38, 20, 20, 14, 5, 8]  # mais no inicio do funil, menos membros
         como_opcoes = [c[0] for c in PrimeiroContato.ComoConheceuChoices.choices]
         busca_opcoes = [c[0] for c in PrimeiroContato.OQueBuscaChoices.choices]
         civil_opcoes = [c[0] for c in PrimeiroContato.EstadoCivilChoices.choices] + ['']

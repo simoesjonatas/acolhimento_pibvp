@@ -74,7 +74,7 @@ def pode_ver_questionario(user):
 
 
 CONVITE_SO_PARTICIPANTE_ERROR = (
-	'O questionario de membresia so pode ser gerado quando a pessoa esta no status Participante.'
+	'O questionario de membresia so pode ser gerado quando a pessoa esta no status Ingressante.'
 )
 
 
@@ -810,7 +810,7 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 			]
 			if len(participantes) < len(pessoas):
 				ignoradas.append(
-					f'{len(pessoas) - len(participantes)} fora do status Participante '
+					f'{len(pessoas) - len(participantes)} fora do status Ingressante '
 					'(o de membresia e so para eles)'
 				)
 				pessoas = participantes

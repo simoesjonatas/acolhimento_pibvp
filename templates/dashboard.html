@@ -54,7 +54,7 @@
         <span class="kpi-hint">Ver pessoas</span>
     </a>
     <a class="kpi-card" href="{% url 'pessoas-lista' %}?status=robo">
-        <span class="kpi-label">Robo</span>
+        <span class="kpi-label">Visitantes</span>
         <strong class="kpi-value">{{ total_robo }}</strong>
         <span class="kpi-hint">Ver pessoas</span>
     </a>
@@ -64,8 +64,13 @@
         <span class="kpi-hint">Ver pessoas</span>
     </a>
     <a class="kpi-card" href="{% url 'pessoas-lista' %}?status=participante">
-        <span class="kpi-label">Participantes</span>
+        <span class="kpi-label">Ingressantes</span>
         <strong class="kpi-value">{{ total_participante }}</strong>
+        <span class="kpi-hint">Ver pessoas</span>
+    </a>
+    <a class="kpi-card" href="{% url 'pessoas-lista' %}?status=aprovado">
+        <span class="kpi-label">Aprovados</span>
+        <strong class="kpi-value">{{ total_aprovado }}</strong>
         <span class="kpi-hint">Ver pessoas</span>
     </a>
     <a class="kpi-card" href="{% url 'pessoas-lista' %}?status=membro">

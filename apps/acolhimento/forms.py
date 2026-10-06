@@ -256,7 +256,7 @@ class DisparoMensagemMassaForm(forms.Form):
 
     def _rotulo_questionario(self, questionario):
         if questionario.pk == self.membresia_id:
-            return f'{questionario.titulo} (so Participantes)'
+            return f'{questionario.titulo} (so Ingressantes)'
         return questionario.titulo
 
     def clean_content_variables(self):

@@ -2735,6 +2735,12 @@ a.queue-summary-item:hover {
     color: #573c86;
 }
 
+.person-status-aprovado {
+    background: #e9f6f5;
+    border-color: #9fd1cd;
+    color: #1d625d;
+}
+
 .person-status-membro {
     background: #edf3fb;
     border-color: #b7c9de;

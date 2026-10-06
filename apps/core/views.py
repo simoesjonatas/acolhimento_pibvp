@@ -175,7 +175,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
 		messages.success(
 			request,
-			f'Disparo de boas-vindas criado para {len(mensagens)} pessoa(s) e status atualizado para Robo.',
+			f'Disparo de boas-vindas criado para {len(mensagens)} pessoa(s) e status atualizado para Visitante.',
 		)
 		return redirect('dashboard')
 
@@ -198,6 +198,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 		total_participante = PrimeiroContato.objects.filter(
 			status=PrimeiroContato.StatusAcolhimento.PARTICIPANTE
 		).count()
+		total_aprovado = PrimeiroContato.objects.filter(
+			status=PrimeiroContato.StatusAcolhimento.APROVADO
+		).count()
 		total_membros = PrimeiroContato.objects.filter(
 			status=PrimeiroContato.StatusAcolhimento.MEMBRO
 		).count()
@@ -213,6 +216,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 				'total_robo': total_robo,
 				'total_acompanhamento': total_acompanhamento,
 				'total_participante': total_participante,
+				'total_aprovado': total_aprovado,
 				'total_membros': total_membros,
 				'total_janela_aberta': total_janela_aberta,
 				'ultimos_passos': ultimos_passos,

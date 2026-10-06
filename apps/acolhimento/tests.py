@@ -270,6 +270,45 @@ class StatusEvolutivoTests(TestCase):
 		self.assertIn('participante', valores)
 		self.assertLess(valores.index('participante'), valores.index('membro'))
 
+	def test_aprovado_fica_entre_ingressante_e_membro(self):
+		valores = list(PrimeiroContato.StatusAcolhimento.values)
+		self.assertEqual(valores.index('aprovado'), valores.index('participante') + 1)
+		self.assertEqual(valores.index('membro'), valores.index('aprovado') + 1)
+
+	def test_robo_e_participante_so_mudaram_o_nome_na_tela(self):
+		# O valor gravado no banco continua o mesmo: so o rotulo mudou.
+		rotulos = dict(PrimeiroContato.StatusAcolhimento.choices)
+		self.assertEqual(rotulos['robo'], 'Visitante')
+		self.assertEqual(rotulos['participante'], 'Ingressante')
+		self.assertEqual(rotulos['aprovado'], 'Aprovado')
+
+	def test_troca_para_aprovado_registra_timeline(self):
+		self.pessoa.status = PrimeiroContato.StatusAcolhimento.PARTICIPANTE
+		self.pessoa.save(update_fields=['status'])
+
+		self.client.post(reverse('pessoas-status', args=[self.pessoa.pk]), {'status': 'aprovado'})
+
+		self.pessoa.refresh_from_db()
+		self.assertEqual(self.pessoa.status, PrimeiroContato.StatusAcolhimento.APROVADO)
+		self.assertTrue(
+			self.pessoa.interacoes.filter(
+				descricao='Status alterado de "Ingressante" para "Aprovado".'
+			).exists()
+		)
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_dashboard_mostra_os_novos_nomes_e_o_card_de_aprovados(self):
+		self.pessoa.status = PrimeiroContato.StatusAcolhimento.APROVADO
+		self.pessoa.save(update_fields=['status'])
+
+		resp = self.client.get(reverse('dashboard'))
+
+		self.assertEqual(resp.context['total_aprovado'], 1)
+		self.assertContains(resp, f'{reverse("pessoas-lista")}?status=aprovado')
+		for rotulo in ('Visitantes', 'Ingressantes', 'Aprovados'):
+			self.assertContains(resp, f'<span class="kpi-label">{rotulo}</span>')
+		self.assertNotContains(resp, '<span class="kpi-label">Robo</span>')
+
 	def test_troca_status_valida_e_registra_timeline(self):
 		url = reverse('pessoas-status', args=[self.pessoa.pk])
 		resp = self.client.post(url, {'status': 'participante'})
@@ -678,7 +717,7 @@ class RelatorioPessoasTests(TestCase):
 		resumo = resumo_pessoas(PrimeiroContato.objects.all())
 		self.assertEqual(resumo['total'], 3)
 		por_status = {item['rotulo']: item['total'] for item in resumo['por_status']}
-		self.assertEqual(por_status.get('Participante'), 2)
+		self.assertEqual(por_status.get('Ingressante'), 2)
 		self.assertEqual(por_status.get('Membro'), 1)
 
 	def test_usuario_comum_nao_emite_relatorio(self):
@@ -2163,6 +2202,21 @@ class AtendimentoBotTests(TestCase):
 		self.assertEqual(pessoa.status, PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO)
 		self.assertEqual(pessoa.bot_etapa, PrimeiroContato.BotEtapaChoices.INATIVO)
 		self.assertFalse(atendimento_bot.processar_entrada(pessoa, 'oi de novo'))
+
+	def test_bot_nao_intervem_com_aprovado(self):
+		# Senao o menu automatico iria para quem ja foi aprovado e o status voltaria a Visitante.
+		cfg = ConfiguracaoAtendimentoBot.carregar()
+		cfg.ativo = True
+		cfg.save()
+		pessoa = self._pessoa()
+		pessoa.status = PrimeiroContato.StatusAcolhimento.APROVADO
+		pessoa.save(update_fields=['status'])
+
+		self.assertFalse(atendimento_bot.processar_entrada(pessoa, 'oi'))
+
+		pessoa.refresh_from_db()
+		self.assertEqual(pessoa.status, PrimeiroContato.StatusAcolhimento.APROVADO)
+		self.assertEqual(self._saidas(pessoa).count(), 0)
 
 	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
 	def test_pagina_config_superusuario_e_403(self):
