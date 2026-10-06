@@ -2281,6 +2281,94 @@ a.queue-summary-item:hover {
     width: 100%;
 }
 
+/* Gabinete pastoral (ficha da pessoa): so administradores e pastores veem. */
+.gabinete-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.gabinete-card-head h2 {
+    margin: 0;
+}
+
+.gabinete-restrito {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-soft);
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 900;
+    white-space: nowrap;
+}
+
+.gabinete-restrito svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.gabinete-list {
+    display: grid;
+    gap: 8px;
+    max-height: 320px;
+    margin: 0 0 14px;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+}
+
+.gabinete-item {
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--surface-soft);
+}
+
+.gabinete-item-realizado {
+    border-left-color: #2f8a57;
+}
+
+.gabinete-item-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 2px 8px;
+    font-size: 0.86rem;
+}
+
+.gabinete-item-head span {
+    color: var(--muted);
+    font-weight: 800;
+}
+
+.gabinete-item p {
+    margin: 6px 0 0;
+    color: #262735;
+    font-size: 0.86rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.gabinete-item small {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 0.74rem;
+    font-weight: 700;
+}
+
 .timeline-list {
     display: grid;
     gap: 10px;
@@ -3812,6 +3900,12 @@ a.kpi-card:hover {
     background: var(--danger-soft);
     border-color: #dfa09a;
     color: #8e3029;
+}
+
+.profile-role-badge.is-pastor {
+    background: #f2edfb;
+    border-color: #c7b7e2;
+    color: #573c86;
 }
 
 .user-admin-page {

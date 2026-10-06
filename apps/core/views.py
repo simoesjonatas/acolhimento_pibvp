@@ -10,7 +10,7 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db import connection
-from django.db.models import F, Q
+from django.db.models import Exists, F, OuterRef, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -20,7 +20,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, T
 from apps.acolhimento import template_config
 from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato, TemplateWhatsapp
 from apps.acolhimento.whatsapp_rules import contar_pessoas_janela_aberta
-from apps.core.forms import PerfilForm, QrCodeDinamicoForm, UsuarioCreateForm, UsuarioUpdateForm
+from apps.core.forms import PerfilForm, QrCodeDinamicoForm, UsuarioCreateForm, UsuarioUpdateForm, eh_pastor
 from apps.core.models import QrCodeDinamico
 from apps.core.qrcode_utils import gerar_qrcode_png, gerar_qrcode_svg
 
@@ -232,6 +232,7 @@ class PerfilView(LoginRequiredMixin, TemplateView):
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
 		context['usuario_obj'] = self.request.user
+		context['eh_pastor'] = eh_pastor(self.request.user)
 		context['perfil_form'] = kwargs.get('perfil_form') or PerfilForm(instance=self.request.user)
 		context['senha_form'] = kwargs.get('senha_form') or PasswordChangeForm(user=self.request.user)
 		return context
@@ -279,7 +280,12 @@ class UsuarioListView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, ListView)
 				| Q(last_name__icontains=busca)
 				| Q(email__icontains=busca)
 			)
-		return queryset.order_by('username')
+		pastor = User.user_permissions.through.objects.filter(
+			user_id=OuterRef('pk'),
+			permission__codename='pode_ver_gabinete',
+			permission__content_type__app_label='acolhimento',
+		)
+		return queryset.annotate(eh_pastor=Exists(pastor)).order_by('username')
 
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)

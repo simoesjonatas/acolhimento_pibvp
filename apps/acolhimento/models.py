@@ -285,6 +285,48 @@ class InteracaoAcolhimento(models.Model):
 		return f'{self.pessoa.nome} - {self.get_tipo_display()}'
 
 
+class RegistroGabinete(models.Model):
+	"""Gabinete pastoral: atendimento reservado da pessoa com o pastor.
+
+	Fica fora da timeline (InteracaoAcolhimento) de proposito, porque a timeline e vista
+	por toda a equipe. So administradores e quem tem o perfil Pastor (permissao
+	`pode_ver_gabinete`) enxergam e registram o gabinete.
+	"""
+
+	class Tipo(models.TextChoices):
+		AGENDADO = 'agendado', 'Gabinete agendado'
+		REALIZADO = 'realizado', 'Gabinete realizado'
+
+	pessoa = models.ForeignKey(
+		PrimeiroContato,
+		on_delete=models.CASCADE,
+		related_name='registros_gabinete',
+	)
+	tipo = models.CharField(max_length=20, choices=Tipo.choices)
+	data = models.DateField(default=timezone.localdate)
+	hora = models.TimeField(default=hora_local_atual)
+	observacoes = models.TextField(blank=True, verbose_name='Observacoes')
+	criado_por = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='registros_gabinete',
+	)
+	criado_em = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		ordering = ['-data', '-hora', '-criado_em']
+		verbose_name = 'Registro de gabinete'
+		verbose_name_plural = 'Registros de gabinete'
+		permissions = [
+			('pode_ver_gabinete', 'Perfil pastor: pode ver e registrar o gabinete pastoral'),
+		]
+
+	def __str__(self):
+		return f'{self.pessoa.nome} - {self.get_tipo_display()}'
+
+
 class ExecucaoProcessamentoFila(models.Model):
 	class StatusExecucaoChoices(models.TextChoices):
 		EXECUTANDO = 'executando', 'Executando'

@@ -39,6 +39,7 @@ from apps.acolhimento.models import (
 	PerguntaQuestionario,
 	PrimeiroContato,
 	Questionario,
+	RegistroGabinete,
 	RespostaPergunta,
 	TemplateWhatsapp,
 )
@@ -3067,3 +3068,103 @@ class DisparoQuestionarioMassaTests(TestCase):
 		resp = self.client.get(self.url)
 
 		self.assertEqual(list(resp.context['form'].fields['questionario'].queryset), [self.cafe])
+
+
+
+@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+class GabinetePastoralTests(TestCase):
+	"""Caixa Gabinete na ficha da pessoa: so administradores e pastores veem e registram."""
+
+	def setUp(self):
+		usuarios = get_user_model()
+		self.admin = usuarios.objects.create_user('adm_gabinete', password='x', is_staff=True)
+		self.pastor = usuarios.objects.create_user(
+			'pastor_gabinete', password='x', first_name='Joao', last_name='Pastor',
+		)
+		self.pastor.user_permissions.add(Permission.objects.get(codename='pode_ver_gabinete'))
+		# Mesmo quem conversa com as pessoas nao enxerga o gabinete.
+		self.equipe = usuarios.objects.create_user('equipe_gabinete', password='x')
+		self.equipe.user_permissions.add(Permission.objects.get(codename='pode_conversar_pessoas'))
+		self.pessoa = PrimeiroContato.objects.create(
+			nome='Marcos',
+			telefone_whatsapp='31944440001',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+		)
+		self.ficha = reverse('pessoas-detalhe', args=[self.pessoa.pk])
+		self.url = reverse('pessoas-gabinete', args=[self.pessoa.pk])
+
+	def _registrar(self, usuario, **dados):
+		self.client.force_login(usuario)
+		payload = {
+			'gabinete-tipo': 'agendado',
+			'gabinete-data': '2026-10-20',
+			'gabinete-hora': '19:30',
+			'gabinete-observacoes': 'Conversa sobre batismo.',
+		}
+		payload.update(dados)
+		return self.client.post(self.url, payload)
+
+	def test_pastor_registra_gabinete_agendado(self):
+		resp = self._registrar(self.pastor)
+
+		self.assertRedirects(resp, f'{self.ficha}#gabinete', fetch_redirect_response=False)
+		registro = RegistroGabinete.objects.get(pessoa=self.pessoa)
+		self.assertEqual(registro.tipo, RegistroGabinete.Tipo.AGENDADO)
+		self.assertEqual(registro.data.isoformat(), '2026-10-20')
+		self.assertEqual(registro.hora.strftime('%H:%M'), '19:30')
+		self.assertEqual(registro.observacoes, 'Conversa sobre batismo.')
+		self.assertEqual(registro.criado_por, self.pastor)
+
+	def test_gabinete_nao_entra_na_timeline_geral(self):
+		self._registrar(self.admin, **{'gabinete-tipo': 'realizado'})
+
+		self.assertEqual(RegistroGabinete.objects.get().tipo, RegistroGabinete.Tipo.REALIZADO)
+		self.assertFalse(self.pessoa.interacoes.exists())
+
+	def test_admin_e_pastor_veem_a_caixa_e_o_historico(self):
+		RegistroGabinete.objects.create(
+			pessoa=self.pessoa,
+			tipo=RegistroGabinete.Tipo.REALIZADO,
+			observacoes='Oramos juntos.',
+			criado_por=self.pastor,
+		)
+		for usuario in (self.admin, self.pastor):
+			self.client.force_login(usuario)
+			resp = self.client.get(self.ficha)
+			self.assertContains(resp, 'id="gabinete"')
+			self.assertContains(resp, 'Gabinete realizado')
+			self.assertContains(resp, 'Oramos juntos.')
+			self.assertContains(resp, 'Registrado por Joao Pastor')
+
+	def test_equipe_nao_ve_nem_registra_gabinete(self):
+		RegistroGabinete.objects.create(
+			pessoa=self.pessoa, tipo=RegistroGabinete.Tipo.REALIZADO, observacoes='Oramos juntos.',
+		)
+		self.client.force_login(self.equipe)
+		resp = self.client.get(self.ficha)
+		self.assertNotContains(resp, 'id="gabinete"')
+		self.assertNotContains(resp, 'Oramos juntos.')
+		self.assertNotIn('registros_gabinete', resp.context)
+
+		resp = self._registrar(self.equipe)
+
+		self.assertEqual(resp.status_code, 403)
+		self.assertEqual(RegistroGabinete.objects.count(), 1)
+
+	def test_tipo_invalido_nao_registra(self):
+		self._registrar(self.pastor, **{'gabinete-tipo': 'qualquer'})
+		self.assertFalse(RegistroGabinete.objects.exists())
+
+	def test_campos_de_data_e_hora_vem_no_formato_que_o_navegador_aceita(self):
+		# <input type="date"> so mostra AAAA-MM-DD; no <input type="time">, um valor com
+		# segundos faz o navegador recusar qualquer horario digitado sem aqueles segundos.
+		self.client.force_login(self.pastor)
+		resp = self.client.get(self.ficha)
+		conteudo = resp.content.decode()
+		hoje = timezone.localdate().isoformat()
+		self.assertIn(f'name="gabinete-data" value="{hoje}"', conteudo)
+		self.assertIn(f'name="data_interacao" value="{hoje}"', conteudo)
+		self.assertRegex(conteudo, r'name="gabinete-hora" value="\d{2}:\d{2}"')
+		self.assertRegex(conteudo, r'name="hora_interacao" value="\d{2}:\d{2}"')

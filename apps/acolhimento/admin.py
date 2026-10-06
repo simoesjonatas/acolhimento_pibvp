@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from apps.acolhimento.forms import PrimeiroContatoAdminForm
-from apps.acolhimento.models import CampanhaComunicacao, ConfiguracaoProcessamentoFila, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato, TemplateWhatsapp
+from apps.acolhimento.models import CampanhaComunicacao, ConfiguracaoProcessamentoFila, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato, RegistroGabinete, TemplateWhatsapp
 
 
 @admin.register(PrimeiroContato)
@@ -26,6 +26,13 @@ class InteracaoAcolhimentoAdmin(admin.ModelAdmin):
 	list_display = ('pessoa', 'tipo', 'data_interacao', 'criado_em')
 	list_filter = ('tipo', 'data_interacao')
 	search_fields = ('pessoa__nome', 'descricao')
+
+
+@admin.register(RegistroGabinete)
+class RegistroGabineteAdmin(admin.ModelAdmin):
+	list_display = ('pessoa', 'tipo', 'data', 'hora', 'criado_por', 'criado_em')
+	list_filter = ('tipo', 'data')
+	search_fields = ('pessoa__nome',)
 
 
 @admin.register(CampanhaComunicacao)

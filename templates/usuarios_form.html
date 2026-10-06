@@ -36,6 +36,9 @@
                 <span class="profile-role-badge {% if object.is_staff or object.is_superuser %}is-admin{% endif %}">
                     {% if object.is_staff or object.is_superuser %}Administrativo{% else %}Equipe{% endif %}
                 </span>
+                {% if form.perfil_pastor.value %}
+                <span class="profile-role-badge is-pastor">Pastor</span>
+                {% endif %}
                 <span class="profile-role-badge {% if object.is_active %}is-active{% else %}is-inactive{% endif %}">
                     {% if object.is_active %}Ativo{% else %}Inativo{% endif %}
                 </span>
@@ -146,16 +149,24 @@
                                 <small>Permite ver e enviar mensagens individuais</small>
                             </span>
                         </label>
+                        <label class="permission-toggle" for="{{ form.perfil_pastor.id_for_label }}">
+                            {{ form.perfil_pastor }}
+                            <span>
+                                <strong>Pastor</strong>
+                                <small>Ve e registra o gabinete pastoral na ficha das pessoas</small>
+                            </span>
+                        </label>
                         <label class="permission-toggle" for="{{ form.is_staff.id_for_label }}">
                             {{ form.is_staff }}
                             <span>
                                 <strong>Acesso administrativo</strong>
-                                <small>Libera usuarios, fila, processamento e disparos</small>
+                                <small>Libera usuarios, fila, processamento, disparos e gabinete</small>
                             </span>
                         </label>
                     </div>
                     {{ form.is_active.errors }}
                     {{ form.pode_conversar_pessoas.errors }}
+                    {{ form.perfil_pastor.errors }}
                     {{ form.is_staff.errors }}
                 </div>
 

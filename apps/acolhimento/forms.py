@@ -15,6 +15,7 @@ from apps.acolhimento.models import (
     PerguntaQuestionario,
     PrimeiroContato,
     Questionario,
+    RegistroGabinete,
     RespostaPergunta,
     hora_local_atual,
 )
@@ -171,9 +172,33 @@ class InteracaoAcolhimentoForm(forms.ModelForm):
         model = InteracaoAcolhimento
         fields = ['tipo', 'data_interacao', 'hora_interacao', 'descricao']
         widgets = {
-            'data_interacao': forms.DateInput(attrs={'type': 'date'}),
-            'hora_interacao': forms.TimeInput(attrs={'type': 'time'}),
+            # O <input type="date"> so aceita AAAA-MM-DD: no formato local a data padrao some.
+            'data_interacao': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
+            # Sem segundos: com "13:30:47" de valor, o navegador so aceita horarios
+            # terminados em :47 e bloqueia o envio quando a pessoa digita 19:30.
+            'hora_interacao': forms.TimeInput(attrs={'type': 'time'}, format='%H:%M'),
             'descricao': forms.Textarea(attrs={'rows': 3}),
+        }
+
+
+class RegistroGabineteForm(forms.ModelForm):
+    """Caixa "Gabinete" da ficha da pessoa (so administradores e pastores)."""
+
+    prefix = 'gabinete'  # a ficha tambem tem o form do Novo passo, com um campo `tipo`
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound and not self.instance.pk:
+            self.fields['data'].initial = timezone.localdate
+            self.fields['hora'].initial = hora_local_atual
+
+    class Meta:
+        model = RegistroGabinete
+        fields = ['tipo', 'data', 'hora', 'observacoes']
+        widgets = {
+            'data': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
+            'hora': forms.TimeInput(attrs={'type': 'time'}, format='%H:%M'),
+            'observacoes': forms.Textarea(attrs={'rows': 3}),
         }
 
 

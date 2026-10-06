@@ -267,6 +267,61 @@
             </article>
             {% endif %}
 
+            {% if pode_ver_gabinete %}
+            <article class="person-summary-card gabinete-card" id="gabinete">
+                <div class="gabinete-card-head">
+                    <h2>Gabinete</h2>
+                    <span class="gabinete-restrito" title="Visível só para administradores e pastores">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                        Restrito
+                    </span>
+                </div>
+
+                {% if registros_gabinete %}
+                <ul class="gabinete-list">
+                    {% for registro in registros_gabinete %}
+                    <li class="gabinete-item gabinete-item-{{ registro.tipo }}">
+                        <div class="gabinete-item-head">
+                            <strong>{{ registro.get_tipo_display }}</strong>
+                            <span>{{ registro.data|date:'d/m/Y' }} {{ registro.hora|time:'H:i' }}</span>
+                        </div>
+                        {% if registro.observacoes %}<p>{{ registro.observacoes|linebreaksbr }}</p>{% endif %}
+                        {% if registro.criado_por %}<small>Registrado por {{ registro.criado_por.get_full_name|default:registro.criado_por.username }}</small>{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="table-muted-text">Nenhum gabinete registrado ainda.</p>
+                {% endif %}
+
+                <form method="post" action="{% url 'pessoas-gabinete' pessoa.pk %}" class="timeline-compose-form gabinete-form">
+                    {% csrf_token %}
+                    <p>
+                        <label for="{{ gabinete_form.tipo.id_for_label }}">Tipo</label>
+                        {{ gabinete_form.tipo }}
+                    </p>
+                    <div class="timeline-compose-grid">
+                        <p>
+                            <label for="{{ gabinete_form.data.id_for_label }}">Data</label>
+                            {{ gabinete_form.data }}
+                        </p>
+                        <p>
+                            <label for="{{ gabinete_form.hora.id_for_label }}">Hora</label>
+                            {{ gabinete_form.hora }}
+                        </p>
+                    </div>
+                    <p>
+                        <label for="{{ gabinete_form.observacoes.id_for_label }}">Observações</label>
+                        {{ gabinete_form.observacoes }}
+                    </p>
+                    <button type="submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <span class="btn-text">Registrar gabinete</span>
+                    </button>
+                </form>
+            </article>
+            {% endif %}
+
             <article class="person-summary-card timeline-compose-card">
                 <h2>Novo passo</h2>
                 <form method="post" class="timeline-compose-form">

@@ -18,6 +18,26 @@ def get_conversar_pessoas_permission():
     ).first()
 
 
+def get_gabinete_permission():
+    return Permission.objects.filter(
+        codename='pode_ver_gabinete',
+        content_type__app_label='acolhimento',
+        content_type__model='registrogabinete',
+    ).first()
+
+
+def eh_pastor(user):
+    """Perfil Pastor = a permissao do gabinete dada ao proprio usuario.
+
+    Nao usa has_perm de proposito: o superusuario tem todas as permissoes e
+    apareceria como pastor sem ter sido marcado.
+    """
+    return user.user_permissions.filter(
+        codename='pode_ver_gabinete',
+        content_type__app_label='acolhimento',
+    ).exists()
+
+
 class LoginForm(AuthenticationForm):
     """Formulario de login que aceita usuario ou e-mail e evita capitalizacao."""
 
@@ -46,16 +66,19 @@ class UsuarioPermissoesFormMixin:
             label='Mensagens das pessoas',
             required=False,
         )
+        pastor_field = forms.BooleanField(label='Pastor', required=False)
         fields = self.fields.__class__()
         for field_name, field in self.fields.items():
             fields[field_name] = field
             if field_name == 'is_active':
                 fields['pode_conversar_pessoas'] = permission_field
+                fields['perfil_pastor'] = pastor_field
         self.fields = fields
 
         instance = getattr(self, 'instance', None)
         if instance and instance.pk:
             self.fields['pode_conversar_pessoas'].initial = instance.has_perm(PERMISSAO_CONVERSAR_PESSOAS)
+            self.fields['perfil_pastor'].initial = eh_pastor(instance)
 
     def salvar_permissao_conversas(self, user):
         permission = get_conversar_pessoas_permission()
@@ -63,6 +86,16 @@ class UsuarioPermissoesFormMixin:
             return
 
         if self.cleaned_data.get('pode_conversar_pessoas'):
+            user.user_permissions.add(permission)
+        else:
+            user.user_permissions.remove(permission)
+
+    def salvar_perfil_pastor(self, user):
+        permission = get_gabinete_permission()
+        if not permission:
+            return
+
+        if self.cleaned_data.get('perfil_pastor'):
             user.user_permissions.add(permission)
         else:
             user.user_permissions.remove(permission)
@@ -92,6 +125,7 @@ class UsuarioCreateForm(UsuarioPermissoesFormMixin, UsernameMinusculoMixin, form
         if commit:
             user.save()
             self.salvar_permissao_conversas(user)
+            self.salvar_perfil_pastor(user)
         return user
 
 
@@ -104,6 +138,7 @@ class UsuarioUpdateForm(UsuarioPermissoesFormMixin, UsernameMinusculoMixin, form
         user = super().save(commit=commit)
         if commit:
             self.salvar_permissao_conversas(user)
+            self.salvar_perfil_pastor(user)
         return user
 
 

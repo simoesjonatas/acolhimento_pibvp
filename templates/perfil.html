@@ -16,6 +16,9 @@
         <span class="profile-role-badge {% if usuario_obj.is_staff or usuario_obj.is_superuser %}is-admin{% endif %}">
             {% if usuario_obj.is_staff or usuario_obj.is_superuser %}Perfil administrativo{% else %}Perfil da equipe{% endif %}
         </span>
+        {% if eh_pastor %}
+        <span class="profile-role-badge is-pastor">Pastor</span>
+        {% endif %}
     </section>
 
     <section class="profile-layout">

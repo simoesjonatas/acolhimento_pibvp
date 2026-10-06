@@ -39,7 +39,7 @@ from apps.acolhimento.aguardando_resposta import (
 	filtrar_respondidas,
 )
 from apps.acolhimento.fila_metrics import metricas_entrega
-from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RelatorioPessoasForm, ResponderQuestionarioForm, TemplatesWhatsappForm
+from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RegistroGabineteForm, RelatorioPessoasForm, ResponderQuestionarioForm, TemplatesWhatsappForm
 from apps.acolhimento.models import ConfiguracaoProcessamentoFila, ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario, RespostaPergunta, TemplateWhatsapp
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
 from apps.acolhimento.reports import filtrar_pessoas, gerar_exportacao_respostas, gerar_relatorio, resumo_filtros, resumo_pessoas
@@ -61,6 +61,7 @@ from apps.acolhimento.whatsapp_rules import (
 
 
 PERMISSAO_CONVERSAR_PESSOAS = 'acolhimento.pode_conversar_pessoas'
+PERMISSAO_GABINETE = 'acolhimento.pode_ver_gabinete'
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,11 @@ def pode_conversar_pessoas(user):
 
 def pode_ver_questionario(user):
 	return pode_conversar_pessoas(user)
+
+
+def pode_ver_gabinete(user):
+	"""Gabinete pastoral: so administradores e quem tem o perfil Pastor."""
+	return user.is_staff or user.is_superuser or user.has_perm(PERMISSAO_GABINETE)
 
 
 CONVITE_SO_PARTICIPANTE_ERROR = (
@@ -159,6 +165,13 @@ class ConversasPessoasPermissaoMixin(UserPassesTestMixin):
 
 	def test_func(self):
 		return pode_conversar_pessoas(self.request.user)
+
+
+class GabinetePermissaoMixin(UserPassesTestMixin):
+	raise_exception = True
+
+	def test_func(self):
+		return pode_ver_gabinete(self.request.user)
 
 
 class PrimeiroContatoQuerysetMixin:
@@ -1011,6 +1024,13 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		context['pode_ver_questionario'] = ver_questionario
 		context['pode_excluir_convite'] = user.is_staff or user.is_superuser
 
+		# Gabinete pastoral: nem os registros vao para o contexto de quem nao pode ver.
+		ver_gabinete = pode_ver_gabinete(user)
+		context['pode_ver_gabinete'] = ver_gabinete
+		if ver_gabinete:
+			context['registros_gabinete'] = self.object.registros_gabinete.select_related('criado_por')
+			context['gabinete_form'] = RegistroGabineteForm()
+
 		pode_gerenciar_responsavel = user.is_staff or user.is_superuser
 		context['pode_gerenciar_responsavel'] = pode_gerenciar_responsavel
 		if pode_gerenciar_responsavel:
@@ -1063,6 +1083,23 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		messages.error(request, 'Nao foi possivel adicionar o evento. Revise os dados informados.')
 		context = self.get_context_data(interacao_form=form)
 		return self.render_to_response(context)
+
+
+class RegistroGabineteCreateView(LoginRequiredMixin, GabinetePermissaoMixin, View):
+	"""Registra um gabinete (agendado/realizado) na ficha. Fica fora da timeline geral."""
+
+	def post(self, request, pk):
+		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		form = RegistroGabineteForm(request.POST)
+		if form.is_valid():
+			registro = form.save(commit=False)
+			registro.pessoa = pessoa
+			registro.criado_por = request.user
+			registro.save()
+			messages.success(request, f'{registro.get_tipo_display()} registrado.')
+		else:
+			messages.error(request, 'Nao foi possivel registrar o gabinete. Revise os dados informados.')
+		return redirect(f"{reverse('pessoas-detalhe', kwargs={'pk': pessoa.pk})}#gabinete")
 
 
 class PrimeiroContatoStatusUpdateView(LoginRequiredMixin, View):

@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from apps.core.forms import PERMISSAO_CONVERSAR_PESSOAS, UsuarioCreateForm
+from apps.core.forms import PERMISSAO_CONVERSAR_PESSOAS, UsuarioCreateForm, UsuarioUpdateForm, eh_pastor
 from apps.core.models import QrCodeDinamico
 
 
@@ -118,6 +118,59 @@ class UsernameMinusculoTests(TestCase):
 		})
 		self.assertFalse(form.is_valid())
 		self.assertIn('username', form.errors)
+
+
+class PerfilPastorTests(TestCase):
+	"""Perfil Pastor no cadastro de usuarios: libera o gabinete pastoral."""
+
+	def setUp(self):
+		self.admin = User.objects.create_superuser('admin_pastor', password='x')
+		self.usuario = User.objects.create_user('joao', password='x')
+
+	def _editar(self, **dados):
+		self.client.force_login(self.admin)
+		payload = {'username': 'joao', 'first_name': '', 'last_name': '', 'email': '', 'is_active': 'on'}
+		payload.update(dados)
+		return self.client.post(reverse('usuarios-editar', args=[self.usuario.pk]), payload)
+
+	def test_form_create_salva_perfil_pastor(self):
+		form = UsuarioCreateForm(data={
+			'username': 'pastor',
+			'first_name': 'Pastor',
+			'last_name': '',
+			'email': '',
+			'is_active': True,
+			'perfil_pastor': True,
+			'is_staff': False,
+			'password1': 'SenhaForte1',
+			'password2': 'SenhaForte1',
+		})
+		self.assertTrue(form.is_valid(), form.errors)
+		user = form.save()
+
+		self.assertTrue(eh_pastor(user))
+		self.assertTrue(User.objects.get(pk=user.pk).has_perm('acolhimento.pode_ver_gabinete'))
+		self.assertFalse(user.is_staff)
+
+	def test_marcar_e_desmarcar_pastor_na_edicao(self):
+		self._editar(perfil_pastor='on')
+		self.assertTrue(eh_pastor(self.usuario))
+
+		self._editar()
+		self.assertFalse(eh_pastor(self.usuario))
+
+	def test_superusuario_nao_aparece_como_pastor_sem_ser_marcado(self):
+		form = UsuarioUpdateForm(instance=self.admin)
+		self.assertFalse(form.fields['perfil_pastor'].initial)
+
+	@override_settings(STORAGES=TEST_STORAGES)
+	def test_lista_de_usuarios_mostra_quem_e_pastor(self):
+		self._editar(perfil_pastor='on')
+
+		resp = self.client.get(reverse('usuarios-lista'))
+
+		pastores = {usuario.username: usuario.eh_pastor for usuario in resp.context['usuarios']}
+		self.assertEqual(pastores, {'admin_pastor': False, 'joao': True})
 
 
 @override_settings(STORAGES=TEST_STORAGES)
