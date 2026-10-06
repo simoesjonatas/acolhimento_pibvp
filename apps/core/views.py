@@ -15,13 +15,14 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento import template_config
 from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato, TemplateWhatsapp
 from apps.acolhimento.whatsapp_rules import contar_pessoas_janela_aberta
 from apps.core.forms import PerfilForm, QrCodeDinamicoForm, UsuarioCreateForm, UsuarioUpdateForm, eh_pastor
-from apps.core.models import QrCodeDinamico
+from apps.core.models import QrCodeDinamico, telefone_do_usuario
 from apps.core.qrcode_utils import gerar_qrcode_png, gerar_qrcode_svg
 
 
@@ -220,6 +221,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 				'total_membros': total_membros,
 				'total_janela_aberta': total_janela_aberta,
 				'ultimos_passos': ultimos_passos,
+				# Aviso no topo do Painel ate o usuario cadastrar o proprio telefone.
+				'telefone_pendente': not telefone_do_usuario(self.request.user),
 			}
 		)
 
@@ -229,11 +232,26 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 class PerfilView(LoginRequiredMixin, TemplateView):
 	template_name = 'perfil.html'
 
+	def destino_seguro(self):
+		"""`?next=` de quem veio de outra tela (ex.: aviso do Painel), so se for do proprio site."""
+		destino = (self.request.POST.get('next') or self.request.GET.get('next') or '').strip()
+		if destino and url_has_allowed_host_and_scheme(
+			destino, allowed_hosts={self.request.get_host()}, require_https=self.request.is_secure()
+		):
+			return destino
+		return ''
+
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
 		context['usuario_obj'] = self.request.user
 		context['eh_pastor'] = eh_pastor(self.request.user)
-		context['perfil_form'] = kwargs.get('perfil_form') or PerfilForm(instance=self.request.user)
+		context['telefone_atual'] = telefone_do_usuario(self.request.user)
+		context['next'] = self.destino_seguro()
+		perfil_form = kwargs.get('perfil_form') or PerfilForm(instance=self.request.user)
+		if context['next'] and not context['telefone_atual']:
+			# Veio do aviso do Painel: o cursor ja abre no campo de telefone.
+			perfil_form.fields['telefone'].widget.attrs['autofocus'] = True
+		context['perfil_form'] = perfil_form
 		context['senha_form'] = kwargs.get('senha_form') or PasswordChangeForm(user=self.request.user)
 		return context
 
@@ -245,7 +263,7 @@ class PerfilView(LoginRequiredMixin, TemplateView):
 			if perfil_form.is_valid():
 				perfil_form.save()
 				messages.success(request, 'Dados do perfil atualizados com sucesso.')
-				return redirect('perfil')
+				return redirect(self.destino_seguro() or 'perfil')
 			messages.error(request, 'Nao foi possivel atualizar o perfil. Verifique os campos.')
 			return self.render_to_response(self.get_context_data(perfil_form=perfil_form, senha_form=senha_form))
 
@@ -285,7 +303,10 @@ class UsuarioListView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, ListView)
 			permission__codename='pode_ver_gabinete',
 			permission__content_type__app_label='acolhimento',
 		)
-		return queryset.annotate(eh_pastor=Exists(pastor)).order_by('username')
+		return queryset.annotate(
+			eh_pastor=Exists(pastor),
+			telefone=F('perfil__telefone'),
+		).order_by('username')
 
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
@@ -316,6 +337,9 @@ class UsuarioUpdateView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, UpdateV
 	template_name = 'usuarios_form.html'
 	model = User
 	form_class = UsuarioUpdateForm
+	# Sem isto o Django chamaria o usuario editado de `user` e o topo/menu passariam a
+	# mostrar o nome e as permissoes dele em vez das de quem esta logado.
+	context_object_name = 'usuario_obj'
 	success_url = reverse_lazy('usuarios-lista')
 
 	def form_valid(self, form):

@@ -3,7 +3,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from apps.core.forms import PERMISSAO_CONVERSAR_PESSOAS, UsuarioCreateForm, UsuarioUpdateForm, eh_pastor
-from apps.core.models import QrCodeDinamico
+from apps.core.models import QrCodeDinamico, telefone_do_usuario
 
 
 User = get_user_model()
@@ -296,3 +296,114 @@ class QrCodeDinamicoTests(TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response['Content-Type'], 'image/png')
 		self.assertTrue(response.content.startswith(b'\x89PNG'))
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class TelefoneUsuarioTests(TestCase):
+	"""Telefone no cadastro de usuarios e aviso no Painel para quem ainda nao cadastrou."""
+
+	AVISO = 'Seu telefone ainda não está no cadastro.'
+
+	def setUp(self):
+		self.usuario = User.objects.create_user('maria_tel', password='x', first_name='Maria')
+		self.client.force_login(self.usuario)
+
+	def _salvar_perfil(self, telefone, next_url='/'):
+		return self.client.post(reverse('perfil'), {
+			'action': 'salvar_perfil',
+			'first_name': 'Maria',
+			'last_name': '',
+			'email': '',
+			'telefone': telefone,
+			'next': next_url,
+		})
+
+	def test_painel_avisa_quem_nao_tem_telefone_com_link_para_o_perfil(self):
+		resp = self.client.get(reverse('dashboard'))
+
+		self.assertTrue(resp.context['telefone_pendente'])
+		self.assertContains(resp, self.AVISO)
+		self.assertContains(resp, f'href="{reverse("perfil")}?next={reverse("dashboard")}"')
+
+	def test_link_do_aviso_abre_o_perfil_no_campo_de_telefone(self):
+		resp = self.client.get(reverse('perfil'), {'next': reverse('dashboard')})
+
+		self.assertTrue(resp.context['perfil_form'].fields['telefone'].widget.attrs.get('autofocus'))
+		self.assertContains(resp, 'name="next" value="/"')
+		self.assertContains(resp, 'id="telefone" class="profile-campo-destaque"')
+
+	def test_cadastrar_telefone_volta_para_o_painel_sem_o_aviso(self):
+		resp = self._salvar_perfil('(31) 99999-8888')
+
+		self.assertRedirects(resp, reverse('dashboard'), fetch_redirect_response=False)
+		self.assertEqual(telefone_do_usuario(self.usuario), '(31) 99999-8888')
+		resp = self.client.get(reverse('dashboard'))
+		self.assertFalse(resp.context['telefone_pendente'])
+		self.assertNotContains(resp, self.AVISO)
+
+	def test_telefone_invalido_nao_salva(self):
+		resp = self._salvar_perfil('1234')
+
+		self.assertEqual(resp.status_code, 200)
+		self.assertIn('telefone', resp.context['perfil_form'].errors)
+		self.assertEqual(telefone_do_usuario(self.usuario), '')
+
+	def test_next_de_outro_site_e_ignorado(self):
+		resp = self._salvar_perfil('31999998888', next_url='https://exemplo.com/')
+		self.assertRedirects(resp, reverse('perfil'), fetch_redirect_response=False)
+
+	def test_admin_cadastra_o_telefone_no_cadastro_de_usuarios(self):
+		admin = User.objects.create_superuser('admin_tel', password='x')
+		self.client.force_login(admin)
+
+		resp = self.client.post(reverse('usuarios-editar', args=[self.usuario.pk]), {
+			'username': 'maria_tel',
+			'first_name': 'Maria',
+			'last_name': '',
+			'email': '',
+			'is_active': 'on',
+			'telefone': '31 98888-7777',
+		})
+
+		self.assertEqual(resp.status_code, 302)
+		self.assertEqual(telefone_do_usuario(self.usuario), '31 98888-7777')
+		self.assertEqual(UsuarioUpdateForm(instance=self.usuario).fields['telefone'].initial, '31 98888-7777')
+		self.assertContains(self.client.get(reverse('usuarios-lista')), '31 98888-7777')
+
+	def test_editar_usuario_nao_troca_quem_esta_logado_no_topo(self):
+		admin = User.objects.create_superuser('admin_topo', password='x')
+		self.client.force_login(admin)
+
+		resp = self.client.get(reverse('usuarios-editar', args=[self.usuario.pk]))
+
+		self.assertEqual(resp.context['user'], admin)
+		self.assertContains(resp, 'Ola, admin_topo')
+		self.assertNotContains(resp, 'Ola, maria_tel')
+
+	def test_form_create_salva_o_telefone(self):
+		form = UsuarioCreateForm(data={
+			'username': 'novo_tel',
+			'first_name': '',
+			'last_name': '',
+			'email': '',
+			'is_active': True,
+			'is_staff': False,
+			'telefone': '(21) 3333-4444',
+			'password1': 'SenhaForte1',
+			'password2': 'SenhaForte1',
+		})
+		self.assertTrue(form.is_valid(), form.errors)
+		user = form.save()
+
+		self.assertEqual(telefone_do_usuario(user), '(21) 3333-4444')
+
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class MarcaDoTopoTests(TestCase):
+	def test_marca_do_topo_leva_para_o_painel(self):
+		self.client.force_login(User.objects.create_user('marca_topo', password='x'))
+
+		resp = self.client.get(reverse('perfil'))
+
+		self.assertContains(resp, f'<a class="brand-wrap" href="{reverse("dashboard")}" title="Ir para o Painel">')

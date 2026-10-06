@@ -2662,6 +2662,10 @@ a.queue-summary-item:hover {
         align-items: stretch;
     }
 
+    .aviso-telefone {
+        flex-wrap: wrap;
+    }
+
     /* Os botoes do cabecalho dividem uma linha (cada um do tamanho do texto) em vez
        de ocupar uma linha cada; o seletor com a.btn vence a regra geral de 100%. */
     .person-header-actions {
@@ -4693,6 +4697,65 @@ a.kpi-card:hover {
 .forbidden-text {
     max-width: 56ch;
     color: #535565;
+}
+
+/* Aviso no Painel para quem ainda nao cadastrou o telefone. */
+.aviso-telefone {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+    box-shadow: var(--shadow-soft);
+}
+
+.aviso-telefone-icone {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #ffffff;
+    color: var(--accent-ink);
+}
+
+.aviso-telefone-icone svg {
+    width: 19px;
+    height: 19px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.aviso-telefone-texto {
+    display: grid;
+    flex: 1 1 auto;
+    gap: 2px;
+    min-width: 0;
+    color: var(--accent-ink);
+}
+
+.aviso-telefone-texto span {
+    font-size: 0.88rem;
+}
+
+.aviso-telefone .btn {
+    flex: 0 0 auto;
+}
+
+/* Campo em destaque quando a pessoa chega pelo aviso do Painel. */
+.profile-campo-destaque {
+    padding: 10px;
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+    background: var(--accent-soft);
 }
 
 /* Responsive pages */

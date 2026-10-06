@@ -33,7 +33,7 @@
     {% if user.is_authenticated %}
     <header class="app-header">
         <div class="header-left">
-            <div class="brand-wrap">
+            <a class="brand-wrap" href="{% url 'dashboard' %}" title="Ir para o Painel">
                 <span class="brand-mark" aria-hidden="true">
                     <img src="{% static 'img/logo-marca.svg' %}" alt="" width="24" height="23">
                 </span>
@@ -41,7 +41,7 @@
                     <strong class="brand">PIBVP Acolhimento</strong>
                     <span class="brand-sub">Uma familia para conviver</span>
                 </span>
-            </div>
+            </a>
 
             <button
                 type="button"

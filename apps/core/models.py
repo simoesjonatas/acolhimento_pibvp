@@ -1,6 +1,7 @@
 import secrets
 
 from django.conf import settings
+from django.core.validators import RegexValidator
 from django.db import models
 from django.urls import reverse
 
@@ -85,3 +86,41 @@ class QrCodeDinamico(models.Model):
 	def get_public_path(self):
 		"""Caminho relativo (sem dominio) da URL fixa que vai dentro do QR Code."""
 		return reverse('qr-redirect', args=[self.codigo])
+
+
+# Mesmo formato aceito no WhatsApp das pessoas (PrimeiroContato.telefone_whatsapp).
+telefone_validator = RegexValidator(
+	regex=r'^\(?[1-9]{2}\)?\s?9?\d{4}-?\d{4}$',
+	message='Informe um telefone valido com DDD. Ex.: (31) 99999-9999',
+)
+
+
+class PerfilUsuario(models.Model):
+	"""Dados do usuario do sistema que o User do Django nao tem (por enquanto, o telefone)."""
+
+	usuario = models.OneToOneField(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name='perfil',
+	)
+	telefone = models.CharField('telefone', max_length=20, blank=True, validators=[telefone_validator])
+	atualizado_em = models.DateTimeField('atualizado em', auto_now=True)
+
+	class Meta:
+		verbose_name = 'Perfil do usuario'
+		verbose_name_plural = 'Perfis dos usuarios'
+
+	def __str__(self):
+		return f'Perfil de {self.usuario}'
+
+
+def telefone_do_usuario(usuario):
+	"""Telefone cadastrado do usuario, ou '' (nao cria o perfil so para ler)."""
+	return (
+		PerfilUsuario.objects.filter(usuario=usuario).values_list('telefone', flat=True).first()
+		or ''
+	)
+
+
+def salvar_telefone_do_usuario(usuario, telefone):
+	PerfilUsuario.objects.update_or_create(usuario=usuario, defaults={'telefone': telefone})

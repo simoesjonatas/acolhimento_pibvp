@@ -107,6 +107,17 @@ body::before {
     gap: 10px;
     color: #f9f9fc;
     flex: 0 0 auto;
+    border-radius: var(--radius);
+    text-decoration: none;
+}
+
+/* A marca leva para o Painel (pagina inicial). */
+.brand-wrap:hover {
+    text-decoration: none;
+}
+
+.brand-wrap:hover .brand-mark {
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.28);
 }
 
 .brand-mark {

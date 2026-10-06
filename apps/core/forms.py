@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import Permission
 
-from apps.core.models import QrCodeDinamico
+from apps.core.models import QrCodeDinamico, salvar_telefone_do_usuario, telefone_do_usuario, telefone_validator
 
 
 User = get_user_model()
@@ -59,6 +59,34 @@ class UsernameMinusculoMixin:
         return (self.cleaned_data.get('username') or '').strip().lower()
 
 
+class TelefoneUsuarioFormMixin:
+    """Campo Telefone dos formularios de usuario.
+
+    Fica no PerfilUsuario (o User do Django nao tem telefone): o form le e grava la.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['telefone'] = forms.CharField(
+            label='Telefone',
+            required=False,
+            max_length=20,
+            validators=[telefone_validator],
+            help_text='Com DDD. Ex.: (31) 99999-9999',
+            widget=forms.TextInput(attrs={
+                'placeholder': '(31) 99999-9999',
+                'inputmode': 'tel',
+                'autocomplete': 'tel',
+            }),
+        )
+        instance = getattr(self, 'instance', None)
+        if instance is not None and instance.pk:
+            self.fields['telefone'].initial = telefone_do_usuario(instance)
+
+    def salvar_telefone(self, user):
+        salvar_telefone_do_usuario(user, self.cleaned_data.get('telefone', ''))
+
+
 class UsuarioPermissoesFormMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -101,7 +129,7 @@ class UsuarioPermissoesFormMixin:
             user.user_permissions.remove(permission)
 
 
-class UsuarioCreateForm(UsuarioPermissoesFormMixin, UsernameMinusculoMixin, forms.ModelForm):
+class UsuarioCreateForm(TelefoneUsuarioFormMixin, UsuarioPermissoesFormMixin, UsernameMinusculoMixin, forms.ModelForm):
     password1 = forms.CharField(label='Senha', widget=forms.PasswordInput)
     password2 = forms.CharField(label='Confirmar senha', widget=forms.PasswordInput)
 
@@ -126,10 +154,11 @@ class UsuarioCreateForm(UsuarioPermissoesFormMixin, UsernameMinusculoMixin, form
             user.save()
             self.salvar_permissao_conversas(user)
             self.salvar_perfil_pastor(user)
+            self.salvar_telefone(user)
         return user
 
 
-class UsuarioUpdateForm(UsuarioPermissoesFormMixin, UsernameMinusculoMixin, forms.ModelForm):
+class UsuarioUpdateForm(TelefoneUsuarioFormMixin, UsuarioPermissoesFormMixin, UsernameMinusculoMixin, forms.ModelForm):
     class Meta:
         model = User
         fields = ['username', 'first_name', 'last_name', 'email', 'is_active', 'is_staff']
@@ -139,13 +168,20 @@ class UsuarioUpdateForm(UsuarioPermissoesFormMixin, UsernameMinusculoMixin, form
         if commit:
             self.salvar_permissao_conversas(user)
             self.salvar_perfil_pastor(user)
+            self.salvar_telefone(user)
         return user
 
 
-class PerfilForm(forms.ModelForm):
+class PerfilForm(TelefoneUsuarioFormMixin, forms.ModelForm):
     class Meta:
         model = User
         fields = ['first_name', 'last_name', 'email']
+
+    def save(self, commit=True):
+        user = super().save(commit=commit)
+        if commit:
+            self.salvar_telefone(user)
+        return user
 
 
 class QrCodeDinamicoForm(forms.ModelForm):

@@ -61,6 +61,10 @@
                     <dd>{{ object.email|default:'-' }}</dd>
                 </div>
                 <div>
+                    <dt>Telefone</dt>
+                    <dd>{{ form.telefone.initial|default:'-' }}</dd>
+                </div>
+                <div>
                     <dt>Ultimo acesso</dt>
                     <dd>{{ object.last_login|date:'d/m/Y H:i'|default:'-' }}</dd>
                 </div>
@@ -107,10 +111,16 @@
                         {{ form.last_name }}
                         {{ form.last_name.errors }}
                     </p>
-                    <p class="user-form-wide">
+                    <p>
                         <label for="{{ form.email.id_for_label }}">Email</label>
                         {{ form.email }}
                         {{ form.email.errors }}
+                    </p>
+                    <p>
+                        <label for="{{ form.telefone.id_for_label }}">Telefone</label>
+                        {{ form.telefone }}
+                        <small class="table-muted-text">{{ form.telefone.help_text }}</small>
+                        {{ form.telefone.errors }}
                     </p>
                 </div>
 

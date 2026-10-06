@@ -36,6 +36,7 @@
             <th>Username</th>
             <th>Nome</th>
             <th>Email</th>
+            <th>Telefone</th>
             <th>Ativo</th>
             <th>Staff</th>
             <th>Pastor</th>
@@ -48,6 +49,7 @@
             <td>{{ usuario.username }}</td>
             <td>{{ usuario.get_full_name|default:'-' }}</td>
             <td>{{ usuario.email|default:'-' }}</td>
+            <td>{{ usuario.telefone|default:'-' }}</td>
             <td>{% if usuario.is_active %}Sim{% else %}Nao{% endif %}</td>
             <td>{% if usuario.is_staff %}Sim{% else %}Nao{% endif %}</td>
             <td>{% if usuario.eh_pastor %}Sim{% else %}Nao{% endif %}</td>

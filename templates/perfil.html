@@ -38,6 +38,10 @@
                     <dd>{{ usuario_obj.email|default:'-' }}</dd>
                 </div>
                 <div>
+                    <dt>Telefone</dt>
+                    <dd>{{ telefone_atual|default:'-' }}</dd>
+                </div>
+                <div>
                     <dt>Acesso administrativo</dt>
                     <dd>{% if usuario_obj.is_staff or usuario_obj.is_superuser %}Sim{% else %}Nao{% endif %}</dd>
                 </div>
@@ -56,6 +60,7 @@
                 <form method="post" class="profile-form">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="salvar_perfil">
+                    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
 
                     {% if perfil_form.non_field_errors %}
                     <div class="form-errors">
@@ -74,10 +79,16 @@
                             {{ perfil_form.last_name }}
                             {{ perfil_form.last_name.errors }}
                         </p>
-                        <p class="profile-form-wide">
+                        <p>
                             <label for="{{ perfil_form.email.id_for_label }}">Email</label>
                             {{ perfil_form.email }}
                             {{ perfil_form.email.errors }}
+                        </p>
+                        <p id="telefone"{% if next and not telefone_atual %} class="profile-campo-destaque"{% endif %}>
+                            <label for="{{ perfil_form.telefone.id_for_label }}">Telefone</label>
+                            {{ perfil_form.telefone }}
+                            <small class="table-muted-text">{{ perfil_form.telefone.help_text }}</small>
+                            {{ perfil_form.telefone.errors }}
                         </p>
                     </div>
 
