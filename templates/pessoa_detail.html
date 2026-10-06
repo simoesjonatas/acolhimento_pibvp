@@ -207,9 +207,8 @@
             </article>
 
             {% if pode_ver_questionario %}
-            {% if is_participante %}
             <article class="person-summary-card questionario-card">
-                <h2>Questionario de membresia</h2>
+                <h2>Questionarios</h2>
 
                 {% if convites_questionario %}
                 <ul class="convite-list">
@@ -266,7 +265,6 @@
                 <p class="table-muted-text">Nenhum questionario ativo. <a href="{% url 'questionarios-lista' %}">Crie um</a>.</p>
                 {% endif %}
             </article>
-            {% endif %}
             {% endif %}
 
             <article class="person-summary-card timeline-compose-card">

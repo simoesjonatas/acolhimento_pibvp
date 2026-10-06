@@ -9,6 +9,7 @@ from openpyxl import load_workbook
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.contrib.messages import get_messages
 from django.core.exceptions import PermissionDenied
 from django.http import QueryDict
 from django.test import RequestFactory, TestCase, override_settings
@@ -1086,7 +1087,20 @@ class QuestionarioTests(TestCase):
 			1,
 		)
 
-	def test_gerar_convite_bloqueado_fora_de_participante(self):
+	def test_gerar_convite_de_outro_questionario_fora_de_participante(self):
+		# Ex.: convite do cafe com o pastor para quem esta em acompanhamento.
+		self.pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
+		self.pessoa.save(update_fields=['status'])
+		self.client.force_login(self.admin)
+		self.client.post(
+			reverse('pessoas-gerar-convite', args=[self.pessoa.pk]),
+			{'questionario': self.questionario.pk},
+		)
+		self.assertTrue(ConviteQuestionario.objects.filter(pessoa=self.pessoa).exists())
+
+	def test_convite_de_membresia_bloqueado_fora_de_participante(self):
+		self.questionario.padrao_membresia = True
+		self.questionario.save()
 		self.pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
 		self.pessoa.save(update_fields=['status'])
 		self.client.force_login(self.admin)
@@ -1095,6 +1109,19 @@ class QuestionarioTests(TestCase):
 			{'questionario': self.questionario.pk},
 		)
 		self.assertFalse(ConviteQuestionario.objects.filter(pessoa=self.pessoa).exists())
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_ficha_mostra_questionarios_fora_de_participante_sem_o_de_membresia(self):
+		membresia = Questionario.objects.create(titulo='Membresia', ativo=True, padrao_membresia=True)
+		self.pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
+		self.pessoa.save(update_fields=['status'])
+		self.client.force_login(self.admin)
+
+		resp = self.client.get(reverse('pessoas-detalhe', args=[self.pessoa.pk]))
+
+		self.assertContains(resp, reverse('pessoas-gerar-convite', args=[self.pessoa.pk]))
+		self.assertEqual(list(resp.context['questionarios_ativos']), [self.questionario])
+		self.assertNotIn(membresia, resp.context['questionarios_ativos'])
 
 	def test_excluir_convite(self):
 		convite = ConviteQuestionario.objects.create(questionario=self.questionario, pessoa=self.pessoa)
@@ -2867,3 +2894,122 @@ class FilaMensagensNaoLidasTests(TestCase):
 		self.assertEqual(list(resp.context['mensagens']), [self.joao_nao_lida])
 		self.assertEqual(self._cards(resp)['Não lidas']['valor'], 1)
 		self.assertEqual(resp.context['menu_retorno_pendente_count'], 1)
+
+
+@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+class DisparoQuestionarioMassaTests(TestCase):
+	"""Disparo em massa no modo questionario: cada pessoa recebe o proprio link."""
+
+	def setUp(self):
+		self.equipe = get_user_model().objects.create_user('equipe_disparo_questionario', password='x', is_staff=True)
+		self.client.force_login(self.equipe)
+		self.url = reverse('mensagens-disparo-massa')
+		self.cafe = Questionario.objects.create(titulo='Cafe com o Pastor', ativo=True)
+		PerguntaQuestionario.objects.create(
+			questionario=self.cafe, texto='Voce topa?', tipo='sim_nao', obrigatoria=True,
+		)
+		self.ana = self._pessoa('Ana Souza', '31933330001')
+		self.bruno = self._pessoa('Bruno Lima', '31933330002')
+		self.carla = self._pessoa('Carla Dias', '31933330003')
+
+	def _pessoa(self, nome, telefone, status=PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO):
+		return PrimeiroContato.objects.create(
+			nome=nome,
+			telefone_whatsapp=telefone,
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			status=status,
+		)
+
+	def _disparar(self, pessoas, questionario=None, texto='Oi {nome}! Topa um cafe? {link}'):
+		return self.client.post(
+			self.url,
+			{
+				'modo': 'questionario',
+				'questionario': (questionario or self.cafe).pk,
+				'texto_convite': texto,
+				'pessoas': [pessoa.pk for pessoa in pessoas],
+			},
+		)
+
+	def _saida(self, pessoa):
+		return MensagemContato.objects.get(pessoa=pessoa, direcao=MensagemContato.DirecaoChoices.SAIDA)
+
+	def _link(self, convite):
+		return 'http://testserver' + reverse('responder-questionario', kwargs={'token': convite.token})
+
+	def test_cada_pessoa_recebe_o_proprio_link(self):
+		resp = self._disparar([self.ana, self.bruno])
+
+		self.assertEqual(resp.status_code, 302)
+		convite_ana = ConviteQuestionario.objects.get(pessoa=self.ana, questionario=self.cafe)
+		convite_bruno = ConviteQuestionario.objects.get(pessoa=self.bruno, questionario=self.cafe)
+		self.assertNotEqual(convite_ana.token, convite_bruno.token)
+		self.assertEqual(self._saida(self.ana).conteudo, f'Oi Ana Souza! Topa um cafe? {self._link(convite_ana)}')
+		self.assertEqual(self._saida(self.bruno).conteudo, f'Oi Bruno Lima! Topa um cafe? {self._link(convite_bruno)}')
+
+		mensagem = self._saida(self.ana)
+		self.assertEqual(mensagem.status_fila, MensagemContato.StatusFilaChoices.PENDENTE)
+		self.assertEqual(mensagem.metadata_envio['origem'], ORIGEM_DISPARO_MASSA)
+		self.assertEqual(mensagem.metadata_envio['convite_questionario_id'], convite_ana.pk)
+		self.assertFalse(MensagemContato.objects.filter(pessoa=self.carla).exists())
+		self.assertTrue(
+			self.ana.interacoes.filter(
+				tipo=InteracaoAcolhimento.TipoInteracao.TENTATIVA_CONTATO,
+				descricao__icontains='Cafe com o Pastor',
+			).exists()
+		)
+
+	def test_link_enviado_abre_o_questionario_da_pessoa(self):
+		self._disparar([self.ana])
+		convite = ConviteQuestionario.objects.get(pessoa=self.ana)
+
+		self.client.logout()
+		resp = self.client.get(reverse('responder-questionario', kwargs={'token': convite.token}))
+
+		self.assertEqual(resp.status_code, 200)
+		self.assertContains(resp, 'Voce topa?')
+
+	def test_reaproveita_link_pendente_e_deixa_de_fora_quem_ja_respondeu(self):
+		pendente = ConviteQuestionario.objects.create(questionario=self.cafe, pessoa=self.ana)
+		ConviteQuestionario.objects.create(
+			questionario=self.cafe, pessoa=self.bruno, status=ConviteQuestionario.StatusConvite.RESPONDIDO,
+		)
+
+		resp = self._disparar([self.ana, self.bruno, self.carla])
+
+		self.assertEqual(ConviteQuestionario.objects.filter(pessoa=self.ana).count(), 1)
+		self.assertIn(self._link(pendente), self._saida(self.ana).conteudo)
+		self.assertFalse(MensagemContato.objects.filter(pessoa=self.bruno).exists())
+		self.assertEqual(ConviteQuestionario.objects.filter(pessoa=self.carla).count(), 1)
+		avisos = [str(m) for m in get_messages(resp.wsgi_request)]
+		self.assertIn('Ficaram de fora: 1 que ja responderam este questionario.', avisos)
+
+	def test_questionario_de_membresia_so_vai_para_participantes(self):
+		membresia = Questionario.objects.create(titulo='Membresia', ativo=True, padrao_membresia=True)
+		PerguntaQuestionario.objects.create(questionario=membresia, texto='Batizado?', tipo='sim_nao')
+		participante = self._pessoa('Davi Participante', '31933330004', PrimeiroContato.StatusAcolhimento.PARTICIPANTE)
+
+		self._disparar([self.ana, participante], questionario=membresia)
+
+		self.assertTrue(ConviteQuestionario.objects.filter(pessoa=participante, questionario=membresia).exists())
+		self.assertFalse(ConviteQuestionario.objects.filter(pessoa=self.ana).exists())
+		self.assertFalse(MensagemContato.objects.filter(pessoa=self.ana).exists())
+
+	def test_mensagem_sem_link_nao_dispara(self):
+		resp = self._disparar([self.ana], texto='Oi {nome}, topa um cafe?')
+
+		self.assertEqual(resp.status_code, 200)
+		self.assertFormError(resp.context['form'], 'texto_convite', 'Inclua {link} na mensagem: e ali que entra o link de cada pessoa.')
+		self.assertFalse(ConviteQuestionario.objects.exists())
+		self.assertFalse(MensagemContato.objects.exists())
+
+	def test_so_lista_questionarios_ativos_com_perguntas(self):
+		Questionario.objects.create(titulo='Sem perguntas', ativo=True)
+		inativo = Questionario.objects.create(titulo='Inativo', ativo=False)
+		PerguntaQuestionario.objects.create(questionario=inativo, texto='?')
+
+		resp = self.client.get(self.url)
+
+		self.assertEqual(list(resp.context['form'].fields['questionario'].queryset), [self.cafe])

@@ -73,6 +73,28 @@ def pode_ver_questionario(user):
 	return pode_conversar_pessoas(user)
 
 
+CONVITE_SO_PARTICIPANTE_ERROR = (
+	'O questionario de membresia so pode ser gerado quando a pessoa esta no status Participante.'
+)
+
+
+def eh_questionario_membresia(questionario):
+	membresia = Questionario.membresia()
+	return membresia is not None and membresia.pk == questionario.pk
+
+
+def motivo_bloqueio_convite(pessoa, questionario):
+	"""Mensagem de bloqueio para gerar o link do questionario para a pessoa, ou None.
+
+	So o questionario de membresia depende do status (ele nasce quando a pessoa vira
+	Participante). Os demais podem ir para qualquer pessoa, ex.: o convite do cafe com o
+	pastor para quem esta em acompanhamento.
+	"""
+	if pessoa.status != PrimeiroContato.StatusAcolhimento.PARTICIPANTE and eh_questionario_membresia(questionario):
+		return CONVITE_SO_PARTICIPANTE_ERROR
+	return None
+
+
 def convite_membresia(pessoa, usuario):
 	"""Garante o convite do questionario de membresia da pessoa.
 
@@ -666,6 +688,7 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		context['selected_pessoas'] = selected_pessoas
 		context['modo_livre'] = DisparoMensagemMassaForm.MODO_LIVRE
 		context['modo_template'] = DisparoMensagemMassaForm.MODO_TEMPLATE
+		context['modo_questionario'] = DisparoMensagemMassaForm.MODO_QUESTIONARIO
 		context['modo_atual'] = (
 			self.request.POST.get('modo') if self.request.method == 'POST' else ''
 		) or DisparoMensagemMassaForm.MODO_LIVRE
@@ -752,9 +775,118 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		messages.success(self.request, f'{len(mensagens)} mensagem(ns) enfileirada(s) com sucesso.')
 		return super().form_valid(form)
 
+	def _texto_convite(self, texto, pessoa, questionario, convite):
+		link = self.request.build_absolute_uri(
+			reverse('responder-questionario', kwargs={'token': convite.token})
+		)
+		nome = (pessoa.nome or '').strip() or 'amigo(a)'
+		return (
+			texto.replace('{nome}', nome)
+			.replace('{questionario}', questionario.titulo)
+			.replace('{link}', link)
+		)
+
+	def _enfileirar_questionario(self, form):
+		"""Modo questionario: cada pessoa recebe o proprio link de resposta.
+
+		Reaproveita o link pendente de quem ja tem um e deixa de fora quem ja respondeu.
+		O questionario de membresia so vai para quem esta como Participante.
+		"""
+		questionario = form.cleaned_data['questionario']
+		texto = form.cleaned_data['texto_convite'].strip()
+		pessoas = list(form.cleaned_data['pessoas'])
+		ignoradas = []
+
+		# O convite vai como texto livre: vale a mesma trava do modo livre.
+		janela_fechada = [pessoa for pessoa in pessoas if not pode_enviar_livre(pessoa)]
+		if janela_fechada:
+			ignoradas.append(f'{len(janela_fechada)} com a janela de 24h fechada')
+			pessoas = [pessoa for pessoa in pessoas if pode_enviar_livre(pessoa)]
+
+		if eh_questionario_membresia(questionario):
+			participantes = [
+				pessoa for pessoa in pessoas
+				if pessoa.status == PrimeiroContato.StatusAcolhimento.PARTICIPANTE
+			]
+			if len(participantes) < len(pessoas):
+				ignoradas.append(
+					f'{len(pessoas) - len(participantes)} fora do status Participante '
+					'(o de membresia e so para eles)'
+				)
+				pessoas = participantes
+
+		pendentes = {}
+		respondidos = set()
+		for convite in ConviteQuestionario.objects.filter(questionario=questionario, pessoa__in=pessoas):
+			if convite.status == ConviteQuestionario.StatusConvite.PENDENTE:
+				pendentes.setdefault(convite.pessoa_id, convite)
+			else:
+				respondidos.add(convite.pessoa_id)
+		ja_responderam = respondidos - set(pendentes)
+		if ja_responderam:
+			ignoradas.append(f'{len(ja_responderam)} que ja responderam este questionario')
+			pessoas = [pessoa for pessoa in pessoas if pessoa.pk not in ja_responderam]
+
+		if not pessoas:
+			messages.error(
+				self.request,
+				'Nenhum convite foi enfileirado: ' + '; '.join(ignoradas) + '.',
+			)
+			return redirect(self.success_url)
+
+		with transaction.atomic():
+			novos = ConviteQuestionario.objects.bulk_create([
+				ConviteQuestionario(questionario=questionario, pessoa=pessoa, criado_por=self.request.user)
+				for pessoa in pessoas
+				if pessoa.pk not in pendentes
+			])
+			convites = {**pendentes, **{convite.pessoa_id: convite for convite in novos}}
+			MensagemContato.objects.bulk_create([
+				MensagemContato(
+					pessoa=pessoa,
+					criado_por=self.request.user,
+					canal=MensagemContato.CanalChoices.WHATSAPP,
+					direcao=MensagemContato.DirecaoChoices.SAIDA,
+					status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
+					prioridade=5,
+					conteudo=self._texto_convite(texto, pessoa, questionario, convites[pessoa.pk]),
+					# Envio em lote: nao conta como resposta na tela "Aguardando resposta".
+					metadata_envio={
+						'origem': ORIGEM_DISPARO_MASSA,
+						'convite_questionario_id': convites[pessoa.pk].pk,
+					},
+				)
+				for pessoa in pessoas
+			])
+			InteracaoAcolhimento.objects.bulk_create([
+				InteracaoAcolhimento(
+					pessoa=pessoa,
+					tipo=InteracaoAcolhimento.TipoInteracao.TENTATIVA_CONTATO,
+					descricao=(
+						f'Link do questionario "{questionario.titulo}" enfileirado para envio '
+						'pelo WhatsApp (disparo em massa).'
+					),
+				)
+				for pessoa in pessoas
+			])
+
+		sucesso = (
+			f'{len(pessoas)} convite(s) do questionario "{questionario.titulo}" enfileirado(s), '
+			'cada um com o proprio link.'
+		)
+		if pendentes:
+			sucesso += f' {len(pendentes)} reaproveitaram o link pendente que ja existia.'
+		messages.success(self.request, sucesso)
+		if ignoradas:
+			messages.warning(self.request, 'Ficaram de fora: ' + '; '.join(ignoradas) + '.')
+		return super().form_valid(form)
+
 	def form_valid(self, form):
-		if form.cleaned_data['modo'] == DisparoMensagemMassaForm.MODO_TEMPLATE:
+		modo = form.cleaned_data['modo']
+		if modo == DisparoMensagemMassaForm.MODO_TEMPLATE:
 			resposta = self._enfileirar_template(form)
+		elif modo == DisparoMensagemMassaForm.MODO_QUESTIONARIO:
+			resposta = self._enfileirar_questionario(form)
 		else:
 			resposta = self._enfileirar_livre(form)
 		# Processamento automatico: bulk_create nao emite signal, entao dispara aqui.
@@ -896,7 +1028,11 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 					reverse('responder-questionario', kwargs={'token': convite.token})
 				)
 			context['convites_questionario'] = convites
-			context['questionarios_ativos'] = Questionario.objects.filter(ativo=True)
+			questionarios_ativos = Questionario.objects.filter(ativo=True)
+			membresia = Questionario.membresia()
+			if membresia and self.object.status != PrimeiroContato.StatusAcolhimento.PARTICIPANTE:
+				questionarios_ativos = questionarios_ativos.exclude(pk=membresia.pk)
+			context['questionarios_ativos'] = questionarios_ativos
 		else:
 			context['convites_questionario'] = []
 			context['questionarios_ativos'] = Questionario.objects.none()
@@ -911,7 +1047,6 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 			),
 			None,
 		)
-		context['is_participante'] = self.object.status == PrimeiroContato.StatusAcolhimento.PARTICIPANTE
 		return context
 
 	def post(self, request, *args, **kwargs):
@@ -1935,11 +2070,12 @@ class PerguntaMoverView(SuperAdminPermissaoMixin, View):
 class GerarConviteQuestionarioView(ConversasPessoasPermissaoMixin, View):
 	def post(self, request, pk):
 		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
-		if pessoa.status != PrimeiroContato.StatusAcolhimento.PARTICIPANTE:
-			messages.error(request, 'O questionario so pode ser gerado quando a pessoa esta no status Participante.')
+		questionario = get_object_or_404(Questionario, pk=request.POST.get('questionario'), ativo=True)
+		bloqueio = motivo_bloqueio_convite(pessoa, questionario)
+		if bloqueio:
+			messages.error(request, bloqueio)
 			return redirect('pessoas-detalhe', pk=pessoa.pk)
 
-		questionario = get_object_or_404(Questionario, pk=request.POST.get('questionario'), ativo=True)
 		if not questionario.perguntas.exists():
 			messages.error(request, 'Este questionario ainda nao tem perguntas.')
 			return redirect('pessoas-detalhe', pk=pessoa.pk)

@@ -193,14 +193,18 @@ class EnfileirarMensagemForm(forms.ModelForm):
 
 
 class DisparoMensagemMassaForm(forms.Form):
-    """Dois modos de disparo: mensagem livre (janela 24h aberta) ou template de marketing."""
+    """Tres modos de disparo: mensagem livre (janela 24h aberta), template de marketing ou
+    link de questionario (cada pessoa recebe o proprio link de resposta)."""
 
     MODO_LIVRE = 'livre'
     MODO_TEMPLATE = 'template'
+    MODO_QUESTIONARIO = 'questionario'
     MODO_CHOICES = [
         (MODO_LIVRE, 'Mensagem livre — so para quem esta com a janela de 24h aberta'),
         (MODO_TEMPLATE, 'Template — para qualquer pessoa fora do primeiro contato (marketing)'),
+        (MODO_QUESTIONARIO, 'Questionario — cada pessoa recebe o proprio link de resposta'),
     ]
+    TEXTO_CONVITE_PADRAO = 'Olá, {nome}! Segue o link para responder o questionário "{questionario}": {link}'
 
     modo = forms.ChoiceField(
         choices=MODO_CHOICES,
@@ -221,6 +225,16 @@ class DisparoMensagemMassaForm(forms.Form):
         label='Variaveis do template (JSON)',
         widget=forms.Textarea(attrs={'rows': 2, 'placeholder': '{"1": "{nome}"}'}),
     )
+    questionario = forms.ModelChoiceField(
+        queryset=Questionario.objects.none(),
+        required=False,
+        empty_label='Selecione o questionario',
+    )
+    texto_convite = forms.CharField(
+        required=False,
+        initial=TEXTO_CONVITE_PADRAO,
+        widget=forms.Textarea(attrs={'rows': 4}),
+    )
     pessoas = forms.ModelMultipleChoiceField(
         queryset=PrimeiroContato.objects.none(),
         widget=forms.CheckboxSelectMultiple,
@@ -232,6 +246,18 @@ class DisparoMensagemMassaForm(forms.Form):
         if pessoas_queryset is None:
             pessoas_queryset = PrimeiroContato.objects.order_by('nome')
         self.fields['pessoas'].queryset = pessoas_queryset
+        # Sem pergunta o link abriria um formulario vazio: so entram os que tem perguntas.
+        self.fields['questionario'].queryset = (
+            Questionario.objects.filter(ativo=True, perguntas__isnull=False).distinct().order_by('titulo')
+        )
+        membresia = Questionario.membresia()
+        self.membresia_id = membresia.pk if membresia else None
+        self.fields['questionario'].label_from_instance = self._rotulo_questionario
+
+    def _rotulo_questionario(self, questionario):
+        if questionario.pk == self.membresia_id:
+            return f'{questionario.titulo} (so Participantes)'
+        return questionario.titulo
 
     def clean_content_variables(self):
         raw = (self.cleaned_data.get('content_variables') or '').strip()
@@ -254,6 +280,14 @@ class DisparoMensagemMassaForm(forms.Form):
                 self.add_error('content_sid', 'Informe o Content Template SID para o disparo por template.')
             elif not sid.startswith('HX'):
                 self.add_error('content_sid', 'O Content SID da Twilio comeca com "HX".')
+        elif modo == self.MODO_QUESTIONARIO:
+            if not cleaned.get('questionario'):
+                self.add_error('questionario', 'Escolha o questionario que sera enviado.')
+            texto = (cleaned.get('texto_convite') or '').strip()
+            if not texto:
+                self.add_error('texto_convite', 'Escreva a mensagem que acompanha o link.')
+            elif '{link}' not in texto:
+                self.add_error('texto_convite', 'Inclua {link} na mensagem: e ali que entra o link de cada pessoa.')
         else:
             if not (cleaned.get('conteudo') or '').strip():
                 self.add_error('conteudo', 'Escreva a mensagem que sera enviada.')
