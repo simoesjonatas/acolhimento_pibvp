@@ -74,6 +74,12 @@ def pode_ver_questionario(user):
 	return pode_conversar_pessoas(user)
 
 
+def redirect_ficha(pessoa_pk, aba=None):
+	"""Volta para a ficha da pessoa ja na aba onde a acao aconteceu."""
+	url = reverse('pessoas-detalhe', kwargs={'pk': pessoa_pk})
+	return redirect(f'{url}?aba={aba}' if aba else url)
+
+
 def pode_ver_gabinete(user):
 	"""Gabinete pastoral: so administradores e quem tem o perfil Pastor."""
 	return user.is_staff or user.is_superuser or user.has_perm(PERMISSAO_GABINETE)
@@ -1067,6 +1073,15 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 			),
 			None,
 		)
+
+		# Aba aberta: vem do ?aba= (redirects e F5) e so vale se o usuario pode ver a aba.
+		abas = {'timeline', 'dados'}
+		if ver_questionario:
+			abas.add('questionarios')
+		if ver_gabinete:
+			abas.add('gabinete')
+		aba = (self.request.GET.get('aba') or '').strip()
+		context['aba_ativa'] = aba if aba in abas else 'timeline'
 		return context
 
 	def post(self, request, *args, **kwargs):
@@ -1099,7 +1114,7 @@ class RegistroGabineteCreateView(LoginRequiredMixin, GabinetePermissaoMixin, Vie
 			messages.success(request, f'{registro.get_tipo_display()} registrado.')
 		else:
 			messages.error(request, 'Nao foi possivel registrar o gabinete. Revise os dados informados.')
-		return redirect(f"{reverse('pessoas-detalhe', kwargs={'pk': pessoa.pk})}#gabinete")
+		return redirect_ficha(pessoa.pk, 'gabinete')
 
 
 class PrimeiroContatoStatusUpdateView(LoginRequiredMixin, View):
@@ -1163,14 +1178,14 @@ class PrimeiroContatoResponsavelUpdateView(LoginRequiredMixin, AdminPermissaoMix
 			novo_responsavel = get_user_model().objects.filter(pk=responsavel_id, is_active=True).first()
 			if novo_responsavel is None:
 				messages.error(request, 'Responsavel invalido.')
-				return redirect('pessoas-detalhe', pk=pessoa.pk)
+				return redirect_ficha(pessoa.pk, 'dados')
 		else:
 			novo_responsavel = None
 
 		anterior = pessoa.responsavel_atual
 		if novo_responsavel == anterior:
 			messages.info(request, 'Nenhuma alteracao no responsavel.')
-			return redirect('pessoas-detalhe', pk=pessoa.pk)
+			return redirect_ficha(pessoa.pk, 'dados')
 
 		pessoa.responsavel_atual = novo_responsavel
 		pessoa.save(update_fields=['responsavel_atual', 'atualizado_em'])
@@ -1182,7 +1197,7 @@ class PrimeiroContatoResponsavelUpdateView(LoginRequiredMixin, AdminPermissaoMix
 		)
 
 		messages.success(request, f'Responsavel atualizado para "{self._rotulo(novo_responsavel)}".')
-		return redirect('pessoas-detalhe', pk=pessoa.pk)
+		return redirect_ficha(pessoa.pk, 'dados')
 
 
 class PrimeiroContatoMensagensView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, DetailView):
@@ -2111,11 +2126,11 @@ class GerarConviteQuestionarioView(ConversasPessoasPermissaoMixin, View):
 		bloqueio = motivo_bloqueio_convite(pessoa, questionario)
 		if bloqueio:
 			messages.error(request, bloqueio)
-			return redirect('pessoas-detalhe', pk=pessoa.pk)
+			return redirect_ficha(pessoa.pk, 'questionarios')
 
 		if not questionario.perguntas.exists():
 			messages.error(request, 'Este questionario ainda nao tem perguntas.')
-			return redirect('pessoas-detalhe', pk=pessoa.pk)
+			return redirect_ficha(pessoa.pk, 'questionarios')
 
 		# Evita duplicar link ao clicar mais de uma vez: reaproveita o pendente existente.
 		ja_pendente = ConviteQuestionario.objects.filter(
@@ -2125,7 +2140,7 @@ class GerarConviteQuestionarioView(ConversasPessoasPermissaoMixin, View):
 		).exists()
 		if ja_pendente:
 			messages.info(request, 'Ja existe um link pendente para este questionario.')
-			return redirect('pessoas-detalhe', pk=pessoa.pk)
+			return redirect_ficha(pessoa.pk, 'questionarios')
 
 		with transaction.atomic():
 			ConviteQuestionario.objects.create(
@@ -2139,7 +2154,7 @@ class GerarConviteQuestionarioView(ConversasPessoasPermissaoMixin, View):
 				descricao=f'Link do questionario "{questionario.titulo}" gerado para preenchimento.',
 			)
 		messages.success(request, 'Link do questionario gerado.')
-		return redirect('pessoas-detalhe', pk=pessoa.pk)
+		return redirect_ficha(pessoa.pk, 'questionarios')
 
 
 class ExcluirConviteQuestionarioView(AdminPermissaoMixin, View):
@@ -2158,7 +2173,7 @@ class ExcluirConviteQuestionarioView(AdminPermissaoMixin, View):
 			)
 			convite.delete()
 		messages.success(request, 'Link do questionario removido.')
-		return redirect('pessoas-detalhe', pk=pessoa_id)
+		return redirect_ficha(pessoa_id, 'questionarios')
 
 
 class EnviarConviteWhatsappView(ConversasPessoasPermissaoMixin, View):
@@ -2170,7 +2185,7 @@ class EnviarConviteWhatsappView(ConversasPessoasPermissaoMixin, View):
 		bloqueio = motivo_bloqueio_livre(pessoa)
 		if bloqueio:
 			messages.error(request, bloqueio[1])
-			return redirect('pessoas-detalhe', pk=pessoa.pk)
+			return redirect_ficha(pessoa.pk, 'questionarios')
 
 		link = request.build_absolute_uri(
 			reverse('responder-questionario', kwargs={'token': convite.token})
@@ -2198,7 +2213,7 @@ class EnviarConviteWhatsappView(ConversasPessoasPermissaoMixin, View):
 				),
 			)
 		messages.success(request, 'Mensagem com o link enfileirada no WhatsApp.')
-		return redirect('pessoas-detalhe', pk=pessoa.pk)
+		return redirect_ficha(pessoa.pk, 'questionarios')
 
 
 class RespostaConviteDetailView(ConversasPessoasPermissaoMixin, DetailView):

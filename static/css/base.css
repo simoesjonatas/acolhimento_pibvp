@@ -42,6 +42,9 @@ html {
 body {
     margin: 0;
     min-height: 100vh;
+    /* Segura a margem de cima do menu dentro do body: sem isto ela soma aos 100vh e
+       toda pagina rolava 16px mesmo com pouco conteudo. */
+    display: flow-root;
     background:
         linear-gradient(180deg, rgba(25, 25, 150, 0.08) 0, rgba(25, 25, 150, 0) 240px),
         linear-gradient(120deg, rgba(244, 102, 30, 0.08) 0, rgba(244, 102, 30, 0) 38%),

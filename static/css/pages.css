@@ -190,12 +190,6 @@
     flex-wrap: wrap;
 }
 
-.person-detail-actions {
-    margin-top: 0;
-    padding-top: 16px;
-    border-top: 1px solid var(--line);
-}
-
 /* Forms & states */
 .stack-form {
     margin: 10px 0 18px;
@@ -850,19 +844,6 @@
     color: var(--danger);
     transform: none;
     box-shadow: none;
-}
-
-.convite-gerar-form {
-    display: grid;
-    gap: 8px;
-    padding-top: 12px;
-    border-top: 1px solid var(--line);
-}
-
-.convite-gerar-form label {
-    font-size: 0.8rem;
-    font-weight: 800;
-    color: var(--primary-strong);
 }
 
 /* Questionarios - central de respostas */
@@ -2134,38 +2115,9 @@ a.queue-summary-item:hover {
 /* Person detail */
 .person-detail-page {
     display: grid;
+    /* minmax(0, 1fr): sem isto os blocos nao encolhem abaixo do conteudo e vazam no tablet. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 14px;
-}
-
-.person-workspace-grid,
-.person-overview-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
-    gap: 14px;
-    align-items: start;
-}
-
-.person-main-column,
-.person-side-column {
-    display: grid;
-    gap: 14px;
-    align-content: start;
-    min-width: 0;
-}
-
-/* Impede que os cards (grid items) estourem a largura da coluna e se sobreponham
-   em tablets: sem isto, o min-width:auto deixa a grade interna (.detail-grid) vazar. */
-.person-main-column > *,
-.person-side-column > * {
-    min-width: 0;
-}
-
-.person-summary-card {
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: rgba(255, 255, 255, 0.92);
-    padding: 16px;
-    box-shadow: var(--shadow-soft);
 }
 
 .detail-grid {
@@ -2197,103 +2149,565 @@ a.queue-summary-item:hover {
     overflow-wrap: anywhere;
 }
 
-.timeline-compose-card h2 {
-    margin-bottom: 12px;
+/* Cabecalho compacto: identidade, contato e acoes na mesma faixa. */
+.person-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background:
+        linear-gradient(135deg, rgba(35, 35, 198, 0.08), transparent 44%),
+        linear-gradient(180deg, #ffffff 0%, #f7f7fa 100%);
+    box-shadow: var(--shadow-soft);
 }
 
-.person-side-column .timeline-compose-card {
-    position: sticky;
-    top: 16px;
-}
-
-.person-timeline-panel {
-    margin-top: 0;
-}
-
-.timeline-panel-header {
+.person-header-top {
+    display: flex;
+    justify-content: space-between;
     align-items: flex-start;
+    gap: 16px;
 }
 
-.timeline-panel-header .page-subtitle {
-    margin-bottom: 0;
+.person-identity {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
 }
 
-.timeline-filter-form {
-    /* Flex com wrap: os campos crescem/quebram conforme a largura da coluna (que fica
-       estreita no layout de 2 colunas dos tablets), e o bloco de acoes mantem a largura
-       natural (Filtrar + Limpar lado a lado) em vez de vazar para o card ao lado. */
+.person-back-link {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #ffffff;
+    color: var(--primary);
+}
+
+.person-back-link:hover {
+    background: var(--surface-tint);
+}
+
+.person-back-link svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.person-title-row {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+}
+
+.person-title-row h1 {
+    margin: 0;
+    font-size: clamp(1.4rem, 2.4vw, 1.75rem);
+    overflow-wrap: anywhere;
+}
+
+.person-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    margin: 0;
+    padding: 0;
+    color: #555767;
+    font-size: 0.86rem;
+    list-style: none;
+}
+
+.person-meta li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.person-meta svg {
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: var(--muted);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.person-meta .retorno-badge,
+.person-meta .iniciou-badge {
+    margin-left: 0;
+}
+
+.person-header-actions {
+    flex: 0 0 auto;
+}
+
+.person-delete-link:hover {
+    border-color: #e1aaa5;
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+/* Jornada na horizontal, com a troca de status na mesma linha. */
+.person-journey {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+}
+
+.journey-steps {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    padding: 0 0 2px;
+    overflow-x: auto;
+    list-style: none;
+}
+
+.journey-step {
+    position: relative;
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 84px;
+    text-align: center;
+}
+
+/* Linha que liga cada etapa a anterior. */
+.journey-step::before {
+    content: "";
+    position: absolute;
+    top: 7px;
+    right: 50%;
+    left: -50%;
+    height: 2px;
+    background: #d4d5e0;
+}
+
+.journey-step:first-child::before {
+    display: none;
+}
+
+.journey-step-concluido::before,
+.journey-step-atual::before {
+    background: #86b394;
+}
+
+.journey-dot {
+    position: relative;
+    z-index: 1;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #cacbd8;
+    border-radius: 50%;
+    background: #ffffff;
+}
+
+.journey-step-concluido .journey-dot {
+    border-color: #86b394;
+    background: #86b394;
+}
+
+.journey-step-atual .journey-dot {
+    border-color: var(--primary);
+    background: var(--primary);
+    box-shadow: 0 0 0 4px rgba(35, 35, 198, 0.16);
+}
+
+.journey-label {
+    color: #8a8b96;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.journey-step-concluido .journey-label {
+    color: #45624d;
+}
+
+.journey-step-atual .journey-label {
+    color: var(--primary-strong);
+    font-weight: 900;
+}
+
+.journey-form {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.journey-form label,
+.person-side-form label {
+    color: var(--primary-strong);
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.journey-form select {
+    width: 190px;
+}
+
+/* Abas: cada secao da ficha abre no mesmo lugar, sem empilhar tudo na pagina. */
+.person-tabs {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
-    align-items: end;
-    margin-bottom: 12px;
-    padding: 12px;
+    min-width: 0;
+}
+
+.person-tablist {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: var(--shadow-soft);
+}
+
+.person-tab {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    color: var(--muted);
+    font-weight: 800;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.person-tab svg {
+    width: 17px;
+    height: 17px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.person-tab:hover {
+    background: var(--surface-tint);
+    color: var(--primary-strong);
+}
+
+.person-tab[aria-selected="true"] {
+    background: var(--primary);
+    color: #ffffff;
+}
+
+.person-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--surface-tint);
+    color: var(--primary-strong);
+    font-size: 0.74rem;
+    font-weight: 900;
+}
+
+.person-tab[aria-selected="true"] .person-tab-count {
+    background: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+}
+
+.person-tab-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: var(--shadow-soft);
+}
+
+/* O display: grid acima ganharia do atributo hidden e mostraria todas as abas. */
+.person-tab-panel[hidden] {
+    display: none;
+}
+
+.person-tab-panel h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+/* Registro rapido (Novo passo / Gabinete): uma linha; o texto cresce ao digitar. */
+.person-composer {
+    display: grid;
+    gap: 8px;
+    padding: 10px 12px;
     border: 1px solid var(--line);
     border-radius: var(--radius);
     background: #f9f9fc;
 }
 
-.timeline-filter-form > * {
-    flex: 1 1 150px;
-    min-width: 0;
-}
-
-.timeline-filter-form > .timeline-search-field {
-    flex-grow: 2;
-    flex-basis: 200px;
-}
-
-.timeline-filter-form > .timeline-filter-actions {
-    flex: 0 0 auto;
-}
-
-.timeline-filter-form label {
-    color: var(--primary-strong);
-    font-size: 0.78rem;
-}
-
-.timeline-search-field {
-    min-width: 0;
-}
-
-.timeline-filter-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.timeline-filter-actions .btn,
-.timeline-filter-actions button {
-    min-height: 40px;
-}
-
-.timeline-compose-form p {
-    margin-bottom: 12px;
-}
-
-.timeline-compose-grid {
+.person-composer-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: auto minmax(150px, 180px) 150px 110px minmax(200px, 1fr) auto;
     gap: 10px;
-}
-
-.timeline-compose-form button {
-    width: 100%;
-}
-
-/* Gabinete pastoral (ficha da pessoa): so administradores e pastores veem. */
-.gabinete-card-head {
-    display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 12px;
 }
 
-.gabinete-card-head h2 {
+.person-tab-panel .composer-title {
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+.person-composer-grid p {
+    min-width: 0;
     margin: 0;
 }
 
+.person-composer textarea {
+    height: 40px;
+    min-height: 40px;
+    max-height: 180px;
+    resize: vertical;
+}
+
+/* Titulo da lista com filtros (ou a acao da aba) do lado. */
+.person-panel-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px 16px;
+}
+
+.person-panel-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+}
+
+.person-panel-toolbar .page-subtitle {
+    margin: 0;
+}
+
+/* Rotulo so para leitor de tela (o campo se explica pelo valor/placeholder). */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.person-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.person-filter-bar input[type="search"] {
+    width: 220px;
+}
+
+.person-filter-bar select {
+    width: auto;
+    max-width: 260px;
+}
+
+.person-tab-panel .timeline-list {
+    max-height: min(560px, 58vh);
+}
+
+.person-tab-panel .gabinete-list {
+    max-height: min(520px, 55vh);
+    margin: 0;
+}
+
+/* Aba Dados: grade compacta e o responsavel ao lado. */
+.person-dados-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+    gap: 16px;
+    align-items: start;
+}
+
+.person-dados-layout h2 {
+    margin-bottom: 10px;
+}
+
+.detail-grid-compact {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+}
+
+.detail-grid-compact .detail-item {
+    min-height: 0;
+    padding: 10px 12px;
+}
+
+.detail-grid-compact .detail-item span {
+    margin-bottom: 4px;
+    font-size: 0.72rem;
+}
+
+.detail-item-wide {
+    grid-column: 1 / -1;
+}
+
+.person-side-box {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #f9f9fc;
+}
+
+.person-side-box .responsavel-atual-nome {
+    margin: 0;
+}
+
+.person-side-form {
+    display: grid;
+    gap: 8px;
+}
+
+/* Aba Questionarios: links em cards lado a lado. */
+.convite-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+    margin: 0;
+}
+
+@media (max-width: 1100px) {
+    /* Duas linhas: titulo + tipo/data/hora em cima, texto + botao embaixo. */
+    .person-composer-grid {
+        grid-template-columns: auto minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.8fr);
+    }
+
+    .person-composer-grid .composer-field-texto {
+        grid-column: 1 / 4;
+    }
+
+    /* "Alterar status" vai para cima do seletor e libera largura para a jornada. */
+    .journey-form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 4px 8px;
+    }
+
+    .journey-form label {
+        grid-column: 1 / -1;
+    }
+
+    .journey-form select {
+        width: 160px;
+    }
+}
+
+@media (max-width: 920px) {
+    .person-journey {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .journey-form select {
+        width: 100%;
+    }
+
+    .person-dados-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .person-header {
+        padding: 14px;
+    }
+
+    .person-header-top {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    /* Os botoes do cabecalho dividem uma linha (cada um do tamanho do texto) em vez
+       de ocupar uma linha cada; o seletor com a.btn vence a regra geral de 100%. */
+    .person-header-actions {
+        flex-wrap: nowrap;
+    }
+
+    .person-header-actions a.btn {
+        flex: 1 1 auto;
+        width: auto;
+        justify-content: center;
+        padding-inline: 8px;
+    }
+
+    .journey-step {
+        min-width: 76px;
+    }
+
+    .person-composer-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .person-composer-grid .composer-title,
+    .person-composer-grid .composer-field-tipo,
+    .person-composer-grid .composer-field-texto,
+    .person-composer-grid .composer-submit {
+        grid-column: 1 / -1;
+    }
+
+    .person-composer-grid .composer-submit {
+        justify-self: stretch;
+    }
+
+    .person-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+    }
+
+    .person-filter-bar input[type="search"],
+    .person-filter-bar select {
+        width: 100%;
+        max-width: none;
+    }
+}
+
+/* Gabinete pastoral (ficha da pessoa): so administradores e pastores veem. */
 .gabinete-restrito {
     display: inline-flex;
     align-items: center;
@@ -2833,93 +3247,6 @@ a.queue-summary-item:hover {
     background: #edf3fb;
     border-color: #b7c9de;
     color: #285a7a;
-}
-
-/* Status do acolhimento (card lateral com fluxo evolutivo) */
-.status-card .status-flow {
-    list-style: none;
-    margin: 0 0 18px;
-    padding: 0;
-}
-
-.status-step {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 0 6px 2px;
-    min-height: 32px;
-}
-
-.status-step::before {
-    content: '';
-    position: absolute;
-    left: 8px;
-    top: 26px;
-    bottom: -6px;
-    width: 2px;
-    background: #d4d5e0;
-}
-
-.status-step:last-child::before {
-    display: none;
-}
-
-.status-step-dot {
-    position: relative;
-    z-index: 1;
-    flex: 0 0 auto;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    border: 2px solid #cacbd8;
-    background: #fff;
-}
-
-.status-step-label {
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: #8a8b96;
-}
-
-.status-step-concluido .status-step-dot {
-    background: #86b394;
-    border-color: #86b394;
-}
-
-.status-step-concluido .status-step-label {
-    color: #45624d;
-}
-
-.status-step-atual .status-step-dot {
-    background: var(--primary);
-    border-color: var(--primary);
-    box-shadow: 0 0 0 4px rgba(35, 35, 198, 0.16);
-}
-
-.status-step-atual .status-step-label {
-    color: var(--primary-strong);
-    font-weight: 900;
-}
-
-.status-change-form {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-top: 14px;
-    border-top: 1px solid #e2e3ec;
-}
-
-.status-change-form label {
-    font-size: 0.8rem;
-    font-weight: 800;
-    color: var(--primary-strong);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-.status-change-form select {
-    width: 100%;
 }
 
 /* Dashboard */
@@ -4372,8 +4699,6 @@ a.kpi-card:hover {
 @media (max-width: 920px) {
     .dashboard-hero,
     .login-shell,
-    .person-workspace-grid,
-    .person-overview-grid,
     .questionario-builder-layout,
     .questionario-editor-layout,
     .pergunta-editor-layout,
@@ -4390,8 +4715,7 @@ a.kpi-card:hover {
 
     .user-account-card,
     .questionario-add-panel,
-    .pergunta-summary-card,
-    .person-side-column .timeline-compose-card {
+    .pergunta-summary-card {
         position: static;
     }
 
@@ -4419,7 +4743,6 @@ a.kpi-card:hover {
     }
 
     .filters-form,
-    .timeline-filter-form,
     .queue-filter-actions,
     .inline-actions,
     .action-row,
@@ -4431,8 +4754,6 @@ a.kpi-card:hover {
 
     /* Empilhado (flex-direction: column): evita que o flex-basis vire altura dos campos.
        Os seletores dos campos de busca igualam a especificidade das regras base. */
-    .timeline-filter-form > *,
-    .timeline-filter-form > .timeline-search-field,
     .queue-filter-form > *,
     .queue-filter-form > .queue-filter-search {
         flex-basis: auto;
@@ -4477,7 +4798,7 @@ a.kpi-card:hover {
     .queue-filter-panel,
     .queue-table-panel,
     .conversation-panel,
-    .person-summary-card,
+    .person-tab-panel,
     .profile-summary-card,
     .profile-form-card,
     .broadcast-filter-panel,
@@ -4598,7 +4919,4 @@ a.kpi-card:hover {
         display: none;
     }
 
-    .timeline-compose-grid {
-        grid-template-columns: 1fr;
-    }
 }

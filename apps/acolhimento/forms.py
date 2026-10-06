@@ -167,6 +167,8 @@ class InteracaoAcolhimentoForm(forms.ModelForm):
         if not self.is_bound and not self.instance.pk:
             self.fields['data_interacao'].initial = timezone.localdate
             self.fields['hora_interacao'].initial = hora_local_atual
+        # Na ficha o Novo passo e uma linha so, sem rotulos visiveis: a opcao vazia explica o campo.
+        self.fields['tipo'].choices = [('', 'Tipo do passo')] + list(InteracaoAcolhimento.TipoInteracao.choices)
 
     class Meta:
         model = InteracaoAcolhimento
@@ -177,7 +179,7 @@ class InteracaoAcolhimentoForm(forms.ModelForm):
             # Sem segundos: com "13:30:47" de valor, o navegador so aceita horarios
             # terminados em :47 e bloqueia o envio quando a pessoa digita 19:30.
             'hora_interacao': forms.TimeInput(attrs={'type': 'time'}, format='%H:%M'),
-            'descricao': forms.Textarea(attrs={'rows': 3}),
+            'descricao': forms.Textarea(attrs={'rows': 1, 'placeholder': 'Descreva o passo (opcional)'}),
         }
 
 
@@ -191,6 +193,7 @@ class RegistroGabineteForm(forms.ModelForm):
         if not self.is_bound and not self.instance.pk:
             self.fields['data'].initial = timezone.localdate
             self.fields['hora'].initial = hora_local_atual
+        self.fields['tipo'].choices = [('', 'Tipo de gabinete')] + list(RegistroGabinete.Tipo.choices)
 
     class Meta:
         model = RegistroGabinete
@@ -198,7 +201,7 @@ class RegistroGabineteForm(forms.ModelForm):
         widgets = {
             'data': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
             'hora': forms.TimeInput(attrs={'type': 'time'}, format='%H:%M'),
-            'observacoes': forms.Textarea(attrs={'rows': 3}),
+            'observacoes': forms.Textarea(attrs={'rows': 1, 'placeholder': 'Observacoes (opcional)'}),
         }
 
 

@@ -1,151 +1,60 @@
 {% extends 'base.html' %}
 
-{% block title %}Detalhes do contato{% endblock %}
+{% block title %}{{ pessoa.nome }}{% endblock %}
 
 {% block content %}
 <div class="person-detail-page">
-    <section class="page-hero">
-        <div>
-            <span class="section-eyebrow">Primeiro contato</span>
-            <h1>{{ pessoa.nome }}</h1>
-            <p>{{ pessoa.get_status_display }} desde {{ pessoa.data_primeiro_contato|date:'d/m/Y' }}</p>
-            <div class="hero-badges">
-                {% if tem_novo_retorno %}
-                <span class="retorno-badge">Novo retorno pendente</span>
-                {% endif %}
-                {% if pessoa.iniciou_interacao %}
-                <span class="iniciou-badge">Iniciou conversa no WhatsApp</span>
-                {% endif %}
+    <section class="person-header">
+        <div class="person-header-top">
+            <div class="person-identity">
+                <div class="person-title-row">
+                    <a class="person-back-link" href="{% url 'pessoas-lista' %}" title="Voltar para Pessoas" aria-label="Voltar para Pessoas">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                    </a>
+                    <h1>{{ pessoa.nome }}</h1>
+                    <span class="person-status person-status-{{ pessoa.status }}">{{ pessoa.get_status_display }}</span>
+                </div>
+                <ul class="person-meta">
+                    <li>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                        {{ pessoa.telefone_whatsapp }}
+                    </li>
+                    {% if pessoa.email %}
+                    <li>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
+                        {{ pessoa.email }}
+                    </li>
+                    {% endif %}
+                    <li>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        Responsável:
+                        {% if pessoa.responsavel_atual %}<strong>{{ pessoa.responsavel_atual.get_full_name|default:pessoa.responsavel_atual.username }}</strong>{% else %}ninguém{% endif %}
+                    </li>
+                    <li>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        Primeiro contato em {{ pessoa.data_primeiro_contato|date:'d/m/Y' }}
+                    </li>
+                    {% if tem_novo_retorno %}
+                    <li><span class="retorno-badge">Novo retorno pendente</span></li>
+                    {% endif %}
+                    {% if pessoa.iniciou_interacao %}
+                    <li><span class="iniciou-badge">Iniciou conversa no WhatsApp</span></li>
+                    {% endif %}
+                </ul>
             </div>
-        </div>
-        <div class="hero-actions">
-            {% if request.user.is_staff or request.user.is_superuser or perms.acolhimento.pode_conversar_pessoas %}
-            <a class="btn" href="{% url 'pessoas-mensagens' pessoa.pk %}">
-                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                <span class="btn-text">Mensagens</span>
-            </a>
-            {% endif %}
-            <a class="btn secundario" href="{% url 'pessoas-editar' pessoa.pk %}">
-                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-                <span class="btn-text">Editar</span>
-            </a>
-        </div>
-    </section>
-
-    <section class="person-workspace-grid">
-        <div class="person-main-column">
-            <article class="person-summary-card">
-                <h2>Dados principais</h2>
-                <div class="detail-grid">
-                    <div class="detail-item">
-                        <span>WhatsApp</span>
-                        <strong>{{ pessoa.telefone_whatsapp }}</strong>
-                    </div>
-                    <div class="detail-item">
-                        <span>E-mail</span>
-                        <strong>{{ pessoa.email|default:'-' }}</strong>
-                    </div>
-                    <div class="detail-item">
-                        <span>Primeira vez</span>
-                        <strong>{% if pessoa.primeira_vez %}Sim{% else %}Nao{% endif %}</strong>
-                    </div>
-                    <div class="detail-item">
-                        <span>Origem</span>
-                        <strong>{{ pessoa.get_origem_cadastro_display }}</strong>
-                    </div>
-                    <div class="detail-item">
-                        <span>Como conheceu</span>
-                        <strong>{{ pessoa.get_como_conheceu_display|default:'-' }}</strong>
-                    </div>
-                    <div class="detail-item">
-                        <span>O que busca</span>
-                        <strong>{{ pessoa.get_o_que_busca_display|default:'-' }}</strong>
-                    </div>
-                    <div class="detail-item">
-                        <span>Cadastrado por</span>
-                        <strong>{% if pessoa.criado_por %}{{ pessoa.criado_por.get_full_name|default:pessoa.criado_por.username }}{% else %}-{% endif %}</strong>
-                    </div>
-                    <div class="detail-item">
-                        <span>Status</span>
-                        <strong><span class="person-status person-status-{{ pessoa.status }}">{{ pessoa.get_status_display }}</span></strong>
-                    </div>
-                </div>
-            </article>
-
-            <section class="dashboard-panel person-timeline-panel">
-                <div class="panel-header timeline-panel-header">
-                    <div>
-                        <h2>Timeline de acompanhamento</h2>
-                        <p class="page-subtitle">{{ timeline_total_filtrado }} de {{ timeline_total }} evento(s)</p>
-                    </div>
-                </div>
-
-                <form method="get" class="timeline-filter-form">
-                    <div class="timeline-search-field">
-                        <label for="timeline-q">Buscar na timeline</label>
-                        <input
-                            type="search"
-                            name="timeline_q"
-                            id="timeline-q"
-                            value="{{ timeline_filtros.timeline_q }}"
-                            placeholder="Tipo, descricao ou observacao"
-                        >
-                    </div>
-                    <div>
-                        <label for="timeline-tipo">Tipo</label>
-                        <select name="timeline_tipo" id="timeline-tipo">
-                            <option value="">Todos</option>
-                            {% for valor, rotulo in timeline_tipo_choices %}
-                            <option value="{{ valor }}" {% if valor == timeline_filtros.timeline_tipo %}selected{% endif %}>{{ rotulo }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label for="timeline-ordem">Ordem</label>
-                        <select name="timeline_ordem" id="timeline-ordem">
-                            <option value="desc" {% if timeline_filtros.timeline_ordem == 'desc' %}selected{% endif %}>Mais recentes</option>
-                            <option value="asc" {% if timeline_filtros.timeline_ordem == 'asc' %}selected{% endif %}>Mais antigos</option>
-                        </select>
-                    </div>
-                    <div class="timeline-filter-actions">
-                        <button type="submit">
-                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                            <span class="btn-text">Filtrar</span>
-                        </button>
-                        <a class="btn secundario" href="{% url 'pessoas-detalhe' pessoa.pk %}">
-                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
-                            <span class="btn-text">Limpar</span>
-                        </a>
-                    </div>
-                </form>
-
-                {% if interacoes %}
-                <div class="timeline-list">
-                {% for interacao in interacoes %}
-                    <article class="timeline-item">
-                        <time datetime="{{ interacao.data_interacao|date:'Y-m-d' }}T{{ interacao.hora_interacao|time:'H:i' }}">
-                            <strong>{{ interacao.data_interacao|date:'d/m/Y' }}</strong>
-                            <span>{{ interacao.hora_interacao|time:'H:i' }}</span>
-                        </time>
-                        <div class="timeline-item-content">
-                            <span class="timeline-type timeline-type-{{ interacao.tipo }}">{{ interacao.get_tipo_display }}</span>
-                            <p>{{ interacao.descricao|default:'-' }}</p>
-                        </div>
-                    </article>
-                {% endfor %}
-                </div>
-                {% else %}
-                <p class="empty-state">Nenhum evento registrado ainda para esta pessoa.</p>
+            <div class="hero-actions person-header-actions">
+                {% if request.user.is_staff or request.user.is_superuser or perms.acolhimento.pode_conversar_pessoas %}
+                <a class="btn" href="{% url 'pessoas-mensagens' pessoa.pk %}">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span class="btn-text">Mensagens</span>
+                </a>
                 {% endif %}
-            </section>
-
-            <div class="action-row person-detail-actions">
-                <a class="btn secundario" href="{% url 'pessoas-lista' %}">
-                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-                    <span class="btn-text">Voltar</span>
+                <a class="btn secundario" href="{% url 'pessoas-editar' pessoa.pk %}">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                    <span class="btn-text">Editar</span>
                 </a>
                 {% if request.user.is_staff or request.user.is_superuser %}
-                <a class="btn danger" href="{% url 'pessoas-excluir' pessoa.pk %}">
+                <a class="btn secundario person-delete-link" href="{% url 'pessoas-excluir' pessoa.pk %}" title="Excluir pessoa">
                     <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                     <span class="btn-text">Excluir</span>
                 </a>
@@ -153,213 +62,358 @@
             </div>
         </div>
 
-        <aside class="person-side-column">
-            <article class="person-summary-card status-card">
-                <h2>Status do acolhimento</h2>
-                <ol class="status-flow">
-                    {% for etapa in status_fluxo %}
-                    <li class="status-step status-step-{{ etapa.estado }}">
-                        <span class="status-step-dot" aria-hidden="true"></span>
-                        <span class="status-step-label">{{ etapa.rotulo }}</span>
-                    </li>
+        <div class="person-journey">
+            <ol class="journey-steps" aria-label="Jornada do acolhimento">
+                {% for etapa in status_fluxo %}
+                <li class="journey-step journey-step-{{ etapa.estado }}"{% if etapa.estado == 'atual' %} aria-current="step"{% endif %}>
+                    <span class="journey-dot" aria-hidden="true"></span>
+                    <span class="journey-label">{{ etapa.rotulo }}</span>
+                </li>
+                {% endfor %}
+            </ol>
+            <form method="post" action="{% url 'pessoas-status' pessoa.pk %}" class="journey-form">
+                {% csrf_token %}
+                <label for="status-select">Alterar status</label>
+                <select name="status" id="status-select">
+                    {% for valor, rotulo in status_choices %}
+                    <option value="{{ valor }}" {% if valor == status_atual %}selected{% endif %}>{{ rotulo }}</option>
                     {% endfor %}
-                </ol>
-                <form method="post" action="{% url 'pessoas-status' pessoa.pk %}" class="status-change-form">
-                    {% csrf_token %}
-                    <label for="status-select">Alterar status</label>
-                    <select name="status" id="status-select">
-                        {% for valor, rotulo in status_choices %}
-                        <option value="{{ valor }}" {% if valor == status_atual %}selected{% endif %}>{{ rotulo }}</option>
-                        {% endfor %}
-                    </select>
-                    <button type="submit">
-                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                        <span class="btn-text">Atualizar status</span>
-                    </button>
-                </form>
-            </article>
+                </select>
+                <button type="submit">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span class="btn-text">Atualizar</span>
+                </button>
+            </form>
+        </div>
+    </section>
 
-            <article class="person-summary-card responsavel-card">
-                <h2>Responsavel atual</h2>
-                <p class="responsavel-atual-nome">
-                    {% if pessoa.responsavel_atual %}
-                    <strong>{{ pessoa.responsavel_atual.get_full_name|default:pessoa.responsavel_atual.username }}</strong>
-                    {% else %}
-                    <span class="table-muted-text">Ninguem associado ainda.</span>
-                    {% endif %}
-                </p>
-                {% if pode_gerenciar_responsavel %}
-                <form method="post" action="{% url 'pessoas-responsavel' pessoa.pk %}" class="status-change-form">
-                    {% csrf_token %}
-                    <label for="responsavel-select">Associar / trocar responsavel</label>
-                    <select name="responsavel_atual" id="responsavel-select">
-                        <option value="">— Ninguem —</option>
-                        {% for usuario in usuarios_responsaveis %}
-                        <option value="{{ usuario.pk }}" {% if pessoa.responsavel_atual_id == usuario.pk %}selected{% endif %}>{{ usuario.get_full_name|default:usuario.username }}</option>
-                        {% endfor %}
-                    </select>
-                    <button type="submit">
-                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                        <span class="btn-text">Salvar responsavel</span>
-                    </button>
-                </form>
-                {% endif %}
-            </article>
-
+    <div class="person-tabs" data-person-tabs>
+        <nav class="person-tablist" role="tablist" aria-label="Seções da ficha">
+            <a class="person-tab" role="tab" id="aba-timeline" href="?aba=timeline" data-aba="timeline" aria-controls="painel-timeline" aria-selected="{% if aba_ativa == 'timeline' %}true{% else %}false{% endif %}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Timeline
+                <span class="person-tab-count">{{ timeline_total }}</span>
+            </a>
+            <a class="person-tab" role="tab" id="aba-dados" href="?aba=dados" data-aba="dados" aria-controls="painel-dados" aria-selected="{% if aba_ativa == 'dados' %}true{% else %}false{% endif %}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M15 8h2"/><path d="M15 12h2"/><path d="M7 16h10"/></svg>
+                Dados
+            </a>
             {% if pode_ver_questionario %}
-            <article class="person-summary-card questionario-card">
-                <h2>Questionarios</h2>
+            <a class="person-tab" role="tab" id="aba-questionarios" href="?aba=questionarios" data-aba="questionarios" aria-controls="painel-questionarios" aria-selected="{% if aba_ativa == 'questionarios' %}true{% else %}false{% endif %}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg>
+                Questionários
+                <span class="person-tab-count">{{ convites_questionario|length }}</span>
+            </a>
+            {% endif %}
+            {% if pode_ver_gabinete %}
+            <a class="person-tab" role="tab" id="aba-gabinete" href="?aba=gabinete" data-aba="gabinete" aria-controls="painel-gabinete" aria-selected="{% if aba_ativa == 'gabinete' %}true{% else %}false{% endif %}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                Gabinete
+                <span class="person-tab-count">{{ registros_gabinete|length }}</span>
+            </a>
+            {% endif %}
+        </nav>
 
-                {% if convites_questionario %}
-                <ul class="convite-list">
-                    {% for convite in convites_questionario %}
-                    <li class="convite-item">
-                        <div class="convite-item-head">
-                            <strong>{{ convite.questionario.titulo }}</strong>
-                            {% if convite.respondido %}
-                            <span class="exec-status exec-status-concluida"><span class="exec-status-dot"></span> Respondido</span>
-                            {% else %}
-                            <span class="exec-status exec-status-executando"><span class="exec-status-dot"></span> Pendente</span>
-                            {% endif %}
-                        </div>
-                        <input class="convite-link" type="text" value="{{ convite.link }}" readonly onclick="this.select()" aria-label="Link do questionario">
-                        <div class="convite-actions">
-                            <a class="btn secundario" href="{{ convite.link }}" target="_blank" rel="noopener">Preencher</a>
-                            {% if convite.respondido %}
-                            <a class="btn secundario" href="{% url 'convite-resposta' convite.pk %}">Ver resposta</a>
-                            {% else %}
-                            <form method="post" action="{% url 'convite-enviar-whatsapp' convite.pk %}" class="inline-form">
-                                {% csrf_token %}
-                                <button type="submit" class="btn secundario">Enviar por WhatsApp</button>
-                            </form>
-                            {% endif %}
-                            {% if pode_excluir_convite %}
-                            <form method="post" action="{% url 'convite-excluir' convite.pk %}" class="inline-form convite-excluir-form" onsubmit="return confirm('Remover este link do questionario?');">
-                                {% csrf_token %}
-                                <button type="submit" class="convite-excluir-btn" aria-label="Remover link do questionario" title="Remover">
-                                    <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                                </button>
-                            </form>
-                            {% endif %}
-                        </div>
-                    </li>
-                    {% endfor %}
-                </ul>
+        <section class="person-tab-panel" role="tabpanel" id="painel-timeline" data-painel="timeline" aria-labelledby="aba-timeline"{% if aba_ativa != 'timeline' %} hidden{% endif %}>
+            <form method="post" class="person-composer">
+                {% csrf_token %}
+                {% if interacao_form.non_field_errors %}
+                <div class="form-errors">{{ interacao_form.non_field_errors }}</div>
                 {% endif %}
+                <div class="person-composer-grid">
+                    <h2 class="composer-title">Novo passo</h2>
+                    <p class="composer-field-tipo">
+                        <label class="visually-hidden" for="{{ interacao_form.tipo.id_for_label }}">Tipo</label>
+                        {{ interacao_form.tipo }}
+                        {% if interacao_form.tipo.errors %}<span class="form-errors">{{ interacao_form.tipo.errors.0 }}</span>{% endif %}
+                    </p>
+                    <p class="composer-field-data">
+                        <label class="visually-hidden" for="{{ interacao_form.data_interacao.id_for_label }}">Data</label>
+                        {{ interacao_form.data_interacao }}
+                        {% if interacao_form.data_interacao.errors %}<span class="form-errors">{{ interacao_form.data_interacao.errors.0 }}</span>{% endif %}
+                    </p>
+                    <p class="composer-field-hora">
+                        <label class="visually-hidden" for="{{ interacao_form.hora_interacao.id_for_label }}">Hora</label>
+                        {{ interacao_form.hora_interacao }}
+                        {% if interacao_form.hora_interacao.errors %}<span class="form-errors">{{ interacao_form.hora_interacao.errors.0 }}</span>{% endif %}
+                    </p>
+                    <p class="composer-field-texto">
+                        <label class="visually-hidden" for="{{ interacao_form.descricao.id_for_label }}">Descricao</label>
+                        {{ interacao_form.descricao }}
+                        {% if interacao_form.descricao.errors %}<span class="form-errors">{{ interacao_form.descricao.errors.0 }}</span>{% endif %}
+                    </p>
+                    <button type="submit" class="composer-submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                        <span class="btn-text">Adicionar evento</span>
+                    </button>
+                </div>
+            </form>
 
+            <div class="person-panel-toolbar">
+                <div class="person-panel-heading">
+                    <h2>Timeline de acompanhamento</h2>
+                    <p class="page-subtitle">{{ timeline_total_filtrado }} de {{ timeline_total }} evento(s)</p>
+                </div>
+                <form method="get" class="person-filter-bar">
+                    <input type="search" name="timeline_q" value="{{ timeline_filtros.timeline_q }}" placeholder="Buscar na timeline" aria-label="Buscar na timeline">
+                    <select name="timeline_tipo" aria-label="Tipo de evento">
+                        <option value="">Todos os tipos</option>
+                        {% for valor, rotulo in timeline_tipo_choices %}
+                        <option value="{{ valor }}" {% if valor == timeline_filtros.timeline_tipo %}selected{% endif %}>{{ rotulo }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="timeline_ordem" aria-label="Ordem">
+                        <option value="desc" {% if timeline_filtros.timeline_ordem == 'desc' %}selected{% endif %}>Mais recentes</option>
+                        <option value="asc" {% if timeline_filtros.timeline_ordem == 'asc' %}selected{% endif %}>Mais antigos</option>
+                    </select>
+                    <button type="submit" title="Filtrar">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <span class="btn-text">Filtrar</span>
+                    </button>
+                    {% if timeline_filtros.timeline_q or timeline_filtros.timeline_tipo or timeline_filtros.timeline_ordem == 'asc' %}
+                    <a class="btn secundario" href="{% url 'pessoas-detalhe' pessoa.pk %}">
+                        <span class="btn-text">Limpar</span>
+                    </a>
+                    {% endif %}
+                </form>
+            </div>
+
+            {% if interacoes %}
+            <div class="timeline-list">
+            {% for interacao in interacoes %}
+                <article class="timeline-item">
+                    <time datetime="{{ interacao.data_interacao|date:'Y-m-d' }}T{{ interacao.hora_interacao|time:'H:i' }}">
+                        <strong>{{ interacao.data_interacao|date:'d/m/Y' }}</strong>
+                        <span>{{ interacao.hora_interacao|time:'H:i' }}</span>
+                    </time>
+                    <div class="timeline-item-content">
+                        <span class="timeline-type timeline-type-{{ interacao.tipo }}">{{ interacao.get_tipo_display }}</span>
+                        <p>{{ interacao.descricao|default:'-' }}</p>
+                    </div>
+                </article>
+            {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty-state">{% if timeline_total %}Nenhum evento encontrado para este filtro.{% else %}Nenhum evento registrado ainda. Use o Novo passo acima para registrar o primeiro.{% endif %}</p>
+            {% endif %}
+        </section>
+
+        <section class="person-tab-panel" role="tabpanel" id="painel-dados" data-painel="dados" aria-labelledby="aba-dados"{% if aba_ativa != 'dados' %} hidden{% endif %}>
+            <div class="person-dados-layout">
+                <div>
+                    <h2>Dados da pessoa</h2>
+                    <div class="detail-grid detail-grid-compact">
+                        <div class="detail-item">
+                            <span>WhatsApp</span>
+                            <strong>{{ pessoa.telefone_whatsapp }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>E-mail</span>
+                            <strong>{{ pessoa.email|default:'-' }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>Primeira vez</span>
+                            <strong>{% if pessoa.primeira_vez %}Sim{% else %}Nao{% endif %}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>Origem</span>
+                            <strong>{{ pessoa.get_origem_cadastro_display }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>Como conheceu</span>
+                            <strong>{{ pessoa.get_como_conheceu_display|default:'-' }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>O que busca</span>
+                            <strong>{{ pessoa.get_o_que_busca_display|default:'-' }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>Gênero</span>
+                            <strong>{{ pessoa.get_genero_display|default:'-' }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>Idade</span>
+                            <strong>{{ pessoa.idade|default:'-' }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>Estado civil</span>
+                            <strong>{{ pessoa.get_estado_civil_display|default:'-' }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>Cidade</span>
+                            <strong>{{ pessoa.cidade|default:'-' }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>Religião</span>
+                            <strong>{{ pessoa.religiao|default:'-' }}</strong>
+                        </div>
+                        <div class="detail-item">
+                            <span>Cadastrado por</span>
+                            <strong>{% if pessoa.criado_por %}{{ pessoa.criado_por.get_full_name|default:pessoa.criado_por.username }}{% else %}-{% endif %}</strong>
+                        </div>
+                        {% if pessoa.observacoes %}
+                        <div class="detail-item detail-item-wide">
+                            <span>Observações</span>
+                            <strong>{{ pessoa.observacoes|linebreaksbr }}</strong>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <aside class="person-side-box responsavel-card">
+                    <h2>Responsavel atual</h2>
+                    <p class="responsavel-atual-nome">
+                        {% if pessoa.responsavel_atual %}
+                        <strong>{{ pessoa.responsavel_atual.get_full_name|default:pessoa.responsavel_atual.username }}</strong>
+                        {% else %}
+                        <span class="table-muted-text">Ninguem associado ainda.</span>
+                        {% endif %}
+                    </p>
+                    {% if pode_gerenciar_responsavel %}
+                    <form method="post" action="{% url 'pessoas-responsavel' pessoa.pk %}" class="person-side-form">
+                        {% csrf_token %}
+                        <label for="responsavel-select">Associar / trocar responsavel</label>
+                        <select name="responsavel_atual" id="responsavel-select">
+                            <option value="">— Ninguem —</option>
+                            {% for usuario in usuarios_responsaveis %}
+                            <option value="{{ usuario.pk }}" {% if pessoa.responsavel_atual_id == usuario.pk %}selected{% endif %}>{{ usuario.get_full_name|default:usuario.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit">
+                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            <span class="btn-text">Salvar responsavel</span>
+                        </button>
+                    </form>
+                    {% endif %}
+                </aside>
+            </div>
+        </section>
+
+        {% if pode_ver_questionario %}
+        <section class="person-tab-panel" role="tabpanel" id="painel-questionarios" data-painel="questionarios" aria-labelledby="aba-questionarios"{% if aba_ativa != 'questionarios' %} hidden{% endif %}>
+            <div class="person-panel-toolbar">
+                <div class="person-panel-heading">
+                    <h2>Questionarios</h2>
+                    <p class="page-subtitle">{{ convites_questionario|length }} link(s) para esta pessoa</p>
+                </div>
                 {% if questionarios_ativos %}
-                <form method="post" action="{% url 'pessoas-gerar-convite' pessoa.pk %}" class="convite-gerar-form">
+                <form method="post" action="{% url 'pessoas-gerar-convite' pessoa.pk %}" class="person-filter-bar">
                     {% csrf_token %}
-                    <label for="questionario-select">Gerar novo link</label>
-                    <select name="questionario" id="questionario-select">
+                    <select name="questionario" id="questionario-select" aria-label="Questionario para gerar o link">
                         {% for questionario in questionarios_ativos %}
                         <option value="{{ questionario.pk }}">{{ questionario.titulo }}</option>
                         {% endfor %}
                     </select>
                     <button type="submit">
                         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                        <span class="btn-text">Gerar link</span>
+                        <span class="btn-text">Gerar novo link</span>
                     </button>
                 </form>
                 {% else %}
                 <p class="table-muted-text">Nenhum questionario ativo. <a href="{% url 'questionarios-lista' %}">Crie um</a>.</p>
                 {% endif %}
-            </article>
+            </div>
+
+            {% if convites_questionario %}
+            <ul class="convite-list convite-grid">
+                {% for convite in convites_questionario %}
+                <li class="convite-item">
+                    <div class="convite-item-head">
+                        <strong>{{ convite.questionario.titulo }}</strong>
+                        {% if convite.respondido %}
+                        <span class="exec-status exec-status-concluida"><span class="exec-status-dot"></span> Respondido</span>
+                        {% else %}
+                        <span class="exec-status exec-status-executando"><span class="exec-status-dot"></span> Pendente</span>
+                        {% endif %}
+                    </div>
+                    <input class="convite-link" type="text" value="{{ convite.link }}" readonly onclick="this.select()" aria-label="Link do questionario">
+                    <div class="convite-actions">
+                        <a class="btn secundario" href="{{ convite.link }}" target="_blank" rel="noopener">Preencher</a>
+                        {% if convite.respondido %}
+                        <a class="btn secundario" href="{% url 'convite-resposta' convite.pk %}">Ver resposta</a>
+                        {% else %}
+                        <form method="post" action="{% url 'convite-enviar-whatsapp' convite.pk %}" class="inline-form">
+                            {% csrf_token %}
+                            <button type="submit" class="btn secundario">Enviar por WhatsApp</button>
+                        </form>
+                        {% endif %}
+                        {% if pode_excluir_convite %}
+                        <form method="post" action="{% url 'convite-excluir' convite.pk %}" class="inline-form convite-excluir-form" onsubmit="return confirm('Remover este link do questionario?');">
+                            {% csrf_token %}
+                            <button type="submit" class="convite-excluir-btn" aria-label="Remover link do questionario" title="Remover">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="empty-state">Nenhum questionario gerado para esta pessoa ainda.</p>
             {% endif %}
+        </section>
+        {% endif %}
 
-            {% if pode_ver_gabinete %}
-            <article class="person-summary-card gabinete-card" id="gabinete">
-                <div class="gabinete-card-head">
-                    <h2>Gabinete</h2>
-                    <span class="gabinete-restrito" title="Visível só para administradores e pastores">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-                        Restrito
-                    </span>
-                </div>
-
-                {% if registros_gabinete %}
-                <ul class="gabinete-list">
-                    {% for registro in registros_gabinete %}
-                    <li class="gabinete-item gabinete-item-{{ registro.tipo }}">
-                        <div class="gabinete-item-head">
-                            <strong>{{ registro.get_tipo_display }}</strong>
-                            <span>{{ registro.data|date:'d/m/Y' }} {{ registro.hora|time:'H:i' }}</span>
-                        </div>
-                        {% if registro.observacoes %}<p>{{ registro.observacoes|linebreaksbr }}</p>{% endif %}
-                        {% if registro.criado_por %}<small>Registrado por {{ registro.criado_por.get_full_name|default:registro.criado_por.username }}</small>{% endif %}
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <p class="table-muted-text">Nenhum gabinete registrado ainda.</p>
-                {% endif %}
-
-                <form method="post" action="{% url 'pessoas-gabinete' pessoa.pk %}" class="timeline-compose-form gabinete-form">
-                    {% csrf_token %}
-                    <p>
-                        <label for="{{ gabinete_form.tipo.id_for_label }}">Tipo</label>
+        {% if pode_ver_gabinete %}
+        <section class="person-tab-panel" role="tabpanel" id="painel-gabinete" data-painel="gabinete" aria-labelledby="aba-gabinete"{% if aba_ativa != 'gabinete' %} hidden{% endif %}>
+            <form method="post" action="{% url 'pessoas-gabinete' pessoa.pk %}" class="person-composer">
+                {% csrf_token %}
+                <div class="person-composer-grid">
+                    <h2 class="composer-title">Novo gabinete</h2>
+                    <p class="composer-field-tipo">
+                        <label class="visually-hidden" for="{{ gabinete_form.tipo.id_for_label }}">Tipo</label>
                         {{ gabinete_form.tipo }}
                     </p>
-                    <div class="timeline-compose-grid">
-                        <p>
-                            <label for="{{ gabinete_form.data.id_for_label }}">Data</label>
-                            {{ gabinete_form.data }}
-                        </p>
-                        <p>
-                            <label for="{{ gabinete_form.hora.id_for_label }}">Hora</label>
-                            {{ gabinete_form.hora }}
-                        </p>
-                    </div>
-                    <p>
-                        <label for="{{ gabinete_form.observacoes.id_for_label }}">Observações</label>
+                    <p class="composer-field-data">
+                        <label class="visually-hidden" for="{{ gabinete_form.data.id_for_label }}">Data</label>
+                        {{ gabinete_form.data }}
+                    </p>
+                    <p class="composer-field-hora">
+                        <label class="visually-hidden" for="{{ gabinete_form.hora.id_for_label }}">Hora</label>
+                        {{ gabinete_form.hora }}
+                    </p>
+                    <p class="composer-field-texto">
+                        <label class="visually-hidden" for="{{ gabinete_form.observacoes.id_for_label }}">Observações</label>
                         {{ gabinete_form.observacoes }}
                     </p>
-                    <button type="submit">
+                    <button type="submit" class="composer-submit">
                         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                         <span class="btn-text">Registrar gabinete</span>
                     </button>
-                </form>
-            </article>
-            {% endif %}
+                </div>
+            </form>
 
-            <article class="person-summary-card timeline-compose-card">
-                <h2>Novo passo</h2>
-                <form method="post" class="timeline-compose-form">
-                    {% csrf_token %}
-                    {% if interacao_form.non_field_errors %}
-                    <div class="form-errors">{{ interacao_form.non_field_errors }}</div>
-                    {% endif %}
+            <div class="person-panel-toolbar">
+                <div class="person-panel-heading">
+                    <h2>Gabinete</h2>
+                    <p class="page-subtitle">{{ registros_gabinete|length }} registro(s)</p>
+                </div>
+                <span class="gabinete-restrito" title="Visível só para administradores e pastores">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                    Restrito a administradores e pastores
+                </span>
+            </div>
 
-                    <p>
-                        <label for="{{ interacao_form.tipo.id_for_label }}">Tipo</label>
-                        {{ interacao_form.tipo }}
-                        {% if interacao_form.tipo.errors %}<span class="form-errors">{{ interacao_form.tipo.errors.0 }}</span>{% endif %}
-                    </p>
-                    <div class="timeline-compose-grid">
-                        <p>
-                            <label for="{{ interacao_form.data_interacao.id_for_label }}">Data</label>
-                            {{ interacao_form.data_interacao }}
-                            {% if interacao_form.data_interacao.errors %}<span class="form-errors">{{ interacao_form.data_interacao.errors.0 }}</span>{% endif %}
-                        </p>
-                        <p>
-                            <label for="{{ interacao_form.hora_interacao.id_for_label }}">Hora</label>
-                            {{ interacao_form.hora_interacao }}
-                            {% if interacao_form.hora_interacao.errors %}<span class="form-errors">{{ interacao_form.hora_interacao.errors.0 }}</span>{% endif %}
-                        </p>
+            {% if registros_gabinete %}
+            <ul class="gabinete-list">
+                {% for registro in registros_gabinete %}
+                <li class="gabinete-item gabinete-item-{{ registro.tipo }}">
+                    <div class="gabinete-item-head">
+                        <strong>{{ registro.get_tipo_display }}</strong>
+                        <span>{{ registro.data|date:'d/m/Y' }} {{ registro.hora|time:'H:i' }}</span>
                     </div>
-                    <p>
-                        <label for="{{ interacao_form.descricao.id_for_label }}">Descricao</label>
-                        {{ interacao_form.descricao }}
-                        {% if interacao_form.descricao.errors %}<span class="form-errors">{{ interacao_form.descricao.errors.0 }}</span>{% endif %}
-                    </p>
-                    <button type="submit">
-                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                        <span class="btn-text">Adicionar evento</span>
-                    </button>
-                </form>
-            </article>
-        </aside>
-    </section>
+                    {% if registro.observacoes %}<p>{{ registro.observacoes|linebreaksbr }}</p>{% endif %}
+                    {% if registro.criado_por %}<small>Registrado por {{ registro.criado_por.get_full_name|default:registro.criado_por.username }}</small>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="empty-state">Nenhum gabinete registrado ainda.</p>
+            {% endif %}
+        </section>
+        {% endif %}
+    </div>
 
     {% if membresia_convite %}
     <dialog class="membresia-modal" data-membresia-modal aria-labelledby="membresia-modal-titulo">
@@ -445,5 +499,81 @@
         })();
     </script>
     {% endif %}
+
+    <script>
+        (function () {
+            const raiz = document.querySelector('[data-person-tabs]');
+            if (!raiz) return;
+            const abas = Array.from(raiz.querySelectorAll('[role="tab"]'));
+            const paineis = Array.from(raiz.querySelectorAll('[role="tabpanel"]'));
+
+            // No computador, as listas longas rolam por dentro e ocupam so o espaco que
+            // sobra na tela: a ficha inteira cabe sem rolar a pagina.
+            function ajustarListas() {
+                raiz.querySelectorAll('.timeline-list, .gabinete-list').forEach((lista) => {
+                    lista.style.maxHeight = '';
+                    if (window.innerWidth <= 920 || lista.closest('[hidden]')) return;
+                    const caixa = lista.getBoundingClientRect();
+                    const topo = caixa.top + window.scrollY;
+                    // O que fica abaixo da lista (fim do painel e da pagina) tambem precisa caber.
+                    const abaixo = document.documentElement.scrollHeight - (caixa.bottom + window.scrollY);
+                    lista.style.maxHeight = `${Math.max(window.innerHeight - topo - abaixo, 200)}px`;
+                });
+            }
+
+            function ativar(aba, foco) {
+                abas.forEach((item) => {
+                    const ativa = item === aba;
+                    item.setAttribute('aria-selected', ativa ? 'true' : 'false');
+                    item.tabIndex = ativa ? 0 : -1;
+                });
+                paineis.forEach((painel) => {
+                    painel.hidden = painel.dataset.painel !== aba.dataset.aba;
+                });
+                ajustarListas();
+                if (foco) aba.focus();
+                // Guarda a aba na URL: o F5 e o "voltar" do navegador reabrem a mesma aba.
+                if (window.history.replaceState) {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('aba', aba.dataset.aba);
+                    window.history.replaceState(window.history.state, '', url);
+                }
+            }
+
+            abas.forEach((aba, indice) => {
+                aba.tabIndex = aba.getAttribute('aria-selected') === 'true' ? 0 : -1;
+                aba.addEventListener('click', (evento) => {
+                    evento.preventDefault();
+                    ativar(aba, false);
+                });
+                aba.addEventListener('keydown', (evento) => {
+                    const destinos = { ArrowRight: indice + 1, ArrowLeft: indice - 1, Home: 0, End: abas.length - 1 };
+                    if (!(evento.key in destinos)) return;
+                    evento.preventDefault();
+                    ativar(abas[(destinos[evento.key] + abas.length) % abas.length], true);
+                });
+            });
+
+            // Descricao/observacoes comecam com uma linha e crescem conforme o texto.
+            raiz.querySelectorAll('.person-composer textarea').forEach((campo) => {
+                const ajustar = () => {
+                    campo.style.height = 'auto';
+                    campo.style.height = `${campo.scrollHeight + 2}px`;
+                };
+                campo.addEventListener('input', ajustar);
+                if (campo.value) ajustar();
+            });
+
+            ajustarListas();
+            // A fonte da pagina muda as alturas quando termina de carregar: recalcula depois.
+            window.addEventListener('load', ajustarListas);
+            if (document.fonts) document.fonts.ready.then(ajustarListas);
+            let redimensionando = null;
+            window.addEventListener('resize', () => {
+                window.cancelAnimationFrame(redimensionando);
+                redimensionando = window.requestAnimationFrame(ajustarListas);
+            });
+        })();
+    </script>
 </div>
 {% endblock %}

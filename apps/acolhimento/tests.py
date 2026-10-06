@@ -3109,7 +3109,7 @@ class GabinetePastoralTests(TestCase):
 	def test_pastor_registra_gabinete_agendado(self):
 		resp = self._registrar(self.pastor)
 
-		self.assertRedirects(resp, f'{self.ficha}#gabinete', fetch_redirect_response=False)
+		self.assertRedirects(resp, f'{self.ficha}?aba=gabinete', fetch_redirect_response=False)
 		registro = RegistroGabinete.objects.get(pessoa=self.pessoa)
 		self.assertEqual(registro.tipo, RegistroGabinete.Tipo.AGENDADO)
 		self.assertEqual(registro.data.isoformat(), '2026-10-20')
@@ -3133,7 +3133,7 @@ class GabinetePastoralTests(TestCase):
 		for usuario in (self.admin, self.pastor):
 			self.client.force_login(usuario)
 			resp = self.client.get(self.ficha)
-			self.assertContains(resp, 'id="gabinete"')
+			self.assertContains(resp, 'id="painel-gabinete"')
 			self.assertContains(resp, 'Gabinete realizado')
 			self.assertContains(resp, 'Oramos juntos.')
 			self.assertContains(resp, 'Registrado por Joao Pastor')
@@ -3144,7 +3144,8 @@ class GabinetePastoralTests(TestCase):
 		)
 		self.client.force_login(self.equipe)
 		resp = self.client.get(self.ficha)
-		self.assertNotContains(resp, 'id="gabinete"')
+		self.assertNotContains(resp, 'id="painel-gabinete"')
+		self.assertNotContains(resp, 'id="aba-gabinete"')
 		self.assertNotContains(resp, 'Oramos juntos.')
 		self.assertNotIn('registros_gabinete', resp.context)
 
@@ -3168,3 +3169,77 @@ class GabinetePastoralTests(TestCase):
 		self.assertIn(f'name="data_interacao" value="{hoje}"', conteudo)
 		self.assertRegex(conteudo, r'name="gabinete-hora" value="\d{2}:\d{2}"')
 		self.assertRegex(conteudo, r'name="hora_interacao" value="\d{2}:\d{2}"')
+
+
+
+@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+class FichaAbasTests(TestCase):
+	"""Ficha da pessoa organizada em abas: a aba aberta vem do ?aba= e volta apos cada acao."""
+
+	def setUp(self):
+		usuarios = get_user_model()
+		self.admin = usuarios.objects.create_user('adm_abas', password='x', is_staff=True)
+		self.comum = usuarios.objects.create_user('comum_abas', password='x')
+		self.pessoa = PrimeiroContato.objects.create(
+			nome='Lucia',
+			telefone_whatsapp='31955550101',
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+			cidade='Vila Velha',
+		)
+		self.ficha = reverse('pessoas-detalhe', args=[self.pessoa.pk])
+
+	def _ficha(self, usuario, **params):
+		self.client.force_login(usuario)
+		resp = self.client.get(self.ficha, params)
+		self.assertEqual(resp.status_code, 200)
+		return resp, resp.content.decode()
+
+	def _aberta(self, conteudo, aba):
+		self.assertNotRegex(conteudo, rf'id="painel-{aba}"[^>]*\shidden')
+		self.assertRegex(conteudo, rf'id="aba-{aba}"[^>]*aria-selected="true"')
+
+	def _fechada(self, conteudo, aba):
+		self.assertRegex(conteudo, rf'id="painel-{aba}"[^>]*\shidden')
+
+	def test_abre_na_timeline_por_padrao(self):
+		resp, conteudo = self._ficha(self.admin)
+		self.assertEqual(resp.context['aba_ativa'], 'timeline')
+		self._aberta(conteudo, 'timeline')
+		for aba in ('dados', 'questionarios', 'gabinete'):
+			self._fechada(conteudo, aba)
+
+	def test_aba_vem_do_parametro_da_url(self):
+		resp, conteudo = self._ficha(self.admin, aba='dados')
+		self._aberta(conteudo, 'dados')
+		self._fechada(conteudo, 'timeline')
+		self.assertContains(resp, 'Vila Velha')
+
+	def test_aba_invalida_ou_sem_permissao_cai_na_timeline(self):
+		resp, _ = self._ficha(self.admin, aba='qualquer')
+		self.assertEqual(resp.context['aba_ativa'], 'timeline')
+
+		resp, conteudo = self._ficha(self.comum, aba='gabinete')
+		self.assertEqual(resp.context['aba_ativa'], 'timeline')
+		self.assertNotIn('painel-gabinete', conteudo)
+		self.assertNotIn('painel-questionarios', conteudo)
+
+	def test_acoes_voltam_para_a_aba_onde_aconteceram(self):
+		self.client.force_login(self.admin)
+		questionario = Questionario.objects.create(titulo='Cafe', ativo=True)
+		PerguntaQuestionario.objects.create(questionario=questionario, texto='Vem?', tipo='sim_nao')
+
+		resp = self.client.post(reverse('pessoas-gerar-convite', args=[self.pessoa.pk]), {'questionario': questionario.pk})
+		self.assertEqual(resp['Location'], f'{self.ficha}?aba=questionarios')
+
+		convite = ConviteQuestionario.objects.get(pessoa=self.pessoa)
+		resp = self.client.post(reverse('convite-excluir', args=[convite.pk]))
+		self.assertEqual(resp['Location'], f'{self.ficha}?aba=questionarios')
+
+		resp = self.client.post(reverse('pessoas-responsavel', args=[self.pessoa.pk]), {'responsavel_atual': self.admin.pk})
+		self.assertEqual(resp['Location'], f'{self.ficha}?aba=dados')
+
+		# Status fica no cabecalho (visivel em todas as abas): volta para a ficha sem aba.
+		resp = self.client.post(reverse('pessoas-status', args=[self.pessoa.pk]), {'status': 'membro'})
+		self.assertEqual(resp['Location'], self.ficha)
