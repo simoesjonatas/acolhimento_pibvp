@@ -10,14 +10,19 @@
             <h1>Fila global de mensagens</h1>
             <p>Visao operacional dos envios, retornos e mensagens recebidas pela equipe de acolhimento.</p>
 
-            <div class="queue-summary-grid" aria-label="Resumo da fila">
+            <nav class="queue-summary-grid" aria-label="Filtros rápidos da fila">
                 {% for card in fila_resumo_cards %}
-                <div class="queue-summary-item {{ card.classe }}">
+                <a
+                    class="queue-summary-item {{ card.classe }}{% if card.ativo %} is-active{% endif %}{% if card.valor %} has-items{% endif %}"
+                    href="?{{ card.query }}"
+                    title="{% if card.ativo %}Remover o filtro {{ card.rotulo }}{% else %}Filtrar: {{ card.rotulo }}{% endif %}"
+                    {% if card.ativo %}aria-current="true"{% endif %}
+                >
                     <span>{{ card.rotulo }}</span>
                     <strong>{{ card.valor }}</strong>
-                </div>
+                </a>
                 {% endfor %}
-            </div>
+            </nav>
         </div>
 
         <div class="hero-actions queue-hero-actions">
@@ -108,7 +113,11 @@
         <div class="panel-header">
             <div>
                 <h2>Mensagens</h2>
+                {% if resposta_status_atual == 'nao_lidas' %}
+                <p>Mensagens recebidas que ninguém da equipe abriu ainda. Abra a conversa da pessoa para marcá-las como lidas.</p>
+                {% else %}
                 <p>Mensagens filtradas na ordem atual da fila.</p>
+                {% endif %}
             </div>
         </div>
 
@@ -162,7 +171,7 @@
                 </thead>
                 <tbody>
                     {% for mensagem in mensagens %}
-                    <tr class="queue-row status-row-{{ mensagem.status_fila }} direction-row-{{ mensagem.direcao }}">
+                    <tr class="queue-row status-row-{{ mensagem.status_fila }} direction-row-{{ mensagem.direcao }}{% if mensagem.direcao == 'entrada' and not mensagem.visualizada_equipe_em %} is-unread{% endif %}">
                         <td>
                             <a class="queue-person-link" href="{% url 'pessoas-mensagens' mensagem.pessoa.pk %}">
                                 <strong>{{ mensagem.pessoa.nome }}</strong>
@@ -208,6 +217,9 @@
                                     {% endif %}
                                 {% else %}
                                     <span class="reply-badge reply-inbound">Recebida</span>
+                                    {% if not mensagem.visualizada_equipe_em %}
+                                    <span class="reply-badge reply-unread" title="Ninguém da equipe abriu esta conversa ainda">Não lida</span>
+                                    {% endif %}
                                 {% endif %}
                             </div>
                             <p class="queue-content-preview">{{ mensagem.conteudo|truncatechars:180 }}</p>

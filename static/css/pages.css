@@ -1754,7 +1754,7 @@
     grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
     gap: 8px;
     margin-top: 16px;
-    max-width: 720px;
+    max-width: 800px;
 }
 
 .queue-summary-item {
@@ -1804,6 +1804,42 @@
 
 .queue-summary-item.is-inbound::before {
     background: #4f7f95;
+}
+
+.queue-summary-item.is-unread::before {
+    background: var(--accent);
+}
+
+/* Os cards do resumo sao atalhos de filtro: clicar aplica, clicar de novo remove. */
+a.queue-summary-item {
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+a.queue-summary-item:hover {
+    border-color: var(--line-strong);
+    background: #ffffff;
+    box-shadow: var(--shadow-soft);
+}
+
+.queue-summary-item.is-unread.has-items {
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+}
+
+.queue-summary-item.is-unread.has-items strong {
+    color: var(--accent-ink);
+}
+
+.queue-summary-grid .queue-summary-item.is-active {
+    border-color: var(--primary);
+    background: var(--surface-tint);
+    box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.queue-summary-item.is-active span {
+    color: var(--primary);
 }
 
 .queue-filter-panel,
@@ -1932,6 +1968,10 @@
 
 .queue-row.status-row-enviada td:first-child {
     border-left-color: var(--primary);
+}
+
+.queue-row.is-unread td:first-child {
+    border-left-color: var(--accent);
 }
 
 .queue-person-link {
@@ -3673,6 +3713,12 @@ a.kpi-card:hover {
     background: #edf4fb;
     color: #255c7d;
     border-color: #a6c5d9;
+}
+
+.reply-unread {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    border-color: var(--accent-line);
 }
 
 .retorno-badge,

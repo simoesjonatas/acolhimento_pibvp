@@ -281,13 +281,19 @@ class MensagemFilaQuerysetMixin:
 
 		return sort_coluna, direcao
 
-	def get_filtered_queryset(self, queryset):
+	def get_filtered_queryset(self, queryset, filtrar_situacao=True):
+		"""Aplica os filtros da tela.
+
+		Com `filtrar_situacao=False` ignora `status` e `resposta_status`, que sao os filtros
+		que os cards do topo controlam: assim cada card conta o que a busca atual tem
+		naquela situacao, e o numero bate com o que aparece ao clicar nele.
+		"""
 		busca = self.request.GET.get('q', '').strip()
-		status = self.request.GET.get('status', '').strip()
+		status = self.request.GET.get('status', '').strip() if filtrar_situacao else ''
 		canal = self.request.GET.get('canal', '').strip()
 		direcao_mensagem = self.request.GET.get('direcao_mensagem', '').strip()
 		enviado = self.request.GET.get('enviado', '').strip()
-		resposta_status = self.request.GET.get('resposta_status', '').strip()
+		resposta_status = self.request.GET.get('resposta_status', '').strip() if filtrar_situacao else ''
 		sort_coluna, direcao_ordenacao = self.get_sort_state()
 
 		if busca:
@@ -318,6 +324,9 @@ class MensagemFilaQuerysetMixin:
 			queryset = queryset.filter(direcao='saida', resposta_recebida_em__isnull=True)
 		elif resposta_status == 'recebidas':
 			queryset = queryset.filter(direcao='entrada')
+		elif resposta_status == 'nao_lidas':
+			# Mesmo criterio do contador do menu: recebida que ninguem da equipe abriu.
+			queryset = queryset.filter(direcao='entrada', visualizada_equipe_em__isnull=True)
 
 		ordering = self.sort_map.get(sort_coluna, 'enfileirada_em')
 		if direcao_ordenacao == 'desc':
@@ -341,7 +350,7 @@ class MensagemFilaListView(LoginRequiredMixin, MensagensPermissaoMixin, Mensagem
 		query_params = self.request.GET.copy()
 		query_params.pop('page', None)
 		filtro_query = query_params.urlencode()
-		fila_queryset = self.get_queryset()
+		fila_queryset = self.get_filtered_queryset(MensagemContato.objects.all(), filtrar_situacao=False)
 		resumo_fila = fila_queryset.aggregate(
 			pendentes=Count('id', filter=Q(status_fila=MensagemContato.StatusFilaChoices.PENDENTE)),
 			falhas=Count('id', filter=Q(status_fila=MensagemContato.StatusFilaChoices.FALHA)),
@@ -354,6 +363,13 @@ class MensagemFilaListView(LoginRequiredMixin, MensagensPermissaoMixin, Mensagem
 				),
 			),
 			recebidas=Count('id', filter=Q(direcao=MensagemContato.DirecaoChoices.ENTRADA)),
+			nao_lidas=Count(
+				'id',
+				filter=Q(
+					direcao=MensagemContato.DirecaoChoices.ENTRADA,
+					visualizada_equipe_em__isnull=True,
+				),
+			),
 		)
 
 		sort_coluna_atual, sort_direcao_atual = self.get_sort_state()
@@ -385,19 +401,44 @@ class MensagemFilaListView(LoginRequiredMixin, MensagensPermissaoMixin, Mensagem
 			('respondidas', 'Respondidas'),
 			('sem_resposta', 'Sem resposta'),
 			('recebidas', 'Mensagens recebidas'),
+			('nao_lidas', 'Recebidas não lidas'),
 		]
 		context['sort_coluna_atual'] = sort_coluna_atual
 		context['sort_direcao_atual'] = sort_direcao_atual
 		context['sort_links'] = sort_links
 		context['total_filtrado'] = context['paginator'].count
 		context['filtro_query'] = filtro_query
-		context['fila_resumo_cards'] = [
-			{'rotulo': 'Pendentes', 'valor': resumo_fila['pendentes'], 'classe': 'is-pending'},
-			{'rotulo': 'Falhas', 'valor': resumo_fila['falhas'], 'classe': 'is-failed'},
-			{'rotulo': 'Canceladas', 'valor': resumo_fila['canceladas'], 'classe': 'is-canceled'},
-			{'rotulo': 'Sem resposta', 'valor': resumo_fila['sem_resposta'], 'classe': 'is-waiting'},
-			{'rotulo': 'Recebidas', 'valor': resumo_fila['recebidas'], 'classe': 'is-inbound'},
+
+		# Cada card e um atalho que troca o par status/resposta_status e mantem o resto
+		# (busca, canal, ordenacao). Clicar no card ja ativo desliga o filtro.
+		card_params = self.request.GET.copy()
+		for chave in ('page', 'status', 'resposta_status'):
+			card_params.pop(chave, None)
+		situacao_atual = (context['status_atual'], context['resposta_status_atual'])
+		cards = [
+			('Pendentes', 'pendentes', 'is-pending', MensagemContato.StatusFilaChoices.PENDENTE, ''),
+			('Falhas', 'falhas', 'is-failed', MensagemContato.StatusFilaChoices.FALHA, ''),
+			('Canceladas', 'canceladas', 'is-canceled', MensagemContato.StatusFilaChoices.CANCELADA, ''),
+			('Sem resposta', 'sem_resposta', 'is-waiting', '', 'sem_resposta'),
+			('Recebidas', 'recebidas', 'is-inbound', '', 'recebidas'),
+			('Não lidas', 'nao_lidas', 'is-unread', '', 'nao_lidas'),
 		]
+		context['fila_resumo_cards'] = []
+		for rotulo, chave, classe, status_card, resposta_card in cards:
+			ativo = situacao_atual == (status_card, resposta_card)
+			params = card_params.copy()
+			if not ativo:
+				if status_card:
+					params['status'] = status_card
+				if resposta_card:
+					params['resposta_status'] = resposta_card
+			context['fila_resumo_cards'].append({
+				'rotulo': rotulo,
+				'valor': resumo_fila[chave],
+				'classe': classe,
+				'ativo': ativo,
+				'query': params.urlencode(),
+			})
 		return context
 
 

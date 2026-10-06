@@ -10,6 +10,7 @@ from openpyxl import load_workbook
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import PermissionDenied
+from django.http import QueryDict
 from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 from django.urls import reverse
@@ -2765,3 +2766,104 @@ class AguardandoRespostaTests(TestCase):
 		self.assertEqual(tempo_espera(agora - timedelta(seconds=20), agora), 'agora')
 		self.assertEqual(tempo_espera(agora - timedelta(minutes=5), agora), 'há 5\xa0minutos')
 		self.assertEqual(tempo_espera(agora - timedelta(hours=26), agora), 'há 1\xa0dia')
+
+
+@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+class FilaMensagensNaoLidasTests(TestCase):
+	"""Fila de mensagens: filtro "Não lidas" e cards do topo funcionando como filtros."""
+
+	def setUp(self):
+		self.equipe = get_user_model().objects.create_user('equipe_fila_nao_lidas', password='x', is_staff=True)
+		self.client.force_login(self.equipe)
+		self.url = reverse('mensagens-fila')
+		self.maria = self._pessoa('Maria', '31922220001')
+		self.joao = self._pessoa('Joao', '31922220002')
+
+		entrada = MensagemContato.DirecaoChoices.ENTRADA
+		saida = MensagemContato.DirecaoChoices.SAIDA
+		self.maria_nao_lida = self._mensagem(self.maria, entrada, 'Qual o horario do culto?')
+		self.maria_falha = self._mensagem(
+			self.maria, saida, 'Lembrete do culto', status_fila=MensagemContato.StatusFilaChoices.FALHA,
+		)
+		self._mensagem(self.maria, saida, 'Bem-vinda!')
+		self.joao_nao_lida = self._mensagem(self.joao, entrada, 'Posso levar meu filho?')
+		self.joao_lida = self._mensagem(self.joao, entrada, 'Obrigado!', visualizada_equipe_em=timezone.now())
+
+	def _pessoa(self, nome, telefone):
+		return PrimeiroContato.objects.create(
+			nome=nome,
+			telefone_whatsapp=telefone,
+			primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
+		)
+
+	def _mensagem(self, pessoa, direcao, conteudo, **extra):
+		extra.setdefault('status_fila', MensagemContato.StatusFilaChoices.ENVIADA)
+		return MensagemContato.objects.create(
+			pessoa=pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=direcao,
+			conteudo=conteudo,
+			**extra,
+		)
+
+	def _fila(self, **params):
+		resp = self.client.get(self.url, params)
+		self.assertEqual(resp.status_code, 200)
+		return resp
+
+	def _cards(self, resp):
+		return {card['rotulo']: card for card in resp.context['fila_resumo_cards']}
+
+	def test_filtro_mostra_so_recebidas_que_ninguem_da_equipe_abriu(self):
+		resp = self._fila(resposta_status='nao_lidas')
+
+		self.assertCountEqual(resp.context['mensagens'], [self.maria_nao_lida, self.joao_nao_lida])
+		self.assertContains(resp, 'Não lida</span>', count=2)
+		self.assertContains(resp, 'Abra a conversa da pessoa para marcá-las como lidas.')
+
+	def test_card_nao_lidas_bate_com_o_contador_do_menu_e_aplica_o_filtro(self):
+		resp = self._fila()
+
+		card = self._cards(resp)['Não lidas']
+		self.assertEqual(card['valor'], 2)
+		self.assertEqual(resp.context['menu_retorno_pendente_count'], 2)
+		self.assertFalse(card['ativo'])
+		self.assertContains(resp, 'href="?resposta_status=nao_lidas"')
+
+	def test_cards_viram_filtros_de_status_e_resposta(self):
+		cards = self._cards(self._fila())
+
+		self.assertEqual(cards['Pendentes']['query'], 'status=pendente')
+		self.assertEqual(cards['Falhas']['query'], 'status=falha')
+		self.assertEqual(cards['Canceladas']['query'], 'status=cancelada')
+		self.assertEqual(cards['Sem resposta']['query'], 'resposta_status=sem_resposta')
+		self.assertEqual(cards['Recebidas']['query'], 'resposta_status=recebidas')
+
+	def test_card_mantem_a_busca_e_troca_so_a_situacao(self):
+		resp = self._fila(q='Maria', status='falha', sort='pessoa', direcao='asc')
+
+		self.assertEqual(list(resp.context['mensagens']), [self.maria_falha])
+		cards = self._cards(resp)
+		# A busca restringe a contagem; a situacao escolhida nao, para o numero do card
+		# bater com o que aparece ao clicar nele.
+		self.assertEqual(cards['Não lidas']['valor'], 1)
+		self.assertEqual(cards['Recebidas']['valor'], 1)
+		self.assertEqual(
+			QueryDict(cards['Não lidas']['query']).dict(),
+			{'q': 'Maria', 'sort': 'pessoa', 'direcao': 'asc', 'resposta_status': 'nao_lidas'},
+		)
+		# Clicar no card ja ativo remove so o filtro dele.
+		self.assertTrue(cards['Falhas']['ativo'])
+		self.assertEqual(QueryDict(cards['Falhas']['query']).dict(), {'q': 'Maria', 'sort': 'pessoa', 'direcao': 'asc'})
+		self.assertContains(resp, 'aria-current="true"', count=1)
+
+	def test_abrir_a_conversa_tira_a_mensagem_das_nao_lidas(self):
+		self.client.get(reverse('pessoas-mensagens', args=[self.maria.pk]))
+
+		resp = self._fila(resposta_status='nao_lidas')
+
+		self.assertEqual(list(resp.context['mensagens']), [self.joao_nao_lida])
+		self.assertEqual(self._cards(resp)['Não lidas']['valor'], 1)
+		self.assertEqual(resp.context['menu_retorno_pendente_count'], 1)

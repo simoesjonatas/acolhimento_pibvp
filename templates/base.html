@@ -84,7 +84,7 @@
                 >
                     Fila de mensagens
                     {% if menu_retorno_pendente_count > 0 %}
-                    <span class="menu-count-badge">{{ menu_retorno_pendente_count }}</span>
+                    <span class="menu-count-badge" title="{{ menu_retorno_pendente_count }} mensage{{ menu_retorno_pendente_count|pluralize:'m,ns' }} recebida{{ menu_retorno_pendente_count|pluralize }} não lida{{ menu_retorno_pendente_count|pluralize }}">{{ menu_retorno_pendente_count }}</span>
                     {% endif %}
                 </a>
                 <a
