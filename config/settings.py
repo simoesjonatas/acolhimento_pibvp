@@ -294,9 +294,10 @@ META_WA_ACCESS_TOKEN = os.getenv('META_WA_ACCESS_TOKEN', '').strip()
 META_WA_APP_SECRET = os.getenv('META_WA_APP_SECRET', '').strip()
 META_WA_VERIFY_TOKEN = os.getenv('META_WA_VERIFY_TOKEN', '').strip()
 META_WA_REQUEST_TIMEOUT_SECONDS = int(os.getenv('META_WA_REQUEST_TIMEOUT_SECONDS', '20'))
-META_WA_WEBHOOK_URL = os.getenv(
-    'META_WA_WEBHOOK_URL',
-    f'{PUBLIC_BASE_URL}/acolhimento/mensagens/webhook/meta/',
+# `or` em vez de default: o docker-compose repassa a variavel vazia quando o .env
+# nao a define, e vazio tambem deve cair na URL montada a partir do PUBLIC_BASE_URL.
+META_WA_WEBHOOK_URL = (
+    os.getenv('META_WA_WEBHOOK_URL') or f'{PUBLIC_BASE_URL}/acolhimento/mensagens/webhook/meta/'
 ).strip()
 META_TEMPLATE_OPT_IN_NOME = os.getenv('META_TEMPLATE_OPT_IN_NOME', '').strip()
 META_TEMPLATE_OPT_IN_IDIOMA = os.getenv('META_TEMPLATE_OPT_IN_IDIOMA', 'pt_BR').strip() or 'pt_BR'
