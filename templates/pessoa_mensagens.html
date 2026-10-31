@@ -106,7 +106,7 @@
                     </div>
                     {% endif %}
 				{% else %}
-				<small class="table-muted-text">{% if usa_evolution %}Configure a mensagem de continuacao na tela de mensagens do WhatsApp.{% else %}Configure TWILIO_TEMPLATE_CONTINUAR_SID para habilitar o envio.{% endif %}</small>
+				<small class="table-muted-text">{% if usa_evolution %}Configure a mensagem de continuacao na tela de mensagens do WhatsApp.{% elif usa_meta %}Configure o nome do template de continuacao (Meta) na tela de mensagens do WhatsApp.{% else %}Configure TWILIO_TEMPLATE_CONTINUAR_SID para habilitar o envio.{% endif %}</small>
 				{% endif %}
             </div>
             {% endif %}

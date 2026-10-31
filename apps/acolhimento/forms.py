@@ -1,4 +1,5 @@
 import json
+import re
 
 from django import forms
 from django.utils import timezone
@@ -248,6 +249,13 @@ class DisparoMensagemMassaForm(forms.Form):
         label='Content Template SID',
         widget=forms.TextInput(attrs={'placeholder': 'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}),
     )
+    # Somente na API oficial da Meta: idioma do template (o nome vai em `content_sid`).
+    template_idioma = forms.CharField(
+        required=False,
+        label='Idioma do template',
+        initial='pt_BR',
+        widget=forms.TextInput(attrs={'placeholder': 'pt_BR'}),
+    )
     content_variables = forms.CharField(
         required=False,
         label='Variaveis do template (JSON)',
@@ -300,11 +308,22 @@ class DisparoMensagemMassaForm(forms.Form):
         return parsed
 
     def clean(self):
+        from apps.acolhimento import template_config  # lazy: evita ciclo de import no load
+
         cleaned = super().clean()
         modo = cleaned.get('modo')
         if modo == self.MODO_TEMPLATE:
             sid = (cleaned.get('content_sid') or '').strip()
-            if not sid:
+            if template_config.usando_meta():
+                if not sid:
+                    self.add_error('content_sid', 'Informe o nome do template aprovado na Meta.')
+                elif not META_TEMPLATE_NOME_RE.match(sid):
+                    self.add_error('content_sid', META_TEMPLATE_NOME_ERRO)
+                idioma = (cleaned.get('template_idioma') or '').strip() or 'pt_BR'
+                if not META_IDIOMA_RE.match(idioma):
+                    self.add_error('template_idioma', META_IDIOMA_ERRO)
+                cleaned['template_idioma'] = idioma
+            elif not sid:
                 self.add_error('content_sid', 'Informe o Content Template SID para o disparo por template.')
             elif not sid.startswith('HX'):
                 self.add_error('content_sid', 'O Content SID da Twilio comeca com "HX".')
@@ -491,8 +510,16 @@ class ResponderQuestionarioForm(forms.Form):
             resposta.save()
 
 
+# Nome de template na Meta: minusculas, digitos e underscore (ate 512 chars).
+META_TEMPLATE_NOME_RE = re.compile(r'^[a-z0-9_]{1,512}$')
+META_TEMPLATE_NOME_ERRO = 'O nome do template na Meta usa so letras minusculas, numeros e _ (ex.: boas_vindas_pibvp).'
+# Codigo de idioma da Meta: pt_BR, en_US, es, ...
+META_IDIOMA_RE = re.compile(r'^[a-z]{2,3}(_[A-Z]{2})?$')
+META_IDIOMA_ERRO = 'Use o codigo de idioma da Meta, ex.: pt_BR.'
+
+
 class TemplatesWhatsappForm(forms.Form):
-    """Edita os templates Twilio e os textos equivalentes do WhatsApp."""
+    """Edita os templates Twilio, os templates da Meta e os textos equivalentes do WhatsApp."""
 
     opt_in_sid = forms.CharField(
         required=False,
@@ -512,6 +539,16 @@ class TemplatesWhatsappForm(forms.Form):
             'placeholder': 'Ola {nome}! Aqui e o acolhimento da PIBVP. Podemos conversar por aqui?',
         }),
     )
+    opt_in_meta_nome = forms.CharField(
+        required=False,
+        label='Primeiro contato — Nome do template (Meta)',
+        widget=forms.TextInput(attrs={'placeholder': 'boas_vindas_pibvp'}),
+    )
+    opt_in_meta_idioma = forms.CharField(
+        required=False,
+        label='Primeiro contato — Idioma do template (Meta)',
+        widget=forms.TextInput(attrs={'placeholder': 'pt_BR'}),
+    )
     continuar_sid = forms.CharField(
         required=False,
         label='Continuar conversa — Content Template SID',
@@ -530,6 +567,16 @@ class TemplatesWhatsappForm(forms.Form):
             'placeholder': 'Ola {nome}, tudo bem? Podemos continuar nossa conversa?',
         }),
     )
+    continuar_meta_nome = forms.CharField(
+        required=False,
+        label='Continuar conversa — Nome do template (Meta)',
+        widget=forms.TextInput(attrs={'placeholder': 'continuar_conversa_pibvp'}),
+    )
+    continuar_meta_idioma = forms.CharField(
+        required=False,
+        label='Continuar conversa — Idioma do template (Meta)',
+        widget=forms.TextInput(attrs={'placeholder': 'pt_BR'}),
+    )
 
     def clean(self):
         cleaned = super().clean()
@@ -538,6 +585,16 @@ class TemplatesWhatsappForm(forms.Form):
             if sid and not sid.startswith('HX'):
                 self.add_error(campo, 'O Content SID da Twilio comeca com "HX".')
             cleaned[campo] = sid
+        for campo in ('opt_in_meta_nome', 'continuar_meta_nome'):
+            nome = (cleaned.get(campo) or '').strip()
+            if nome and not META_TEMPLATE_NOME_RE.match(nome):
+                self.add_error(campo, META_TEMPLATE_NOME_ERRO)
+            cleaned[campo] = nome
+        for campo in ('opt_in_meta_idioma', 'continuar_meta_idioma'):
+            idioma = (cleaned.get(campo) or '').strip() or 'pt_BR'
+            if not META_IDIOMA_RE.match(idioma):
+                self.add_error(campo, META_IDIOMA_ERRO)
+            cleaned[campo] = idioma
         for campo in ('opt_in_variables', 'continuar_variables'):
             raw = (cleaned.get(campo) or '').strip() or '{}'
             try:

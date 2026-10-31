@@ -187,13 +187,17 @@ def motivo_bloqueio_template_continuar(pessoa):
 
 
 def mensagem_eh_template(mensagem: MensagemContato) -> bool:
-    """Toda mensagem enviada via Content Template SID (opt-in, continuacao ou marketing) e
-    isenta da janela de 24h: templates aprovados pela Meta podem iniciar/retomar a conversa."""
+    """Toda mensagem enviada via template (opt-in, continuacao ou marketing) e isenta da
+    janela de 24h: templates aprovados pela Meta podem iniciar/retomar a conversa.
+    Vale para o Content Template SID da Twilio e para o nome de template da Cloud API."""
     metadata = dict(mensagem.metadata_envio or {})
     if metadata.get('tipo_template'):
         return True
     template_cfg = dict(metadata.get('twilio_template') or {})
-    return bool((template_cfg.get('content_sid') or '').strip())
+    if (template_cfg.get('content_sid') or '').strip():
+        return True
+    meta_cfg = dict(metadata.get('meta_template') or {})
+    return bool((meta_cfg.get('nome') or '').strip())
 
 
 def mensagem_eh_template_primeiro_contato(mensagem: MensagemContato) -> bool:

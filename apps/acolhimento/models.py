@@ -650,9 +650,10 @@ class RespostaPergunta(models.Model):
 class TemplateWhatsapp(models.Model):
 	"""Configuracao das mensagens padrao do WhatsApp, editavel pela aplicacao.
 
-	Na Twilio, guarda o Content Template SID e suas variaveis. No Evolution,
-	guarda o texto simples equivalente. Quando preenchido, sobrescreve o
-	valor do .env (settings); vazio => usa o .env.
+	Na Twilio, guarda o Content Template SID e suas variaveis. Na API oficial da
+	Meta, guarda o nome e o idioma do template aprovado (as variaveis sao as
+	mesmas da Twilio). No Evolution, guarda o texto simples equivalente. Quando
+	preenchido, sobrescreve o valor do .env (settings); vazio => usa o .env.
 	Os valores de `tipo` batem com metadata_envio['tipo_template'] das mensagens.
 	"""
 
@@ -664,6 +665,8 @@ class TemplateWhatsapp(models.Model):
 	content_sid = models.CharField('Content Template SID', max_length=64, blank=True)
 	content_variables = models.TextField('Variaveis (JSON)', blank=True, default='{}')
 	texto_evolution = models.TextField('Texto WhatsApp', blank=True)
+	meta_nome = models.CharField('Nome do template (Meta)', max_length=512, blank=True)
+	meta_idioma = models.CharField('Idioma do template (Meta)', max_length=15, blank=True, default='pt_BR')
 	atualizado_em = models.DateTimeField(auto_now=True)
 	atualizado_por = models.ForeignKey(
 		settings.AUTH_USER_MODEL,

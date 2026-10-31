@@ -8,7 +8,7 @@
 		<div>
 			<span class="section-eyebrow">Configuracoes</span>
 			<h1>Mensagens do WhatsApp</h1>
-			<p>Configure os templates da Twilio e os textos simples usados pela conexao direta do WhatsApp. Deixe um campo vazio para usar o valor padrao do ambiente.</p>
+			<p>Configure os templates aprovados na Meta, os templates da Twilio e os textos simples usados pela conexao direta do WhatsApp. Deixe um campo vazio para usar o valor padrao do ambiente.</p>
 		</div>
         <a class="btn secundario" href="{% url 'dashboard' %}">
             <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
@@ -19,6 +19,10 @@
 	{% if usa_evolution %}
 	<div class="config-alert">
 		<strong>Conexao direta ativa</strong>: boas-vindas e continuacao usam os textos desta tela.
+	</div>
+	{% elif usa_meta %}
+	<div class="config-alert">
+		<strong>API oficial da Meta ativa</strong>: boas-vindas e continuacao usam o <b>nome do template (Meta)</b> e o idioma desta tela. O nome precisa ser exatamente o do template aprovado no painel da Meta.
 	</div>
 	{% elif not twilio_habilitado %}
 	<div class="config-alert">
@@ -52,6 +56,21 @@
                 </div>
 
                 <p class="builder-field">
+                    <label for="{{ form.opt_in_meta_nome.id_for_label }}">Nome do template (Meta)</label>
+                    {{ form.opt_in_meta_nome }}
+                    {% if env_opt_in_meta_nome %}<small class="table-muted-text">Padrao do .env: <code>{{ env_opt_in_meta_nome }}</code></small>
+                    {% else %}<small class="table-muted-text">Sem padrao no .env — defina o nome aqui (ex.: <code>boas_vindas_pibvp</code>).</small>{% endif %}
+                    {% if form.opt_in_meta_nome.errors %}<span class="form-errors">{{ form.opt_in_meta_nome.errors.0 }}</span>{% endif %}
+                </p>
+
+                <p class="builder-field">
+                    <label for="{{ form.opt_in_meta_idioma.id_for_label }}">Idioma do template (Meta)</label>
+                    {{ form.opt_in_meta_idioma }}
+                    <small class="table-muted-text">Codigo do idioma escolhido ao criar o template, normalmente <code>pt_BR</code>.</small>
+                    {% if form.opt_in_meta_idioma.errors %}<span class="form-errors">{{ form.opt_in_meta_idioma.errors.0 }}</span>{% endif %}
+                </p>
+
+                <p class="builder-field">
                     <label for="{{ form.opt_in_sid.id_for_label }}">Content Template SID</label>
                     {{ form.opt_in_sid }}
                     {% if env_opt_in_sid %}<small class="table-muted-text">Padrao do .env: <code>{{ env_opt_in_sid }}</code></small>
@@ -62,7 +81,7 @@
 				<p class="builder-field">
 					<label for="{{ form.opt_in_variables.id_for_label }}">Variaveis (JSON)</label>
 					{{ form.opt_in_variables }}
-					<small class="table-muted-text">A variavel <code>1</code> e preenchida automaticamente com o nome da pessoa; use este JSON para as demais.</small>
+					<small class="table-muted-text">Vale para Twilio e Meta. A variavel <code>1</code> e preenchida automaticamente com o nome da pessoa; use este JSON para as demais.</small>
 					{% if form.opt_in_variables.errors %}<span class="form-errors">{{ form.opt_in_variables.errors.0 }}</span>{% endif %}
 				</p>
 
@@ -89,6 +108,21 @@
                 </div>
 
                 <p class="builder-field">
+                    <label for="{{ form.continuar_meta_nome.id_for_label }}">Nome do template (Meta)</label>
+                    {{ form.continuar_meta_nome }}
+                    {% if env_continuar_meta_nome %}<small class="table-muted-text">Padrao do .env: <code>{{ env_continuar_meta_nome }}</code></small>
+                    {% else %}<small class="table-muted-text">Sem padrao no .env — defina o nome aqui (ex.: <code>continuar_conversa_pibvp</code>).</small>{% endif %}
+                    {% if form.continuar_meta_nome.errors %}<span class="form-errors">{{ form.continuar_meta_nome.errors.0 }}</span>{% endif %}
+                </p>
+
+                <p class="builder-field">
+                    <label for="{{ form.continuar_meta_idioma.id_for_label }}">Idioma do template (Meta)</label>
+                    {{ form.continuar_meta_idioma }}
+                    <small class="table-muted-text">Codigo do idioma escolhido ao criar o template, normalmente <code>pt_BR</code>.</small>
+                    {% if form.continuar_meta_idioma.errors %}<span class="form-errors">{{ form.continuar_meta_idioma.errors.0 }}</span>{% endif %}
+                </p>
+
+                <p class="builder-field">
                     <label for="{{ form.continuar_sid.id_for_label }}">Content Template SID</label>
                     {{ form.continuar_sid }}
                     {% if env_continuar_sid %}<small class="table-muted-text">Padrao do .env: <code>{{ env_continuar_sid }}</code></small>
@@ -99,7 +133,7 @@
 				<p class="builder-field">
 					<label for="{{ form.continuar_variables.id_for_label }}">Variaveis (JSON)</label>
 					{{ form.continuar_variables }}
-					<small class="table-muted-text">A variavel <code>1</code> e preenchida automaticamente com o nome da pessoa; use este JSON para as demais.</small>
+					<small class="table-muted-text">Vale para Twilio e Meta. A variavel <code>1</code> e preenchida automaticamente com o nome da pessoa; use este JSON para as demais.</small>
 					{% if form.continuar_variables.errors %}<span class="form-errors">{{ form.continuar_variables.errors.0 }}</span>{% endif %}
 				</p>
 

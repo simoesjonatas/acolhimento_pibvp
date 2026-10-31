@@ -149,7 +149,10 @@ Principais variáveis usadas pelo projeto:
 - `TWILIO_TEMPLATE_OPT_IN_VARIABLES` (JSON string com variáveis do template)
 - `TWILIO_TEMPLATE_CONTINUAR_SID` (Content SID do template aprovado para continuar conversa)
 - `TWILIO_TEMPLATE_CONTINUAR_VARIABLES` (JSON string com variáveis do template de continuação)
-- `WHATSAPP_PROVIDER` (`twilio` ou `evolution`)
+- `WHATSAPP_PROVIDER` (`meta`, `twilio` ou `evolution`)
+- `META_WA_PHONE_NUMBER_ID`, `META_WA_BUSINESS_ACCOUNT_ID`, `META_WA_ACCESS_TOKEN`, `META_WA_APP_SECRET`, `META_WA_VERIFY_TOKEN` (API oficial da Meta; ver `docs/meta-cloud-api.md`)
+- `META_TEMPLATE_OPT_IN_NOME` / `META_TEMPLATE_OPT_IN_IDIOMA` / `META_TEMPLATE_OPT_IN_VARIABLES` (template aprovado de primeiro contato)
+- `META_TEMPLATE_CONTINUAR_NOME` / `META_TEMPLATE_CONTINUAR_IDIOMA` / `META_TEMPLATE_CONTINUAR_VARIABLES` (template aprovado de continuacao)
 - `EVOLUTION_BASE_URL` (URL que o Django usa para chamar o Evolution; em producao com a rede compartilhada, use `http://evolution-api:8080`)
 - `EVOLUTION_PUBLIC_URL` (URL exibida para abrir o manager; pode ser local ou uma URL publica protegida)
 - `EVOLUTION_API_KEY`

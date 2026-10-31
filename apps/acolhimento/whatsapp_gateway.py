@@ -1,9 +1,10 @@
-"""Gateway de WhatsApp: escolhe o provider (Twilio ou Evolution) em runtime.
+"""Gateway de WhatsApp: escolhe o provider (Meta, Twilio ou Evolution) em runtime.
 
 Ponto unico usado pelo processador da fila (`fila_processor.py`). Mantem o
-comportamento do Twilio identico ao anterior; quando WHATSAPP_PROVIDER=evolution,
-envia texto simples (modo Baileys) e ignora as regras de opt-in/janela/template
-da Meta (que sao especificas da Twilio/WhatsApp Business API).
+comportamento do Twilio identico ao anterior; WHATSAPP_PROVIDER=meta fala direto
+com a API oficial (Cloud API) e segue as mesmas regras de opt-in/janela/template;
+quando WHATSAPP_PROVIDER=evolution, envia texto simples (modo Baileys) e ignora
+essas regras (que sao especificas da WhatsApp Business API).
 """
 from __future__ import annotations
 
@@ -12,7 +13,13 @@ from typing import Any
 from django.conf import settings
 from django.utils import timezone
 
-from apps.acolhimento import evolution_service, mensagem_variacao, template_config, twilio_service
+from apps.acolhimento import (
+    evolution_service,
+    mensagem_variacao,
+    meta_service,
+    template_config,
+    twilio_service,
+)
 from apps.acolhimento.models import ConfiguracaoProcessamentoFila, MensagemContato, TemplateWhatsapp
 from apps.acolhimento import whatsapp_rules
 
@@ -29,9 +36,17 @@ def usando_evolution() -> bool:
     return provider() == 'evolution'
 
 
+def usando_meta() -> bool:
+    return provider() == 'meta'
+
+
 def provider_key() -> str:
     """Chave usada em metadata_envio para guardar o resultado/erro do provider."""
-    return 'evolution' if usando_evolution() else 'twilio'
+    if usando_evolution():
+        return 'evolution'
+    if usando_meta():
+        return 'meta'
+    return 'twilio'
 
 
 def motivo_bloqueio_mensagem(mensagem: MensagemContato):
@@ -156,6 +171,62 @@ def _enviar_twilio(mensagem: MensagemContato, destino: str) -> dict[str, Any]:
     }
 
 
+_TIPOS_TEMPLATE_CONFIGURAVEIS = {
+    TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO,
+    TemplateWhatsapp.Tipo.CONTINUAR,
+}
+
+
+def _template_meta_para(mensagem: MensagemContato) -> dict[str, Any]:
+    """Bloco {nome, idioma, parametros} do template a enviar pela Meta, ou {} para texto livre.
+
+    Prioridade: o que foi gravado na mensagem ao enfileirar (`meta_template`). Se a
+    mensagem e de um fluxo configuravel (opt-in / continuar) mas foi enfileirada em
+    outro provider (ex.: migracao Twilio -> Meta com fila pendente), resolve o
+    template na hora pela configuracao atual.
+    """
+    metadata = dict(mensagem.metadata_envio or {})
+    template = dict(metadata.get('meta_template') or {})
+    if (template.get('nome') or '').strip():
+        return template
+
+    tipo = metadata.get('tipo_template')
+    if tipo in _TIPOS_TEMPLATE_CONFIGURAVEIS:
+        nome = template_config.meta_nome_para(tipo)
+        if not nome:
+            raise WhatsAppSendError(template_config.mensagem_nao_configurado(tipo))
+        return template_config.montar_meta_template(tipo, mensagem.pessoa)
+    return {}
+
+
+def _enviar_meta(mensagem: MensagemContato, destino: str) -> dict[str, Any]:
+    template = _template_meta_para(mensagem)
+    try:
+        if template:
+            resultado = meta_service.send_template(
+                to_phone=destino,
+                nome=template['nome'],
+                idioma=template.get('idioma') or 'pt_BR',
+                parametros=template.get('parametros') or {},
+            )
+        else:
+            resultado = meta_service.send_text(to_phone=destino, text=mensagem.conteudo)
+    except meta_service.MetaWhatsAppError as exc:
+        raise WhatsAppSendError(str(exc)) from exc
+
+    # A Meta responde "accepted" assim que aceita a mensagem; entrega/leitura/falha
+    # chegam depois pelo webhook (`meta_webhooks.py`), que atualiza a mensagem.
+    return {
+        'provider': 'meta',
+        'status_fila': MensagemContato.StatusFilaChoices.ENVIADA,
+        'enviada_em': timezone.now(),
+        'referencia_externa': resultado.get('sid') or '',
+        'status_label': str(resultado.get('status') or 'accepted'),
+        'metadata_key': 'meta',
+        'metadata_value': resultado,
+    }
+
+
 def enviar(mensagem: MensagemContato, destino: str) -> dict[str, Any]:
     """Envia a mensagem pelo provider ativo. Levanta WhatsAppSendError em falha.
 
@@ -165,4 +236,6 @@ def enviar(mensagem: MensagemContato, destino: str) -> dict[str, Any]:
     """
     if usando_evolution():
         return _enviar_evolution(mensagem, destino)
+    if usando_meta():
+        return _enviar_meta(mensagem, destino)
     return _enviar_twilio(mensagem, destino)

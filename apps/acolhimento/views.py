@@ -705,6 +705,8 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		context['total_pessoas_filtradas'] = len(audiencia)
 		context['total_janela_aberta'] = total_janela_aberta
 		context['selected_pessoas'] = selected_pessoas
+		context['usa_meta'] = template_config.usando_meta()
+		context['usa_evolution'] = template_config.usando_evolution()
 		context['modo_livre'] = DisparoMensagemMassaForm.MODO_LIVRE
 		context['modo_template'] = DisparoMensagemMassaForm.MODO_TEMPLATE
 		context['modo_questionario'] = DisparoMensagemMassaForm.MODO_QUESTIONARIO
@@ -714,20 +716,46 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		return context
 
 	def _enfileirar_template(self, form):
-		"""Modo template: envia um Content Template (marketing) para todos os selecionados."""
+		"""Modo template: envia um template (marketing) para todos os selecionados.
+
+		Na Twilio o template e o Content SID; na API oficial da Meta e o nome do
+		template aprovado + idioma. O campo `content_sid` do formulario guarda os dois.
+		"""
 		pessoas = list(form.cleaned_data['pessoas'])
 		content_sid = form.cleaned_data['content_sid'].strip()
 		base_vars = form.cleaned_data.get('content_variables') or {}
+		usa_meta = template_config.usando_meta()
+		idioma = (form.cleaned_data.get('template_idioma') or '').strip() or 'pt_BR'
+
+		def _variaveis_dict(pessoa):
+			nome = (pessoa.nome or '').strip()
+			return {
+				str(chave): (valor.replace('{nome}', nome) if isinstance(valor, str) else valor)
+				for chave, valor in base_vars.items()
+			}
 
 		def _variaveis_para(pessoa):
 			if not base_vars:
 				return ''
-			nome = (pessoa.nome or '').strip()
-			person_vars = {
-				chave: (valor.replace('{nome}', nome) if isinstance(valor, str) else valor)
-				for chave, valor in base_vars.items()
+			return json.dumps(_variaveis_dict(pessoa), ensure_ascii=False)
+
+		def _metadata_para(pessoa):
+			if usa_meta:
+				return {
+					'tipo_template': 'marketing_massa',
+					'meta_template': {
+						'nome': content_sid,
+						'idioma': idioma,
+						'parametros': _variaveis_dict(pessoa),
+					},
+				}
+			return {
+				'tipo_template': 'marketing_massa',
+				'twilio_template': {
+					'content_sid': content_sid,
+					'content_variables': _variaveis_para(pessoa),
+				},
 			}
-			return json.dumps(person_vars, ensure_ascii=False)
 
 		mensagens = [
 			MensagemContato(
@@ -739,13 +767,7 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 				prioridade=5,
 				agendada_para=None,
 				conteudo=f'[Template] {content_sid}',
-				metadata_envio={
-					'tipo_template': 'marketing_massa',
-					'twilio_template': {
-						'content_sid': content_sid,
-						'content_variables': _variaveis_para(pessoa),
-					},
-				},
+				metadata_envio=_metadata_para(pessoa),
 			)
 			for pessoa in pessoas
 		]
@@ -1267,6 +1289,7 @@ class PrimeiroContatoMensagensView(LoginRequiredMixin, ConversasPessoasPermissao
 		context['janela_aberta'] = janela_atendimento_aberta(self.object)
 		context['precisa_template_continuar'] = precisa_template_continuar(self.object)
 		context['usa_evolution'] = template_config.usando_evolution()
+		context['usa_meta'] = template_config.usando_meta()
 		context['template_continuar_configurado'] = template_config.continuar_configurado()
 		context['pode_enviar_template_continuar'] = pode_enviar_template_continuar(self.object)
 		context['template_continuar_liberado_em'] = proximo_template_continuar_em(self.object)
@@ -1460,15 +1483,10 @@ class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoM
 		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
 		tipo_template = TemplateWhatsapp.Tipo.CONTINUAR
 		usa_evolution = template_config.usando_evolution()
-		template_sid = template_config.continuar_sid()
+		usa_meta = template_config.usando_meta()
+		template_sid = '' if usa_meta else template_config.continuar_sid()
 		if not template_config.continuar_configurado():
-			mensagem_config = (
-				'Mensagem de continuacao do WhatsApp nao configurada. '
-				'Defina o texto na tela de configuracao de templates.'
-				if usa_evolution
-				else 'Template de continuacao nao configurado. Defina o SID na tela de configuracao de templates.'
-			)
-			messages.error(request, mensagem_config)
+			messages.error(request, template_config.mensagem_nao_configurado(tipo_template))
 			return redirect('pessoas-mensagens', pk=pessoa.pk)
 
 		bloqueio = motivo_bloqueio_template_continuar(pessoa)
@@ -1491,6 +1509,8 @@ class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoM
 				'content_sid': template_sid,
 				'content_variables': content_variables,
 			}
+		if usa_meta:
+			metadata_envio['meta_template'] = template_config.montar_meta_template(tipo_template, pessoa)
 		if usa_evolution:
 			texto_evolution = template_config.continuar_texto_evolution().replace('{nome}', nome)
 			metadata_envio['evolution_texto'] = texto_evolution
@@ -1528,20 +1548,27 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 			'opt_in_sid': template_config.opt_in_sid(),
 			'opt_in_variables': template_config.opt_in_variables(),
 			'opt_in_texto_evolution': template_config.opt_in_texto_evolution(),
+			'opt_in_meta_nome': template_config.opt_in_meta_nome(),
+			'opt_in_meta_idioma': template_config.opt_in_meta_idioma(),
 			'continuar_sid': template_config.continuar_sid(),
 			'continuar_variables': template_config.continuar_variables(),
 			'continuar_texto_evolution': template_config.continuar_texto_evolution(),
+			'continuar_meta_nome': template_config.continuar_meta_nome(),
+			'continuar_meta_idioma': template_config.continuar_meta_idioma(),
 		}
 
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
 		context['twilio_habilitado'] = settings.TWILIO_ENABLED
 		context['usa_evolution'] = template_config.usando_evolution()
+		context['usa_meta'] = template_config.usando_meta()
 		context['whatsapp_provider'] = template_config.provider()
 		context['env_opt_in_sid'] = (settings.TWILIO_TEMPLATE_OPT_IN_SID or '').strip()
 		context['env_continuar_sid'] = (settings.TWILIO_TEMPLATE_CONTINUAR_SID or '').strip()
 		context['env_opt_in_texto_evolution'] = (settings.EVOLUTION_TEXTO_OPTIN or '').strip()
 		context['env_continuar_texto_evolution'] = (settings.EVOLUTION_TEXTO_CONTINUAR or '').strip()
+		context['env_opt_in_meta_nome'] = (getattr(settings, 'META_TEMPLATE_OPT_IN_NOME', '') or '').strip()
+		context['env_continuar_meta_nome'] = (getattr(settings, 'META_TEMPLATE_CONTINUAR_NOME', '') or '').strip()
 		context['configs'] = {
 			cfg.tipo: cfg
 			for cfg in TemplateWhatsapp.objects.select_related('atualizado_por')
@@ -1555,11 +1582,15 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 				'content_sid': dados['opt_in_sid'],
 				'content_variables': dados['opt_in_variables'],
 				'texto_evolution': dados['opt_in_texto_evolution'],
+				'meta_nome': dados['opt_in_meta_nome'],
+				'meta_idioma': dados['opt_in_meta_idioma'],
 			},
 			TemplateWhatsapp.Tipo.CONTINUAR: {
 				'content_sid': dados['continuar_sid'],
 				'content_variables': dados['continuar_variables'],
 				'texto_evolution': dados['continuar_texto_evolution'],
+				'meta_nome': dados['continuar_meta_nome'],
+				'meta_idioma': dados['continuar_meta_idioma'],
 			},
 		}
 		for tipo, defaults in valores.items():

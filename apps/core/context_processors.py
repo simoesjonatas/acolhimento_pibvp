@@ -16,24 +16,36 @@ def mensagens_retorno_pendente(request):
 
 
 def whatsapp_conexao(request):
-    """Indicador discreto (no menu) do estado da conexao do WhatsApp via Evolution.
+    """Indicador discreto (no menu) do estado da conexao do WhatsApp.
 
-    So faz sentido no modo Evolution; no modo Twilio retorna vazio (nao renderiza).
-    O estado e cacheado por 30s para nao chamar o Evolution a cada requisicao.
+    Modo Evolution: estado da sessao pareada (open/connecting/close). Modo Meta
+    (API oficial): se o Graph API responde pelo numero configurado. No modo Twilio
+    retorna vazio (nao renderiza). O estado e cacheado por 30s para nao chamar a
+    API a cada requisicao.
     """
     from django.conf import settings
 
-    if (getattr(settings, 'WHATSAPP_PROVIDER', 'twilio') or '').strip().lower() != 'evolution':
+    provider = (getattr(settings, 'WHATSAPP_PROVIDER', 'twilio') or '').strip().lower()
+    if provider not in ('evolution', 'meta'):
         return {}
     if not request.user.is_authenticated:
         return {}
 
     from django.core.cache import cache
-    from apps.acolhimento import evolution_service
 
     estado = cache.get('wa_conn_estado', '__miss__')
     if estado == '__miss__':
-        estado = evolution_service.get_connection_state(timeout=2)
+        if provider == 'meta':
+            from apps.acolhimento import meta_service
+
+            if meta_service.configurado():
+                estado = 'open' if meta_service.get_phone_number_info(timeout=2) is not None else None
+            else:
+                estado = 'close'
+        else:
+            from apps.acolhimento import evolution_service
+
+            estado = evolution_service.get_connection_state(timeout=2)
         cache.set('wa_conn_estado', estado, 30)
 
     if estado == 'open':
@@ -42,6 +54,8 @@ def whatsapp_conexao(request):
         classe, texto = 'wait', 'conectando'
     elif estado is None:
         classe, texto = 'off', 'API fora do ar'
+    elif provider == 'meta':
+        classe, texto = 'off', 'nao configurado'
     else:
         classe, texto = 'off', 'desconectado'
 
@@ -60,7 +74,7 @@ def whatsapp_conexao(request):
         texto = f'conectado, mas {falhas} envio(s) falharam em 24h'
 
     return {
-        'whatsapp_provider': 'evolution',
+        'whatsapp_provider': provider,
         'whatsapp_estado': estado,
         'whatsapp_estado_classe': classe,
         'whatsapp_estado_texto': texto,

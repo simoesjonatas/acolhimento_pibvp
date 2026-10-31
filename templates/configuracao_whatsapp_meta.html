@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+
+{% block title %}WhatsApp (API oficial da Meta){% endblock %}
+
+{% block content %}
+<div class="config-whatsapp-page">
+    <style>
+        .wa-conn-badge { display:inline-flex; align-items:center; gap:8px; padding:6px 14px;
+            border-radius:999px; font-weight:600; font-size:.9rem; }
+        .wa-conn-badge .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+        .wa-conn-badge.ok   { background:rgba(34,197,94,.15);  color:#15803d; }
+        .wa-conn-badge.ok   .dot { background:#22c55e; }
+        .wa-conn-badge.wait { background:rgba(245,158,11,.15); color:#b45309; }
+        .wa-conn-badge.wait .dot { background:#e2550e; }
+        .wa-conn-badge.off  { background:rgba(239,68,68,.15);  color:#b91c1c; }
+        .wa-conn-badge.off  .dot { background:#ef4444; }
+        .config-whatsapp-page { max-width:100%; overflow-x:hidden; }
+        .wa-conn-grid { display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap:20px; align-items:start; }
+        .wa-conn-grid > * { min-width:0; }
+        @media (max-width: 860px){ .wa-conn-grid { grid-template-columns: minmax(0, 1fr); } }
+        .wa-kv { margin:4px 0; overflow-wrap:anywhere; }
+        .wa-kv b { font-weight:600; }
+        .wa-check { display:flex; gap:8px; align-items:flex-start; margin:6px 0; }
+        .wa-check .ok { color:#15803d; } .wa-check .no { color:#b91c1c; }
+        .wa-tpl-table { width:100%; border-collapse:collapse; margin-top:10px; font-size:.92rem; }
+        .wa-tpl-table th, .wa-tpl-table td { text-align:left; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.08); }
+        .wa-tpl-status { text-transform:lowercase; }
+        .wa-test-form label { display:block; margin-top:10px; font-weight:600; }
+        .wa-test-form input[type=text], .wa-test-form textarea { width:100%; }
+        .wa-test-form .wa-actions { margin-top:14px; }
+    </style>
+
+    <section class="page-hero">
+        <div>
+            <span class="section-eyebrow">Configuracoes</span>
+            <h1>WhatsApp — API oficial da Meta</h1>
+            <p>O numero e registrado no painel da Meta; aqui voce confere se o sistema consegue falar com ele. Somente superusuarios.</p>
+        </div>
+        <a class="btn secundario" href="{% url 'configuracao-whatsapp' %}" data-no-loading>
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            <span class="btn-text">Atualizar status</span>
+        </a>
+    </section>
+
+    <div class="wa-conn-grid">
+        <section class="profile-form-card">
+            <div class="panel-header"><div><h2>Status do numero</h2></div></div>
+
+            {% if not configurado %}
+                <span class="wa-conn-badge off"><span class="dot"></span> Nao configurado</span>
+                <p class="table-muted-text" style="margin-top:10px">
+                    Defina <code>META_WA_ACCESS_TOKEN</code> e <code>META_WA_PHONE_NUMBER_ID</code> no ambiente para o sistema falar com a Meta.
+                </p>
+            {% elif not reachable %}
+                <span class="wa-conn-badge off"><span class="dot"></span> API fora do ar ou credenciais invalidas</span>
+                <p class="table-muted-text" style="margin-top:10px">
+                    Nao consegui consultar o numero <code>{{ phone_number_id }}</code> no Graph API ({{ api_version }}).
+                    Confira o token (precisa ser permanente, de System User) e o Phone Number ID.
+                </p>
+            {% else %}
+                <span class="wa-conn-badge ok"><span class="dot"></span> Conectado a Meta</span>
+                <p class="wa-kv" style="margin-top:14px">Numero: <b>{{ info.display_phone_number|default:'—' }}</b></p>
+                <p class="wa-kv">Nome exibido: <b>{{ info.verified_name|default:'—' }}</b>
+                    {% if info.name_status %}<span class="table-muted-text">({{ info.name_status|lower }})</span>{% endif %}</p>
+                <p class="wa-kv">Qualidade: <b>{{ info.quality_rating|default:'—' }}</b></p>
+                {% if info.code_verification_status %}<p class="wa-kv">Verificacao do numero: <b>{{ info.code_verification_status|lower }}</b></p>{% endif %}
+            {% endif %}
+
+            <p class="wa-kv" style="margin-top:14px">Phone Number ID: <b>{{ phone_number_id|default:'—' }}</b></p>
+            <p class="wa-kv">WABA ID: <b>{{ waba_id|default:'—' }}</b></p>
+            <p class="wa-kv">Token: <b>{{ token_mascarado|default:'—' }}</b></p>
+            <p class="wa-kv">Versao da API: <b>{{ api_version }}</b></p>
+
+            <div class="panel-header" style="margin-top:18px"><div><h2>Webhook</h2></div></div>
+            <p class="wa-kv">URL de callback: <code>{{ webhook_url }}</code></p>
+            <div class="wa-check">{% if verify_token_ok %}<span class="ok">✔</span><span>Verify token configurado (<code>META_WA_VERIFY_TOKEN</code>).</span>{% else %}<span class="no">✖</span><span>Falta o <code>META_WA_VERIFY_TOKEN</code>: a Meta nao consegue validar o webhook.</span>{% endif %}</div>
+            <div class="wa-check">{% if app_secret_ok %}<span class="ok">✔</span><span>App Secret configurado: os eventos recebidos sao autenticados.</span>{% else %}<span class="no">✖</span><span>Falta o <code>META_WA_APP_SECRET</code>: em producao o webhook recusa todos os eventos.</span>{% endif %}</div>
+            <p class="table-muted-text">No painel da Meta, assine o campo <b>messages</b> para receber mensagens e status de entrega.</p>
+        </section>
+
+        <section class="profile-form-card">
+            <div class="panel-header"><div>
+                <h2>Templates</h2>
+                <p>Os nomes vem da <a href="{% url 'configuracao-templates' %}">tela de mensagens</a>; o status vem da Meta.</p>
+            </div></div>
+
+            <p class="wa-kv">Primeiro contato: <b>{{ opt_in_nome|default:'(nao configurado)' }}</b> <span class="table-muted-text">{{ opt_in_idioma }}</span> — <span class="wa-tpl-status">{{ opt_in_status }}</span></p>
+            <p class="wa-kv">Continuar conversa: <b>{{ continuar_nome|default:'(nao configurado)' }}</b> <span class="table-muted-text">{{ continuar_idioma }}</span> — <span class="wa-tpl-status">{{ continuar_status }}</span></p>
+
+            {% if templates %}
+            <table class="wa-tpl-table">
+                <thead><tr><th>Nome</th><th>Idioma</th><th>Categoria</th><th>Status</th></tr></thead>
+                <tbody>
+                {% for t in templates %}
+                    <tr><td><code>{{ t.name }}</code></td><td>{{ t.language }}</td><td>{{ t.category|lower }}</td><td class="wa-tpl-status">{{ t.status|lower }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% elif configurado and waba_id %}
+            <p class="table-muted-text" style="margin-top:10px">Nao consegui listar os templates da WABA <code>{{ waba_id }}</code>. O token precisa da permissao <code>whatsapp_business_management</code>.</p>
+            {% elif configurado %}
+            <p class="table-muted-text" style="margin-top:10px">Defina <code>META_WA_BUSINESS_ACCOUNT_ID</code> para listar os templates e o status de aprovacao aqui.</p>
+            {% endif %}
+
+            <div class="panel-header" style="margin-top:18px"><div>
+                <h2>Envio de teste</h2>
+                <p>Manda o template de primeiro contato (ou um texto) para um numero. Conta como envio real.</p>
+            </div></div>
+            <form method="post" class="wa-test-form">{% csrf_token %}
+                <input type="hidden" name="acao" value="teste">
+                <label for="wa-teste-telefone">Telefone (com DDD)</label>
+                <input type="text" id="wa-teste-telefone" name="telefone" placeholder="(21) 99999-9999" required>
+                <label>Tipo</label>
+                <label style="font-weight:400"><input type="radio" name="modo" value="template" checked> Template de primeiro contato (abre a conversa)</label>
+                <label style="font-weight:400"><input type="radio" name="modo" value="texto"> Texto livre (so chega se a pessoa escreveu nas ultimas 24h)</label>
+                <label for="wa-teste-texto">Texto (so no modo texto)</label>
+                <textarea id="wa-teste-texto" name="texto" rows="2" placeholder="Teste de integracao do acolhimento PIBVP."></textarea>
+                <div class="wa-actions">
+                    <button type="submit" {% if not configurado %}disabled{% endif %}>
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        <span class="btn-text">Enviar teste</span>
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+</div>
+{% endblock %}

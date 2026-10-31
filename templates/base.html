@@ -97,10 +97,10 @@
             </nav>
         </div>
         <div class="header-right{% if user.is_superuser %} has-settings{% endif %}">
-            {% if whatsapp_provider == 'evolution' %}
+            {% if whatsapp_provider == 'evolution' or whatsapp_provider == 'meta' %}
             {% if user.is_superuser %}
             <a href="{% url 'configuracao-whatsapp' %}" class="wa-menu-status wa-{{ whatsapp_estado_classe }}"
-               title="WhatsApp {{ whatsapp_estado_texto }} — clique para conectar" data-no-loading>
+               title="WhatsApp {{ whatsapp_estado_texto }} — clique para ver a conexao" data-no-loading>
                 <span class="wa-menu-dot"></span><span class="wa-menu-text">WhatsApp</span>
             </a>
             {% else %}

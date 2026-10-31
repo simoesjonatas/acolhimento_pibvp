@@ -235,11 +235,11 @@ TWILIO_TEMPLATE_CONTINUAR_VARIABLES = os.getenv('TWILIO_TEMPLATE_CONTINUAR_VARIA
 
 
 # ---------------------------------------------------------------------------
-# Provider de WhatsApp: 'evolution' ou 'twilio'.
-# Nesta branch (feat/evolution-integracao) o padrao do app e 'evolution'.
-# Durante os testes o padrao volta a 'twilio': as regras de opt-in/janela sao
-# semanticas da Twilio e o modo Baileys tentaria enviar de verdade (rede).
-# Sempre trocavel por ambiente: WHATSAPP_PROVIDER=twilio|evolution.
+# Provider de WhatsApp: 'meta' (API oficial / Cloud API), 'evolution' ou 'twilio'.
+# O padrao do app e 'evolution'. Durante os testes o padrao volta a 'twilio':
+# as regras de opt-in/janela sao semanticas da API oficial (Twilio e Meta) e o
+# modo Baileys tentaria enviar de verdade (rede).
+# Sempre trocavel por ambiente: WHATSAPP_PROVIDER=meta|twilio|evolution.
 # ---------------------------------------------------------------------------
 _default_whatsapp_provider = 'twilio' if 'test' in sys.argv else 'evolution'
 WHATSAPP_PROVIDER = os.getenv('WHATSAPP_PROVIDER', _default_whatsapp_provider).strip().lower()
@@ -271,6 +271,39 @@ EVOLUTION_TEXTO_OPTIN = os.getenv('EVOLUTION_TEXTO_OPTIN') or (
 EVOLUTION_TEXTO_CONTINUAR = os.getenv('EVOLUTION_TEXTO_CONTINUAR') or (
     'Ola {nome}, tudo bem? Podemos continuar nossa conversa?'
 )
+
+# ---------------------------------------------------------------------------
+# WhatsApp Cloud API (API oficial da Meta). Sem intermediario: o app fala direto
+# com o Graph API. Valores vindos do painel da Meta (developers.facebook.com /
+# business.facebook.com):
+#   META_WA_PHONE_NUMBER_ID  -> ID do numero de telefone (WhatsApp > API Setup)
+#   META_WA_BUSINESS_ACCOUNT_ID -> ID da conta do WhatsApp Business (WABA)
+#   META_WA_ACCESS_TOKEN     -> token permanente de um System User
+#   META_WA_APP_SECRET       -> App Secret do app (valida a assinatura do webhook)
+#   META_WA_VERIFY_TOKEN     -> string escolhida por nos; a Meta devolve no GET de
+#                               verificacao do webhook
+# Os templates sao identificados por NOME + IDIOMA (ex.: boas_vindas / pt_BR), e
+# as variaveis seguem a mesma convencao da Twilio: {"1": "{nome}"} => a variavel
+# 1 do corpo recebe o nome da pessoa.
+# ---------------------------------------------------------------------------
+META_WA_API_VERSION = os.getenv('META_WA_API_VERSION', 'v22.0').strip()
+META_WA_GRAPH_BASE_URL = os.getenv('META_WA_GRAPH_BASE_URL', 'https://graph.facebook.com').rstrip('/')
+META_WA_PHONE_NUMBER_ID = os.getenv('META_WA_PHONE_NUMBER_ID', '').strip()
+META_WA_BUSINESS_ACCOUNT_ID = os.getenv('META_WA_BUSINESS_ACCOUNT_ID', '').strip()
+META_WA_ACCESS_TOKEN = os.getenv('META_WA_ACCESS_TOKEN', '').strip()
+META_WA_APP_SECRET = os.getenv('META_WA_APP_SECRET', '').strip()
+META_WA_VERIFY_TOKEN = os.getenv('META_WA_VERIFY_TOKEN', '').strip()
+META_WA_REQUEST_TIMEOUT_SECONDS = int(os.getenv('META_WA_REQUEST_TIMEOUT_SECONDS', '20'))
+META_WA_WEBHOOK_URL = os.getenv(
+    'META_WA_WEBHOOK_URL',
+    f'{PUBLIC_BASE_URL}/acolhimento/mensagens/webhook/meta/',
+).strip()
+META_TEMPLATE_OPT_IN_NOME = os.getenv('META_TEMPLATE_OPT_IN_NOME', '').strip()
+META_TEMPLATE_OPT_IN_IDIOMA = os.getenv('META_TEMPLATE_OPT_IN_IDIOMA', 'pt_BR').strip() or 'pt_BR'
+META_TEMPLATE_OPT_IN_VARIABLES = os.getenv('META_TEMPLATE_OPT_IN_VARIABLES', '{}')
+META_TEMPLATE_CONTINUAR_NOME = os.getenv('META_TEMPLATE_CONTINUAR_NOME', '').strip()
+META_TEMPLATE_CONTINUAR_IDIOMA = os.getenv('META_TEMPLATE_CONTINUAR_IDIOMA', 'pt_BR').strip() or 'pt_BR'
+META_TEMPLATE_CONTINUAR_VARIABLES = os.getenv('META_TEMPLATE_CONTINUAR_VARIABLES', '{}')
 
 # ---------------------------------------------------------------------------
 # Opt-in-first (anti-bloqueio): faz a PESSOA iniciar a conversa.

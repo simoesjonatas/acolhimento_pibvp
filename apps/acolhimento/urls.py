@@ -15,8 +15,9 @@ from apps.acolhimento.como_conheceu_views import (
     OpcaoComoConheceuToggleView,
     OpcaoComoConheceuUpdateView,
 )
-from apps.acolhimento.evolution_views import ConfiguracaoWhatsappConexaoView
 from apps.acolhimento.evolution_webhooks import EvolutionWebhookView
+from apps.acolhimento.meta_views import ConfiguracaoWhatsappView
+from apps.acolhimento.meta_webhooks import MetaWebhookView
 from apps.acolhimento.views import (
     AguardandoRespostaView,
     AutoCadastroCreateView,
@@ -67,7 +68,7 @@ urlpatterns = [
     path('mensagens/processamento/', ProcessamentoFilaControleView.as_view(), name='mensagens-processamento'),
     path('mensagens/disparo/', DisparoMensagemMassaView.as_view(), name='mensagens-disparo-massa'),
     path('configuracoes/templates/', ConfiguracaoTemplatesView.as_view(), name='configuracao-templates'),
-    path('configuracoes/whatsapp/', ConfiguracaoWhatsappConexaoView.as_view(), name='configuracao-whatsapp'),
+    path('configuracoes/whatsapp/', ConfiguracaoWhatsappView.as_view(), name='configuracao-whatsapp'),
     path('configuracoes/atendimento/', ConfiguracaoAtendimentoBotView.as_view(), name='configuracao-atendimento'),
     path('configuracoes/atendimento/opcao/nova/', OpcaoAtendimentoBotCreateView.as_view(), name='atendimento-opcao-nova'),
     path('configuracoes/atendimento/opcao/<int:pk>/editar/', OpcaoAtendimentoBotUpdateView.as_view(), name='atendimento-opcao-editar'),
@@ -82,6 +83,7 @@ urlpatterns = [
     path('mensagens/webhook/twilio-status/', TwilioStatusWebhookView.as_view(), name='mensagens-webhook-twilio-status'),
     path('mensagens/webhook/twilio-inbound/', TwilioInboundWebhookView.as_view(), name='mensagens-webhook-twilio-inbound'),
     path('mensagens/webhook/evolution/', EvolutionWebhookView.as_view(), name='mensagens-webhook-evolution'),
+    path('mensagens/webhook/meta/', MetaWebhookView.as_view(), name='mensagens-webhook-meta'),
     path('mensagens/<int:pk>/excluir/', MensagemContatoExcluirView.as_view(), name='mensagens-excluir'),
     path('pessoas/novo/', PrimeiroContatoCreateView.as_view(), name='pessoas-novo'),
     path('pessoas/relatorios/', RelatorioPessoasView.as_view(), name='pessoas-relatorios'),

@@ -106,15 +106,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
 		tipo_template = TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO
 		usa_evolution = template_config.usando_evolution()
-		template_sid = template_config.opt_in_sid()
+		usa_meta = template_config.usando_meta()
+		template_sid = '' if usa_meta else template_config.opt_in_sid()
 		if action == 'disparar_template_opt_in' and not template_config.opt_in_configurado():
-			mensagem_config = (
-				'Mensagem de boas-vindas do WhatsApp nao configurada. '
-				'Defina o texto na tela de configuracao de templates.'
-				if usa_evolution
-				else 'Template SID nao configurado. Defina o SID na tela de configuracao de templates.'
-			)
-			messages.error(request, mensagem_config)
+			messages.error(request, template_config.mensagem_nao_configurado(tipo_template))
 			return redirect('dashboard')
 
 		try:
@@ -140,6 +135,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 					'content_sid': template_sid,
 					'content_variables': content_variables,
 				}
+			if usa_meta:
+				metadata_envio['meta_template'] = template_config.montar_meta_template(tipo_template, pessoa)
 			if usa_evolution:
 				texto_evolution = texto_evolution_base.replace('{nome}', nome)
 				metadata_envio['evolution_texto'] = texto_evolution

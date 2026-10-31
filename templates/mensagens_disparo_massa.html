@@ -106,7 +106,7 @@
                             <svg viewBox="0 0 24 24"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 0 1-5.8-1.6"/></svg>
                         </span>
                         <strong>Template (marketing)</strong>
-                        <small>Envia um template aprovado (<b>Content SID</b>) para qualquer pessoa fora do primeiro contato, mesmo com a janela fechada.</small>
+                        <small>Envia um template aprovado ({% if usa_meta %}<b>nome do template na Meta</b>{% else %}<b>Content SID</b>{% endif %}) para qualquer pessoa fora do primeiro contato, mesmo com a janela fechada.</small>
                     </span>
                 </label>
                 <label class="broadcast-mode-option">
@@ -139,11 +139,25 @@
             <div class="broadcast-fields" data-fields-template hidden>
                 <div class="broadcast-template-grid">
                     <div>
+                        {% if usa_meta %}
+                        <label for="id_content_sid">Nome do template (Meta)</label>
+                        {{ form.content_sid }}
+                        <small class="table-muted-text">Nome exato do template aprovado no painel da Meta (ex.: <code>convite_evento_pibvp</code>).</small>
+                        {% else %}
                         <label for="id_content_sid">Content Template SID</label>
                         {{ form.content_sid }}
                         <small class="table-muted-text">Copie o SID do template aprovado na Twilio (comeca com HX).</small>
+                        {% endif %}
                         {% if form.content_sid.errors %}<p class="form-errors">{{ form.content_sid.errors|join:', ' }}</p>{% endif %}
                     </div>
+                    {% if usa_meta %}
+                    <div>
+                        <label for="id_template_idioma">Idioma do template</label>
+                        {{ form.template_idioma }}
+                        <small class="table-muted-text">Codigo do idioma do template, normalmente <code>pt_BR</code>.</small>
+                        {% if form.template_idioma.errors %}<p class="form-errors">{{ form.template_idioma.errors|join:', ' }}</p>{% endif %}
+                    </div>
+                    {% endif %}
                     <div>
                         <label for="id_content_variables">Variaveis (JSON, opcional)</label>
                         {{ form.content_variables }}
