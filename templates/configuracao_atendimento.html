@@ -48,6 +48,10 @@
     <div class="config-alert">
         O atendimento esta ligado, mas <b>nao ha opcoes ativas</b> no menu. Cadastre ao menos uma opcao abaixo.
     </div>
+    {% elif cfg.ativo and total_opcoes_no_menu == 0 %}
+    <div class="config-alert">
+        Ha opcoes ativas, mas <b>nenhuma aparece no menu</b>: a pessoa recebe a saudacao sem lista de opcoes e so consegue acionar o bot pelas palavras-chave.
+    </div>
     {% endif %}
 
     <section class="profile-form-card">
@@ -112,7 +116,7 @@
         <div class="panel-header">
             <div>
                 <h2>Opcoes do menu</h2>
-                <p>Cada opcao vira um item numerado. A pessoa pode responder o numero ou uma palavra-chave.</p>
+                <p>Cada opcao no menu vira um item numerado; a pessoa pode responder o numero ou uma palavra-chave. Opcoes fora do menu respondem so pelas palavras-chave.</p>
             </div>
             <a class="btn" href="{% url 'atendimento-opcao-nova' %}">
                 <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -124,12 +128,12 @@
         <div class="table-wrap">
             <table>
                 <thead>
-                    <tr><th>#</th><th>Rotulo</th><th>Acao</th><th>Palavras-chave</th><th>Ativa</th><th>Acoes</th></tr>
+                    <tr><th>No menu</th><th>Rotulo</th><th>Acao</th><th>Palavras-chave</th><th>Ativa</th><th>Acoes</th></tr>
                 </thead>
                 <tbody>
                     {% for op in opcoes %}
                     <tr>
-                        <td>{{ forloop.counter }}</td>
+                        <td>{% if op.numero_menu %}{{ op.numero_menu }}{% elif op.ativa %}<span class="table-muted-text" title="Responde so pelas palavras-chave">fora do menu</span>{% else %}<span class="table-muted-text">&mdash;</span>{% endif %}</td>
                         <td>{{ op.rotulo }}</td>
                         <td>{{ op.get_acao_display }}</td>
                         <td class="table-muted-text">{{ op.palavras_chave|default:'-'|truncatechars:44 }}</td>

@@ -67,11 +67,17 @@ class ConfiguracaoAtendimentoBotView(_SuperUserOnly, View):
         cfg = ConfiguracaoAtendimentoBot.carregar()
         opcoes = list(OpcaoAtendimentoBot.objects.all().order_by('ordem', 'id'))
         ativas = [op for op in opcoes if op.ativa]
+        no_menu = atendimento_bot.opcoes_do_menu(ativas)
+        # Numero que a pessoa ve no WhatsApp (so para quem esta ativa e no menu).
+        numeros = {op.pk: numero for numero, op in enumerate(no_menu, start=1)}
+        for op in opcoes:
+            op.numero_menu = numeros.get(op.pk)
         return {
             'cfg': cfg,
             'form': form or ConfiguracaoAtendimentoBotForm(instance=cfg),
             'opcoes': opcoes,
             'total_opcoes_ativas': len(ativas),
+            'total_opcoes_no_menu': len(no_menu),
             'menu_preview': atendimento_bot.montar_menu(ativas),
             'processamento_auto_ligado': ConfiguracaoProcessamentoFila.auto_ligado(),
         }

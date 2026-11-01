@@ -747,11 +747,18 @@ class OpcaoAtendimentoBot(models.Model):
 	palavras_chave = models.TextField(
 		'Palavras-chave',
 		blank=True,
-		help_text='Aliases que acionam a opcao (separados por virgula ou linha). O numero da opcao sempre funciona.',
+		help_text=(
+			'Aliases que acionam a opcao (separados por virgula ou linha). O numero da opcao '
+			'funciona quando ela aparece no menu.'
+		),
 	)
 	resposta = models.TextField('Resposta enviada')
 	acao = models.CharField(max_length=20, choices=Acao.choices, default=Acao.RESPONDER)
+	# Ativa = o bot responde a opcao. Inativa = o bot a ignora por completo.
 	ativa = models.BooleanField(default=True)
+	# Aparece no menu = listada e numerada. Fora do menu (e ativa) = so responde pelas
+	# palavras-chave, sem numero; serve para atalhos que nao precisam ficar visiveis.
+	aparece_no_menu = models.BooleanField('Aparece no menu', default=True)
 	atualizado_em = models.DateTimeField(auto_now=True)
 
 	class Meta:

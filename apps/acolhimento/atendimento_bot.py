@@ -12,6 +12,8 @@ Nao envia nada diretamente aqui.
 """
 from __future__ import annotations
 
+import re
+
 from django.utils import timezone
 
 from apps.acolhimento.models import (
@@ -32,17 +34,33 @@ _STATUS_NAO_INTERVIR = {
 
 
 def opcoes_ativas() -> list[OpcaoAtendimentoBot]:
+    """Opcoes a que o bot responde (no menu ou so por palavra-chave), na ordem do menu."""
     return list(OpcaoAtendimentoBot.objects.filter(ativa=True).order_by('ordem', 'id'))
 
 
-def montar_menu(opcoes=None) -> str:
-    """Texto do menu numerado (1..N) a partir dos rotulos das opcoes ativas."""
+def opcoes_do_menu(opcoes=None) -> list[OpcaoAtendimentoBot]:
+    """As opcoes ativas que aparecem (numeradas) no menu."""
     opcoes = opcoes if opcoes is not None else opcoes_ativas()
-    return '\n'.join(f'{i}. {op.rotulo}' for i, op in enumerate(opcoes, start=1))
+    return [op for op in opcoes if op.ativa and op.aparece_no_menu]
+
+
+def montar_menu(opcoes=None) -> str:
+    """Texto do menu numerado (1..N) com as opcoes ativas que aparecem no menu."""
+    visiveis = opcoes_do_menu(opcoes)
+    return '\n'.join(f'{i}. {op.rotulo}' for i, op in enumerate(visiveis, start=1))
+
+
+def _com_menu(texto: str, opcoes) -> str:
+    menu = montar_menu(opcoes)
+    return f'{texto}\n\n{menu}' if menu else texto
 
 
 def encontrar_opcao(texto: str, opcoes=None):
-    """Casa o texto da pessoa com uma opcao: por numero (1..N) ou por palavra-chave."""
+    """Casa o texto da pessoa com uma opcao.
+
+    Numero (1..N): so as opcoes que aparecem no menu, na mesma numeracao mostrada.
+    Palavra-chave: qualquer opcao ativa, inclusive as que estao fora do menu.
+    """
     opcoes = opcoes if opcoes is not None else opcoes_ativas()
     if not opcoes:
         return None
@@ -51,10 +69,12 @@ def encontrar_opcao(texto: str, opcoes=None):
         return None
 
     if t.isdigit():
+        visiveis = opcoes_do_menu(opcoes)
         idx = int(t)
-        return opcoes[idx - 1] if 1 <= idx <= len(opcoes) else None
+        return visiveis[idx - 1] if 1 <= idx <= len(visiveis) else None
 
-    palavras = set(t.split())
+    # Palavras sem pontuacao: "qual o pix?" precisa casar com a palavra-chave "pix".
+    palavras = set(re.findall(r'\w+', t))
     for op in opcoes:
         for kw in op.palavras_chave_lista():
             # igualdade, palavra inteira, ou frase (multi-palavra) contida no texto.
@@ -110,7 +130,7 @@ def processar_entrada(pessoa, texto: str) -> bool:
 
     # Primeira interacao: cumprimenta e mostra o menu (nao interpreta o texto inicial).
     if pessoa.bot_etapa == Etapa.INATIVO:
-        enfileirar_resposta(pessoa, f'{cfg.mensagem_saudacao}\n\n{montar_menu(opcoes)}')
+        enfileirar_resposta(pessoa, _com_menu(cfg.mensagem_saudacao, opcoes))
         pessoa.bot_etapa = Etapa.MENU
         pessoa.status = PrimeiroContato.StatusAcolhimento.ROBO
         pessoa.save(update_fields=['bot_etapa', 'status', 'atualizado_em'])
@@ -120,7 +140,7 @@ def processar_entrada(pessoa, texto: str) -> bool:
     # Aguardando escolha no menu.
     opcao = encontrar_opcao(texto, opcoes)
     if opcao is None:
-        enfileirar_resposta(pessoa, f'{cfg.mensagem_fallback}\n\n{montar_menu(opcoes)}')
+        enfileirar_resposta(pessoa, _com_menu(cfg.mensagem_fallback, opcoes))
         _log(pessoa, f'Atendimento automatico: nao entendeu "{(texto or "").strip()[:60]}", reenviou o menu.', agora)
         return True
 

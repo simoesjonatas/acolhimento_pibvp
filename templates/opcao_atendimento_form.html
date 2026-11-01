@@ -8,7 +8,7 @@
         <div>
             <span class="section-eyebrow">Atendimento automatico</span>
             <h1>{{ titulo|default:'Opcao do menu' }}</h1>
-            <p>Defina o rotulo (aparece no menu), as palavras-chave que a acionam, a resposta e a acao.</p>
+            <p>Defina o rotulo, as palavras-chave que a acionam, a resposta, a acao e se ela aparece no menu.</p>
         </div>
         <a class="btn secundario" href="{% url 'configuracao-atendimento' %}">
             <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
@@ -30,7 +30,7 @@
             <p class="builder-field">
                 <label for="{{ form.palavras_chave.id_for_label }}">Palavras-chave</label>
                 {{ form.palavras_chave }}
-                <small class="table-muted-text">Separadas por virgula ou uma por linha. O numero da opcao no menu sempre funciona.</small>
+                <small class="table-muted-text">Separadas por virgula ou uma por linha. Quando a opcao aparece no menu, o numero dela tambem funciona.</small>
                 {% if form.palavras_chave.errors %}<span class="form-errors">{{ form.palavras_chave.errors.0 }}</span>{% endif %}
             </p>
 
@@ -48,8 +48,15 @@
             </p>
 
             <label class="processar-check" for="{{ form.ativa.id_for_label }}">
-                {{ form.ativa }} Opcao ativa (aparece no menu)
+                {{ form.ativa }} Opcao ativa (o bot responde a ela)
             </label>
+            <small class="table-muted-text" style="display:block;margin:-4px 0 10px">Desmarcada, o bot ignora a opcao por completo.</small>
+
+            <label class="processar-check" for="{{ form.aparece_no_menu.id_for_label }}">
+                {{ form.aparece_no_menu }} Aparece no menu
+            </label>
+            <small class="table-muted-text" style="display:block;margin:-4px 0 10px">Desmarcada (e ativa), a opcao nao e listada nem numerada: so responde pelas palavras-chave.</small>
+            {% if form.aparece_no_menu.errors %}<span class="form-errors">{{ form.aparece_no_menu.errors.0 }}</span>{% endif %}
 
             <div class="action-row">
                 <button type="submit">

@@ -633,18 +633,32 @@ class OpcaoAtendimentoBotForm(forms.ModelForm):
 
     class Meta:
         model = OpcaoAtendimentoBot
-        fields = ['rotulo', 'palavras_chave', 'resposta', 'acao', 'ativa']
+        fields = ['rotulo', 'palavras_chave', 'resposta', 'acao', 'ativa', 'aparece_no_menu']
         widgets = {
             'rotulo': forms.TextInput(attrs={'placeholder': 'Ex.: Falar com alguem'}),
             'palavras_chave': forms.Textarea(attrs={
                 'rows': 2,
-                'placeholder': 'atendente, falar, pessoa (o numero da opcao sempre funciona)',
+                'placeholder': 'atendente, falar, pessoa',
             }),
             'resposta': forms.Textarea(attrs={
                 'rows': 4,
                 'placeholder': 'Texto que o bot envia quando a pessoa escolhe esta opcao.',
             }),
         }
+
+
+    def clean(self):
+        cleaned = super().clean()
+        # Ativa e fora do menu, a opcao nao tem numero: sem palavra-chave ninguem a aciona.
+        if cleaned.get('ativa') and not cleaned.get('aparece_no_menu'):
+            palavras = OpcaoAtendimentoBot(palavras_chave=cleaned.get('palavras_chave') or '').palavras_chave_lista()
+            if not palavras:
+                self.add_error(
+                    'palavras_chave',
+                    'Fora do menu a opcao nao tem numero: informe ao menos uma palavra-chave, '
+                    'senao ninguem consegue aciona-la.',
+                )
+        return cleaned
 
 
 class OpcaoComoConheceuForm(forms.ModelForm):
