@@ -8,7 +8,14 @@
 		<div>
 			<span class="section-eyebrow">Configuracoes</span>
 			<h1>Mensagens do WhatsApp</h1>
-			<p>Configure os templates aprovados na Meta, os templates da Twilio e os textos simples usados pela conexao direta do WhatsApp. Deixe um campo vazio para usar o valor padrao do ambiente.</p>
+			{% if usa_meta %}
+			<p>Configure os templates aprovados no painel da Meta (nome, idioma e variaveis). Deixe um campo vazio para usar o valor padrao do ambiente.</p>
+			{% elif usa_evolution %}
+			<p>Configure os textos simples usados pela conexao direta do WhatsApp. Deixe um campo vazio para usar o valor padrao do ambiente.</p>
+			{% else %}
+			<p>Configure os templates da Twilio (Content Template SID e variaveis). Deixe um campo vazio para usar o valor padrao do ambiente.</p>
+			{% endif %}
+			{# Campos dos outros providers seguem no formulario como hidden: trocar de provider nao apaga nada. #}
 		</div>
         <a class="btn secundario" href="{% url 'dashboard' %}">
             <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
@@ -55,6 +62,7 @@
                     </div>
                 </div>
 
+                {% if usa_meta or form.opt_in_meta_nome.errors %}
                 <p class="builder-field">
                     <label for="{{ form.opt_in_meta_nome.id_for_label }}">Nome do template (Meta)</label>
                     {{ form.opt_in_meta_nome }}
@@ -62,14 +70,18 @@
                     {% else %}<small class="table-muted-text">Sem padrao no .env — defina o nome aqui (ex.: <code>boas_vindas_pibvp</code>).</small>{% endif %}
                     {% if form.opt_in_meta_nome.errors %}<span class="form-errors">{{ form.opt_in_meta_nome.errors.0 }}</span>{% endif %}
                 </p>
+                {% else %}{{ form.opt_in_meta_nome.as_hidden }}{% endif %}
 
+                {% if usa_meta or form.opt_in_meta_idioma.errors %}
                 <p class="builder-field">
                     <label for="{{ form.opt_in_meta_idioma.id_for_label }}">Idioma do template (Meta)</label>
                     {{ form.opt_in_meta_idioma }}
                     <small class="table-muted-text">Codigo do idioma escolhido ao criar o template, normalmente <code>pt_BR</code>.</small>
                     {% if form.opt_in_meta_idioma.errors %}<span class="form-errors">{{ form.opt_in_meta_idioma.errors.0 }}</span>{% endif %}
                 </p>
+                {% else %}{{ form.opt_in_meta_idioma.as_hidden }}{% endif %}
 
+                {% if usa_twilio or form.opt_in_sid.errors %}
                 <p class="builder-field">
                     <label for="{{ form.opt_in_sid.id_for_label }}">Content Template SID</label>
                     {{ form.opt_in_sid }}
@@ -77,14 +89,18 @@
                     {% else %}<small class="table-muted-text">Sem padrao no .env — defina o SID aqui.</small>{% endif %}
                     {% if form.opt_in_sid.errors %}<span class="form-errors">{{ form.opt_in_sid.errors.0 }}</span>{% endif %}
                 </p>
+                {% else %}{{ form.opt_in_sid.as_hidden }}{% endif %}
 
+				{% if not usa_evolution or form.opt_in_variables.errors %}
 				<p class="builder-field">
 					<label for="{{ form.opt_in_variables.id_for_label }}">Variaveis (JSON)</label>
 					{{ form.opt_in_variables }}
-					<small class="table-muted-text">Vale para Twilio e Meta. A variavel <code>1</code> e preenchida automaticamente com o nome da pessoa; use este JSON para as demais.</small>
+					<small class="table-muted-text">A variavel <code>1</code> e preenchida automaticamente com o nome da pessoa; use este JSON para as demais.</small>
 					{% if form.opt_in_variables.errors %}<span class="form-errors">{{ form.opt_in_variables.errors.0 }}</span>{% endif %}
 				</p>
+				{% else %}{{ form.opt_in_variables.as_hidden }}{% endif %}
 
+				{% if usa_evolution or form.opt_in_texto_evolution.errors %}
 				<p class="builder-field">
 					<label for="{{ form.opt_in_texto_evolution.id_for_label }}">Mensagem de boas-vindas no WhatsApp</label>
 					{{ form.opt_in_texto_evolution }}
@@ -93,6 +109,7 @@
 					<small class="table-muted-text">Use <code>{nome}</code> para inserir o nome da pessoa.</small>
 					{% if form.opt_in_texto_evolution.errors %}<span class="form-errors">{{ form.opt_in_texto_evolution.errors.0 }}</span>{% endif %}
 				</p>
+				{% else %}{{ form.opt_in_texto_evolution.as_hidden }}{% endif %}
 
                 {% with cfg=configs.primeiro_contato_opt_in %}
                 {% if cfg %}<p class="config-meta">Salvo em {{ cfg.atualizado_em|date:'d/m/Y H:i' }}{% if cfg.atualizado_por %} por {{ cfg.atualizado_por.get_full_name|default:cfg.atualizado_por.username }}{% endif %}.</p>{% endif %}
@@ -107,6 +124,7 @@
                     </div>
                 </div>
 
+                {% if usa_meta or form.continuar_meta_nome.errors %}
                 <p class="builder-field">
                     <label for="{{ form.continuar_meta_nome.id_for_label }}">Nome do template (Meta)</label>
                     {{ form.continuar_meta_nome }}
@@ -114,14 +132,18 @@
                     {% else %}<small class="table-muted-text">Sem padrao no .env — defina o nome aqui (ex.: <code>continuar_conversa_pibvp</code>).</small>{% endif %}
                     {% if form.continuar_meta_nome.errors %}<span class="form-errors">{{ form.continuar_meta_nome.errors.0 }}</span>{% endif %}
                 </p>
+                {% else %}{{ form.continuar_meta_nome.as_hidden }}{% endif %}
 
+                {% if usa_meta or form.continuar_meta_idioma.errors %}
                 <p class="builder-field">
                     <label for="{{ form.continuar_meta_idioma.id_for_label }}">Idioma do template (Meta)</label>
                     {{ form.continuar_meta_idioma }}
                     <small class="table-muted-text">Codigo do idioma escolhido ao criar o template, normalmente <code>pt_BR</code>.</small>
                     {% if form.continuar_meta_idioma.errors %}<span class="form-errors">{{ form.continuar_meta_idioma.errors.0 }}</span>{% endif %}
                 </p>
+                {% else %}{{ form.continuar_meta_idioma.as_hidden }}{% endif %}
 
+                {% if usa_twilio or form.continuar_sid.errors %}
                 <p class="builder-field">
                     <label for="{{ form.continuar_sid.id_for_label }}">Content Template SID</label>
                     {{ form.continuar_sid }}
@@ -129,14 +151,18 @@
                     {% else %}<small class="table-muted-text">Sem padrao no .env — defina o SID aqui.</small>{% endif %}
                     {% if form.continuar_sid.errors %}<span class="form-errors">{{ form.continuar_sid.errors.0 }}</span>{% endif %}
                 </p>
+                {% else %}{{ form.continuar_sid.as_hidden }}{% endif %}
 
+				{% if not usa_evolution or form.continuar_variables.errors %}
 				<p class="builder-field">
 					<label for="{{ form.continuar_variables.id_for_label }}">Variaveis (JSON)</label>
 					{{ form.continuar_variables }}
-					<small class="table-muted-text">Vale para Twilio e Meta. A variavel <code>1</code> e preenchida automaticamente com o nome da pessoa; use este JSON para as demais.</small>
+					<small class="table-muted-text">A variavel <code>1</code> e preenchida automaticamente com o nome da pessoa; use este JSON para as demais.</small>
 					{% if form.continuar_variables.errors %}<span class="form-errors">{{ form.continuar_variables.errors.0 }}</span>{% endif %}
 				</p>
+				{% else %}{{ form.continuar_variables.as_hidden }}{% endif %}
 
+				{% if usa_evolution or form.continuar_texto_evolution.errors %}
 				<p class="builder-field">
 					<label for="{{ form.continuar_texto_evolution.id_for_label }}">Mensagem de continuacao no WhatsApp</label>
 					{{ form.continuar_texto_evolution }}
@@ -145,6 +171,7 @@
 					<small class="table-muted-text">Use <code>{nome}</code> para inserir o nome da pessoa.</small>
 					{% if form.continuar_texto_evolution.errors %}<span class="form-errors">{{ form.continuar_texto_evolution.errors.0 }}</span>{% endif %}
 				</p>
+				{% else %}{{ form.continuar_texto_evolution.as_hidden }}{% endif %}
 
                 {% with cfg=configs.continuar_conversa %}
                 {% if cfg %}<p class="config-meta">Salvo em {{ cfg.atualizado_em|date:'d/m/Y H:i' }}{% if cfg.atualizado_por %} por {{ cfg.atualizado_por.get_full_name|default:cfg.atualizado_por.username }}{% endif %}.</p>{% endif %}

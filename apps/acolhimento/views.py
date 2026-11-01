@@ -39,6 +39,7 @@ from apps.acolhimento.aguardando_resposta import (
 	filtrar_respondidas,
 )
 from apps.acolhimento.fila_metrics import metricas_entrega
+from apps.acolhimento.fila_processor import ritmo_anti_bloqueio_ativo
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RegistroGabineteForm, RelatorioPessoasForm, ResponderQuestionarioForm, TemplatesWhatsappForm
 from apps.acolhimento.models import ConfiguracaoProcessamentoFila, ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario, RespostaPergunta, TemplateWhatsapp
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
@@ -56,6 +57,7 @@ from apps.acolhimento.whatsapp_rules import (
 	pode_enviar_template_continuar,
 	precisa_template_continuar,
 	proximo_template_continuar_em,
+	travas_api_oficial_ativas,
 	ultima_entrada_em,
 )
 
@@ -594,6 +596,9 @@ class ProcessamentoFilaControleView(LoginRequiredMixin, SuperAdminPermissaoMixin
 		context['fila'] = fila
 		context['entrega'] = metricas_entrega()
 		context['auto_ativo'] = ConfiguracaoProcessamentoFila.auto_ligado()
+		# Ritmo anti-bloqueio (escalonamento/pausa) so vale fora do modo Meta.
+		context['ritmo_anti_bloqueio'] = ritmo_anti_bloqueio_ativo()
+		context['ritmo_cfg'] = ConfiguracaoProcessamentoFila.carregar()
 		return context
 
 
@@ -673,20 +678,20 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 			]
 
 		# Status da janela de 24h por pessoa (sem N+1: usa a anotacao ultima_entrada).
+		# Travas de opt-in/janela so na API oficial (Meta/Twilio) — ver whatsapp_rules.py.
 		limite_janela = timezone.now() - timedelta(hours=JANELA_ATENDIMENTO_HORAS)
+		travas_ativas = travas_api_oficial_ativas()
 		audiencia = []
 		total_janela_aberta = 0
 		for pessoa in queryset_filtrado:
 			ultima = getattr(pessoa, 'ultima_entrada', None)
 			janela_aberta = bool(ultima and ultima >= limite_janela)
-			# TRAVA DESATIVADA (opt-in + janela de 24h) — ver apps/acolhimento/whatsapp_rules.py.
-			# Para reativar, apague as duas linhas abaixo e descomente as originais.
-			pode_livre = True
-			if janela_aberta:
-				total_janela_aberta += 1
-			# pode_livre = bool(pessoa.iniciou_interacao and janela_aberta)
-			# if pode_livre:
-			# 	total_janela_aberta += 1
+			if travas_ativas:
+				pode_livre = bool(pessoa.iniciou_interacao and janela_aberta)
+				total_janela_aberta += int(pode_livre)
+			else:
+				pode_livre = True
+				total_janela_aberta += int(janela_aberta)
 			audiencia.append({'pessoa': pessoa, 'janela_aberta': janela_aberta, 'pode_livre': pode_livre})
 
 		context['busca'] = self.request.GET.get('q', '').strip()
@@ -704,6 +709,7 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		context['audiencia'] = audiencia
 		context['total_pessoas_filtradas'] = len(audiencia)
 		context['total_janela_aberta'] = total_janela_aberta
+		context['travas_janela_ativas'] = travas_ativas
 		context['selected_pessoas'] = selected_pessoas
 		context['usa_meta'] = template_config.usando_meta()
 		context['usa_evolution'] = template_config.usando_evolution()
@@ -1288,6 +1294,7 @@ class PrimeiroContatoMensagensView(LoginRequiredMixin, ConversasPessoasPermissao
 		)
 		context['janela_aberta'] = janela_atendimento_aberta(self.object)
 		context['precisa_template_continuar'] = precisa_template_continuar(self.object)
+		context['travas_janela_ativas'] = travas_api_oficial_ativas()
 		context['usa_evolution'] = template_config.usando_evolution()
 		context['usa_meta'] = template_config.usando_meta()
 		context['template_continuar_configurado'] = template_config.continuar_configurado()
@@ -1562,6 +1569,7 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 		context['twilio_habilitado'] = settings.TWILIO_ENABLED
 		context['usa_evolution'] = template_config.usando_evolution()
 		context['usa_meta'] = template_config.usando_meta()
+		context['usa_twilio'] = template_config.usando_twilio()
 		context['whatsapp_provider'] = template_config.provider()
 		context['env_opt_in_sid'] = (settings.TWILIO_TEMPLATE_OPT_IN_SID or '').strip()
 		context['env_continuar_sid'] = (settings.TWILIO_TEMPLATE_CONTINUAR_SID or '').strip()

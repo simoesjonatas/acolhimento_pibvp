@@ -236,12 +236,13 @@ TWILIO_TEMPLATE_CONTINUAR_VARIABLES = os.getenv('TWILIO_TEMPLATE_CONTINUAR_VARIA
 
 # ---------------------------------------------------------------------------
 # Provider de WhatsApp: 'meta' (API oficial / Cloud API), 'evolution' ou 'twilio'.
-# O padrao do app e 'evolution'. Durante os testes o padrao volta a 'twilio':
-# as regras de opt-in/janela sao semanticas da API oficial (Twilio e Meta) e o
-# modo Baileys tentaria enviar de verdade (rede).
+# O padrao do app e 'meta' (producao usa a API oficial desde 2026-10-31): sobe
+# com as travas de opt-in/janela de 24h ligadas e sem o ritmo anti-bloqueio da
+# Evolution. Durante os testes o padrao e 'twilio': mesmas regras da API oficial,
+# sem depender das credenciais da Meta (e o modo Baileys tentaria enviar de verdade).
 # Sempre trocavel por ambiente: WHATSAPP_PROVIDER=meta|twilio|evolution.
 # ---------------------------------------------------------------------------
-_default_whatsapp_provider = 'twilio' if 'test' in sys.argv else 'evolution'
+_default_whatsapp_provider = 'twilio' if 'test' in sys.argv else 'meta'
 WHATSAPP_PROVIDER = os.getenv('WHATSAPP_PROVIDER', _default_whatsapp_provider).strip().lower()
 
 # Evolution API (Baileys / WhatsApp Web). Defaults casam com evolution/docker-compose.yml.

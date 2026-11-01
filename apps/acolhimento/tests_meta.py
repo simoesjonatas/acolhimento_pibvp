@@ -319,7 +319,16 @@ class MetaGatewayTests(TestCase):
 		from apps.acolhimento.fila_processor import processar_fila_mensagens
 
 		ConfiguracaoProcessamentoFila.carregar()
-		msg = _saida(_pessoa(iniciou_interacao=True), conteudo='ola')
+		pessoa = _pessoa(iniciou_interacao=True)
+		# Janela de 24h aberta: a pessoa acabou de responder (texto livre so passa assim).
+		MensagemContato.objects.create(
+			pessoa=pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+			conteudo='oi',
+		)
+		msg = _saida(pessoa, conteudo='ola')
 		with patch('apps.acolhimento.meta_service.send_text') as send_text, patch('apps.acolhimento.fila_processor.time.sleep'):
 			send_text.return_value = {'sid': 'wamid.F', 'status': 'accepted', 'to': 'x', 'raw': {'ok': True}}
 			resultado = processar_fila_mensagens(ids=[msg.id])
@@ -714,3 +723,266 @@ class MetaChecksTests(TestCase):
 	@override_settings(**META_OK, DEBUG=False)
 	def test_meta_completo_nao_avisa(self):
 		self.assertEqual(self._rodar(), [])
+
+
+# ---------------------------------------------------------------------------
+# Modo Meta como padrao: travas de janela/opt-in e fila sem ritmo artificial
+# ---------------------------------------------------------------------------
+def _entrada(pessoa, horas_atras):
+	from datetime import timedelta
+
+	from django.utils import timezone
+
+	msg = MensagemContato.objects.create(
+		pessoa=pessoa,
+		canal=MensagemContato.CanalChoices.WHATSAPP,
+		direcao=MensagemContato.DirecaoChoices.ENTRADA,
+		status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+		conteudo='oi',
+	)
+	MensagemContato.objects.filter(pk=msg.pk).update(enfileirada_em=timezone.now() - timedelta(hours=horas_atras))
+	return msg
+
+
+@override_settings(**META_OK, STORAGES=SIMPLE_STATIC_STORAGES)
+class MetaTravasJanelaTests(TestCase):
+	"""Na Meta texto livre fora da janela falha (131047): a trava bloqueia antes, na tela e na fila."""
+
+	def setUp(self):
+		self.user = get_user_model().objects.create_user('equipe_travas', password='x', is_staff=True)
+		self.client.force_login(self.user)
+		self.pessoa = _pessoa(
+			nome='Janela Fechada',
+			iniciou_interacao=True,
+			status=PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO,
+		)
+		_entrada(self.pessoa, horas_atras=30)
+
+	def test_regras_bloqueiam_livre_fora_da_janela_so_na_api_oficial(self):
+		from apps.acolhimento import whatsapp_rules
+
+		codigo, texto = whatsapp_rules.motivo_bloqueio_livre(self.pessoa)
+		self.assertEqual(codigo, 'whatsapp_janela_24h_fechada')
+		self.assertIn('template de continuacao', texto)
+		self.assertFalse(whatsapp_rules.pode_enviar_livre(self.pessoa))
+
+		sem_opt_in = _pessoa(nome='Sem opt-in', telefone='21900000001')
+		self.assertEqual(
+			whatsapp_rules.motivo_bloqueio_livre(sem_opt_in)[0], 'whatsapp_sem_interacao_previa'
+		)
+
+		for provider in ('twilio', 'meta'):
+			with self.subTest(provider=provider), override_settings(WHATSAPP_PROVIDER=provider):
+				self.assertTrue(whatsapp_rules.travas_api_oficial_ativas())
+				self.assertIsNotNone(whatsapp_rules.motivo_bloqueio_livre(self.pessoa))
+		with override_settings(WHATSAPP_PROVIDER='evolution'):
+			self.assertFalse(whatsapp_rules.travas_api_oficial_ativas())
+			self.assertIsNone(whatsapp_rules.motivo_bloqueio_livre(self.pessoa))
+			self.assertIsNone(whatsapp_rules.motivo_bloqueio_livre(sem_opt_in))
+			self.assertTrue(whatsapp_rules.pessoa_pode_receber_whatsapp(sem_opt_in))
+
+	def test_livre_dentro_da_janela_passa(self):
+		from apps.acolhimento import whatsapp_rules
+
+		_entrada(self.pessoa, horas_atras=1)
+		self.assertIsNone(whatsapp_rules.motivo_bloqueio_livre(self.pessoa))
+
+	def test_tela_recusa_livre_fora_da_janela_com_aviso_do_template(self):
+		resp = self.client.post(
+			reverse('pessoas-enfileirar-mensagem', args=[self.pessoa.pk]),
+			{'conteudo': 'Oi, tudo bem?'},
+			follow=True,
+		)
+		self.assertFalse(self.pessoa.mensagens.filter(direcao=MensagemContato.DirecaoChoices.SAIDA).exists())
+		self.assertContains(resp, 'Envie o template de continuacao para reabrir a conversa')
+		self.assertContains(resp, 'mensagens livres serao bloqueadas')
+		self.assertContains(resp, 'erro 131047')
+
+	def test_fila_cancela_livre_fora_da_janela_sem_chamar_a_meta(self):
+		from apps.acolhimento.fila_processor import processar_fila_mensagens
+
+		msg = _saida(self.pessoa, conteudo='livre fora da janela')
+		with patch('apps.acolhimento.meta_service.send_text') as send_text:
+			resultado = processar_fila_mensagens(ids=[msg.id])
+
+		send_text.assert_not_called()
+		self.assertEqual(resultado['falha'], 1)
+		msg.refresh_from_db()
+		self.assertEqual(msg.status_fila, MensagemContato.StatusFilaChoices.CANCELADA)
+		self.assertIn('template de continuacao', msg.erro_ultimo_envio)
+		self.assertEqual(msg.metadata_envio['bloqueio_envio']['motivo'], 'whatsapp_janela_24h_fechada')
+
+	def test_disparo_massa_deixa_janela_fechada_indisponivel(self):
+		aberta = _pessoa(
+			nome='Janela Aberta', telefone='21900000002', iniciou_interacao=True,
+			status=PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO,
+		)
+		_entrada(aberta, horas_atras=1)
+
+		resp = self.client.get(reverse('mensagens-disparo-massa'))
+		pode_livre = {item['pessoa'].pk: item['pode_livre'] for item in resp.context['audiencia']}
+		self.assertEqual(pode_livre, {self.pessoa.pk: False, aberta.pk: True})
+		self.assertTrue(resp.context['travas_janela_ativas'])
+		self.assertContains(resp, 'var travasAtivas = true;')
+
+		with override_settings(WHATSAPP_PROVIDER='evolution'):
+			resp = self.client.get(reverse('mensagens-disparo-massa'))
+		self.assertTrue(all(item['pode_livre'] for item in resp.context['audiencia']))
+		self.assertContains(resp, 'var travasAtivas = false;')
+
+
+@override_settings(**META_OK)
+class MetaFilaSemRitmoTests(TestCase):
+	"""No modo Meta a fila nao escalona nem pausa entre envios; o teto diario segue valendo."""
+
+	def setUp(self):
+		cfg = ConfiguracaoProcessamentoFila.carregar()
+		cfg.intervalo_min_seg = 120
+		cfg.intervalo_max_seg = 120
+		cfg.janela_envio_inicio = 0
+		cfg.janela_envio_fim = 24
+		cfg.save()
+		self.pessoa = _pessoa(iniciou_interacao=True)
+		_entrada(self.pessoa, horas_atras=1)
+
+	def _novas(self, total):
+		return [
+			MensagemContato(
+				pessoa=self.pessoa,
+				canal=MensagemContato.CanalChoices.WHATSAPP,
+				direcao=MensagemContato.DirecaoChoices.SAIDA,
+				conteudo=f'msg {i}',
+			)
+			for i in range(total)
+		]
+
+	def test_escalonamento_nao_agenda_no_modo_meta(self):
+		from apps.acolhimento import fila_auto
+
+		msgs = fila_auto.escalonar_agendamento(self._novas(3))
+		self.assertEqual([m.agendada_para for m in msgs], [None, None, None])
+
+		with override_settings(WHATSAPP_PROVIDER='evolution'):
+			msgs = fila_auto.escalonar_agendamento(self._novas(2))
+		self.assertTrue(all(m.agendada_para for m in msgs))
+		self.assertEqual((msgs[1].agendada_para - msgs[0].agendada_para).total_seconds(), 120)
+
+	def _processar_tres(self):
+		from apps.acolhimento.fila_processor import processar_fila_mensagens
+
+		for i in range(3):
+			_saida(self.pessoa, conteudo=f'oi {i}')
+		with patch('apps.acolhimento.meta_service.send_text') as send_text, \
+				patch('apps.acolhimento.fila_processor.time.sleep') as sleep:
+			send_text.return_value = {'sid': 'wamid.X', 'status': 'accepted', 'to': 'x', 'raw': {}}
+			resultado = processar_fila_mensagens()
+		return resultado, sleep
+
+	def test_fila_envia_sem_pausa_entre_mensagens(self):
+		resultado, sleep = self._processar_tres()
+		self.assertEqual(resultado['sucesso'], 3)
+		sleep.assert_not_called()
+
+	def test_teto_diario_continua_valendo(self):
+		cfg = ConfiguracaoProcessamentoFila.carregar()
+		cfg.teto_diario = 2
+		cfg.save()
+		resultado, _sleep = self._processar_tres()
+		self.assertEqual(resultado['sucesso'], 2)
+
+	def test_tela_de_processamento_explica_o_modo_meta(self):
+		admin = get_user_model().objects.create_superuser('admin_fila', password='x')
+		self.client.force_login(admin)
+		with override_settings(STORAGES=SIMPLE_STATIC_STORAGES):
+			resp = self.client.get(reverse('mensagens-processamento'))
+			self.assertContains(resp, 'data-ritmo-meta')
+			self.assertNotContains(resp, 'data-ritmo-anti-bloqueio')
+			with override_settings(WHATSAPP_PROVIDER='evolution'):
+				resp = self.client.get(reverse('mensagens-processamento'))
+			self.assertContains(resp, 'data-ritmo-anti-bloqueio')
+			self.assertNotContains(resp, 'data-ritmo-meta')
+
+	def test_admin_do_ritmo_so_mostra_teto_no_modo_meta(self):
+		admin = get_user_model().objects.create_superuser('admin_ritmo', password='x')
+		self.client.force_login(admin)
+		url = reverse('admin:acolhimento_configuracaoprocessamentofila_change', args=[1])
+		with override_settings(STORAGES=SIMPLE_STATIC_STORAGES):
+			resp = self.client.get(url)
+			self.assertContains(resp, 'name="teto_diario"')
+			self.assertNotContains(resp, 'name="intervalo_min_seg"')
+			with override_settings(WHATSAPP_PROVIDER='evolution'):
+				resp = self.client.get(url)
+			self.assertContains(resp, 'name="intervalo_min_seg"')
+
+
+@override_settings(**META_OK, STORAGES=SIMPLE_STATIC_STORAGES)
+class TelasPorProviderTests(TestCase):
+	"""As telas de configuracao mostram so os campos do provider ativo (os demais vao hidden)."""
+
+	def setUp(self):
+		self.admin = get_user_model().objects.create_superuser('admin_telas', password='x')
+		self.client.force_login(self.admin)
+
+	def _tela_templates(self, provider):
+		with override_settings(WHATSAPP_PROVIDER=provider):
+			return self.client.get(reverse('configuracao-templates')).content.decode()
+
+	def test_templates_mostra_so_o_provider_ativo(self):
+		html = self._tela_templates('meta')
+		self.assertIn('Nome do template (Meta)', html)
+		self.assertIn('Variaveis (JSON)', html)
+		self.assertNotIn('Content Template SID', html)
+		self.assertNotIn('Mensagem de boas-vindas no WhatsApp', html)
+		self.assertIn('type="hidden" name="opt_in_sid"', html)
+		self.assertIn('type="hidden" name="opt_in_texto_evolution"', html)
+
+		html = self._tela_templates('twilio')
+		self.assertIn('Content Template SID', html)
+		self.assertIn('Variaveis (JSON)', html)
+		self.assertNotIn('Nome do template (Meta)', html)
+		self.assertNotIn('Mensagem de boas-vindas no WhatsApp', html)
+
+		html = self._tela_templates('evolution')
+		self.assertIn('Mensagem de boas-vindas no WhatsApp', html)
+		self.assertNotIn('Content Template SID', html)
+		self.assertNotIn('Nome do template (Meta)', html)
+		self.assertNotIn('Variaveis (JSON)', html)
+
+	def test_salvar_no_modo_meta_preserva_campos_dos_outros_providers(self):
+		TemplateWhatsapp.objects.create(
+			tipo=TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO,
+			content_sid='HXguardado',
+			texto_evolution='Oi {nome}, texto guardado',
+		)
+		resp = self.client.get(reverse('configuracao-templates'))
+		dados = {
+			campo.html_name: campo.value() or ''
+			for campo in resp.context['form']
+		}
+		dados['opt_in_meta_nome'] = 'boas_vindas_pibvp'
+
+		resp = self.client.post(reverse('configuracao-templates'), dados)
+		self.assertEqual(resp.status_code, 302)
+		cfg = TemplateWhatsapp.objects.get(tipo=TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO)
+		self.assertEqual(cfg.meta_nome, 'boas_vindas_pibvp')
+		self.assertEqual(cfg.content_sid, 'HXguardado')
+		self.assertEqual(cfg.texto_evolution, 'Oi {nome}, texto guardado')
+
+	def test_campo_oculto_com_erro_aparece_para_corrigir(self):
+		TemplateWhatsapp.objects.create(tipo=TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO, content_sid='XXerrado')
+		resp = self.client.get(reverse('configuracao-templates'))
+		dados = {campo.html_name: campo.value() or '' for campo in resp.context['form']}
+		resp = self.client.post(reverse('configuracao-templates'), dados)
+		self.assertEqual(resp.status_code, 200)
+		self.assertContains(resp, 'Content Template SID')
+		self.assertNotContains(resp, 'type="hidden" name="opt_in_sid"')
+
+	def test_disparo_massa_sem_modo_template_na_evolution(self):
+		with override_settings(WHATSAPP_PROVIDER='evolution'):
+			resp = self.client.get(reverse('mensagens-disparo-massa'))
+		self.assertNotContains(resp, 'id_content_sid')
+		self.assertNotContains(resp, 'Template (marketing)')
+
+		resp = self.client.get(reverse('mensagens-disparo-massa'))
+		self.assertContains(resp, 'Nome do template (Meta)')
+		self.assertNotContains(resp, 'Content Template SID')

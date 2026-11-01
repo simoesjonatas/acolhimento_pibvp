@@ -54,7 +54,7 @@ services:
       PIB_WHATSAPP_NUMERO_OPTIN: ${PIB_WHATSAPP_NUMERO_OPTIN:-}
       PIB_WHATSAPP_OPTIN_TEXTO: ${PIB_WHATSAPP_OPTIN_TEXTO:-}
       HORAS_ESPERA_OPTIN: ${HORAS_ESPERA_OPTIN:-0}
-      WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-evolution}
+      WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-meta}
       # WhatsApp Cloud API (API oficial da Meta). Sem repassar aqui, o .env do
       # servidor e ignorado e o provider sobe sem token/numero (checks W002-W004).
       META_WA_API_VERSION: ${META_WA_API_VERSION:-v22.0}

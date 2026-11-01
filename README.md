@@ -70,7 +70,20 @@ Acesse:
 
 - `http://localhost:8183/login/`
 
-### Evolution API separado
+### Provider de WhatsApp
+
+O padrao e a API oficial da Meta (`WHATSAPP_PROVIDER=meta`): um deploy sem a
+variavel sobe nesse modo. Nele valem as travas de opt-in e da janela de 24h
+(texto livre fora da janela e bloqueado na tela e na fila, com o aviso para usar
+o template de continuacao) e a fila envia sem atrasos artificiais. Configuracao
+e detalhes em [`docs/meta-cloud-api.md`](docs/meta-cloud-api.md).
+
+Twilio (`twilio`) e Evolution (`evolution`, WhatsApp Web) continuam disponiveis.
+So no modo Evolution as travas ficam desligadas e a fila aplica o ritmo
+anti-bloqueio (escalonamento, pausa entre envios, "digitando..." e variacao de
+texto). Os testes rodam em `twilio` por padrao.
+
+### Evolution API separado (opcional, `WHATSAPP_PROVIDER=evolution`)
 
 O Evolution roda em um compose proprio, separado do app Django. Isso evita misturar bancos/redis do WhatsApp com a aplicacao e deixa a API pronta para ser usada por outros servicos depois.
 
@@ -149,7 +162,7 @@ Principais variáveis usadas pelo projeto:
 - `TWILIO_TEMPLATE_OPT_IN_VARIABLES` (JSON string com variáveis do template)
 - `TWILIO_TEMPLATE_CONTINUAR_SID` (Content SID do template aprovado para continuar conversa)
 - `TWILIO_TEMPLATE_CONTINUAR_VARIABLES` (JSON string com variáveis do template de continuação)
-- `WHATSAPP_PROVIDER` (`meta`, `twilio` ou `evolution`)
+- `WHATSAPP_PROVIDER` (`meta` — padrao —, `twilio` ou `evolution`)
 - `META_WA_PHONE_NUMBER_ID`, `META_WA_BUSINESS_ACCOUNT_ID`, `META_WA_ACCESS_TOKEN`, `META_WA_APP_SECRET`, `META_WA_VERIFY_TOKEN` (API oficial da Meta; ver `docs/meta-cloud-api.md`)
 - `META_TEMPLATE_OPT_IN_NOME` / `META_TEMPLATE_OPT_IN_IDIOMA` / `META_TEMPLATE_OPT_IN_VARIABLES` (template aprovado de primeiro contato)
 - `META_TEMPLATE_CONTINUAR_NOME` / `META_TEMPLATE_CONTINUAR_IDIOMA` / `META_TEMPLATE_CONTINUAR_VARIABLES` (template aprovado de continuacao)

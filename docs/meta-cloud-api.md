@@ -5,6 +5,58 @@ intermediario (Twilio) e sem WhatsApp Web pareado (Evolution). As regras de
 opt-in, janela de 24h e templates aprovados valem integralmente: fora da janela
 so sai template.
 
+**`meta` e o provider padrao** (desde 2026-11): um deploy sem `WHATSAPP_PROVIDER`
+(`config/settings.py` e `docker-compose.yml`) sobe neste modo. Nos testes o
+padrao continua `twilio`, que segue as mesmas regras sem depender de credenciais.
+
+## Travas de envio livre
+
+`apps/acolhimento/whatsapp_rules.py` (`travas_api_oficial_ativas`) liga as travas
+na Meta e na Twilio e as desliga so no modo Evolution:
+
+- **Opt-in previo**: texto livre so para quem ja respondeu ao template de
+  primeiro contato (`iniciou_interacao`).
+- **Janela de 24h**: texto livre so se a pessoa escreveu nas ultimas 24h. Fora
+  disso a Meta recusaria com o erro 131047; o sistema bloqueia antes:
+  - na conversa da pessoa (`pessoa_mensagens.html`), com o aviso para enviar o
+    template de continuacao;
+  - no envio manual e no convite de questionario (mensagem de erro com o mesmo aviso);
+  - no disparo em massa (modo livre e questionario): quem esta com a janela
+    fechada fica indisponivel na lista;
+  - na fila: a mensagem e CANCELADA com `bloqueio_envio.motivo =
+    whatsapp_janela_24h_fechada` (ou `whatsapp_sem_interacao_previa`) sem chamar a API.
+- Templates (opt-in, continuacao, marketing) sao isentos da janela.
+
+## Fila sem ritmo artificial
+
+O ritmo anti-bloqueio existe para o WhatsApp Web (Evolution). No modo Meta
+(`fila_processor.ritmo_anti_bloqueio_ativo()` falso):
+
+- `fila_auto.escalonar_agendamento` nao preenche `agendada_para`: o disparo de
+  opt-in sai na proxima rodada da fila, sem espacamento aleatorio nem janela de horario;
+- o processador nao faz a pausa aleatoria entre envios (`_PAUSA_ENTRE_ENVIOS_SEG`);
+- nao ha variacao de texto nem "digitando..." (so existem no envio da Evolution);
+- o **teto diario** continua opcional (Admin > Configuracao do processamento da
+  fila; 0 = sem limite).
+
+A tela **Processamento da fila** explica isso numa linha e o admin do ritmo mostra
+so o teto diario no modo Meta.
+
+## Telas por provider
+
+**Configuracoes > Mensagens do WhatsApp** e o modo template do **Disparo em massa**
+mostram so os campos do provider ativo:
+
+| Provider | Campos |
+|---|---|
+| Meta | nome do template + idioma + variaveis (JSON) |
+| Twilio | Content Template SID + variaveis (JSON) |
+| Evolution | texto simples (sem modo template no disparo em massa) |
+
+Os campos dos outros providers continuam no formulario como `hidden`, entao
+salvar no modo Meta nao apaga o SID da Twilio nem os textos da Evolution. Se um
+desses campos tiver erro, ele volta a aparecer para ser corrigido.
+
 ## O que muda em relacao aos outros providers
 
 | | Twilio | Evolution (Baileys) | Meta (Cloud API) |
@@ -15,12 +67,14 @@ so sai template.
 | Webhook | `webhook/twilio-*` | `webhook/evolution/` | `webhook/meta/` (assinado com App Secret) |
 | Pareamento | nao | QR code | nao (numero registrado no painel da Meta) |
 | Anti-bloqueio (variacao de texto, "digitando") | nao | sim | nao se aplica |
+| Escalonamento / pausa entre envios na fila | sim | sim | nao (envia direto) |
+| Padrao de `WHATSAPP_PROVIDER` | nos testes | — | **sim** (app) |
 
 ## Variaveis de ambiente
 
 | Variavel | De onde vem |
 |---|---|
-| `WHATSAPP_PROVIDER=meta` | liga o provider |
+| `WHATSAPP_PROVIDER=meta` | liga o provider (e o padrao quando a variavel nao existe) |
 | `META_WA_PHONE_NUMBER_ID` | developers.facebook.com > app > WhatsApp > API Setup > Phone number ID |
 | `META_WA_BUSINESS_ACCOUNT_ID` | mesmo lugar > WhatsApp Business Account ID (opcional; lista os templates na tela) |
 | `META_WA_ACCESS_TOKEN` | business.facebook.com > Usuarios do sistema > token permanente com `whatsapp_business_messaging` e `whatsapp_business_management` |
