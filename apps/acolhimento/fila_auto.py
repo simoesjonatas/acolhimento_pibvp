@@ -28,7 +28,7 @@ from django.db import close_old_connections, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from apps.acolhimento.fila_processor import processar_fila_mensagens
+from apps.acolhimento.fila_processor import processar_fila_mensagens, ritmo_anti_bloqueio_ativo
 from apps.acolhimento.models import (
     ConfiguracaoProcessamentoFila,
     ExecucaoProcessamentoFila,
@@ -84,8 +84,11 @@ def escalonar_agendamento(mensagens, *, base=None):
 
     O processador so envia mensagens ja vencidas; o cron (a cada minuto) drena os
     disparos conforme cada horario chega.
+
+    No modo Meta (API oficial) nao ha escalonamento: as mensagens ficam sem
+    `agendada_para` e saem na proxima rodada da fila.
     """
-    if not mensagens:
+    if not mensagens or not ritmo_anti_bloqueio_ativo():
         return mensagens
     cfg = ConfiguracaoProcessamentoFila.carregar()
     momento = cfg.proximo_horario_valido(base or timezone.now())

@@ -21,6 +21,7 @@
     .switch-label { font-size:.78rem; letter-spacing:.5px; }
     .switch-toggle.is-on .switch-label { color:#15803d; }
     .switch-toggle.is-off .switch-label { color:#b91c1c; }
+    .ritmo-nota { margin:-6px 0 18px; font-size:.85rem; }
     .entrega-panel { margin-bottom:18px; }
     .entrega-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
     .entrega-metric { padding:12px 14px; border:1px solid rgba(0,0,0,.08); border-radius:12px;
@@ -125,6 +126,21 @@
             </button>
         </form>
     </div>
+
+    {% if ritmo_anti_bloqueio %}
+    <p class="table-muted-text ritmo-nota" data-ritmo-anti-bloqueio>
+        Ritmo anti-bloqueio: {{ ritmo_cfg.intervalo_min_seg }}–{{ ritmo_cfg.intervalo_max_seg }}s entre mensagens,
+        envio das {{ ritmo_cfg.janela_envio_inicio }}h às {{ ritmo_cfg.janela_envio_fim }}h,
+        teto diário {% if ritmo_cfg.teto_diario %}de {{ ritmo_cfg.teto_diario }}{% else %}desligado{% endif %}
+        (ajuste em Admin › Configuração do processamento da fila).
+    </p>
+    {% else %}
+    <p class="table-muted-text ritmo-nota" data-ritmo-meta>
+        API oficial da Meta: as mensagens saem assim que entram na fila, sem espaçamento aleatório, pausa entre envios
+        nem variação de texto (isso só servia para o WhatsApp Web). Teto diário opcional:
+        {% if ritmo_cfg.teto_diario %}{{ ritmo_cfg.teto_diario }} por dia{% else %}desligado{% endif %}.
+    </p>
+    {% endif %}
 
     {% if execucao_ativa %}
     <div class="active-exec">

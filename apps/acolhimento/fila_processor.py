@@ -16,7 +16,18 @@ ShouldStopCallback = Callable[[], bool]
 # Pausa (segundos) entre dois envios REAIS na mesma rodada. Guarda secundaria: o
 # espacamento principal vem do `agendada_para` (staggering no enfileiramento);
 # este jitter protege contra rajada quando varias mensagens vencem juntas.
+# Nao vale no modo Meta (ver `ritmo_anti_bloqueio_ativo`).
 _PAUSA_ENTRE_ENVIOS_SEG = (2.0, 6.0)
+
+
+def ritmo_anti_bloqueio_ativo() -> bool:
+    """True quando a fila deve imitar ritmo humano (escalonamento + pausa entre envios).
+
+    Isso so serve para o WhatsApp Web (Evolution), que bloqueia o numero por rajada.
+    Na API oficial da Meta o limite e de throughput da propria API: atrasar envios
+    so deixa a pessoa esperando. O teto diario continua valendo em qualquer modo.
+    """
+    return not gateway.usando_meta()
 
 
 def normalize_phone_br(raw_phone: str) -> str:
@@ -125,6 +136,7 @@ def processar_fila_mensagens(
     processadas = 0
     interrompido = False
     pausar_antes_do_proximo = False
+    pausa_entre_envios = ritmo_anti_bloqueio_ativo()
 
     for mensagem in mensagens:
         if should_stop and should_stop():
@@ -142,8 +154,8 @@ def processar_fila_mensagens(
             break
 
         # Espacamento entre envios reais (jitter): so pausa quando o item anterior
-        # de fato foi enviado pela rede.
-        if pausar_antes_do_proximo and not dry_run:
+        # de fato foi enviado pela rede (e nunca no modo Meta).
+        if pausar_antes_do_proximo and pausa_entre_envios and not dry_run:
             time.sleep(random.uniform(*_PAUSA_ENTRE_ENVIOS_SEG))
         pausar_antes_do_proximo = False
 

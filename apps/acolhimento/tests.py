@@ -2,7 +2,6 @@ import csv
 import io
 import json
 from datetime import time, timedelta
-from unittest import skip
 from unittest.mock import patch
 
 from openpyxl import load_workbook
@@ -26,6 +25,7 @@ from apps.acolhimento import (
 	whatsapp_saude,
 )
 from apps.acolhimento.fila_processor import processar_fila_mensagens
+from apps.acolhimento.whatsapp_rules import travas_api_oficial_ativas
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, PerguntaForm, PrimeiroContatoForm, RelatorioPessoasForm, ResponderQuestionarioForm
 from apps.acolhimento.models import (
 	ConfiguracaoAtendimentoBot,
@@ -391,9 +391,6 @@ class BloqueioWhatsappOptInTests(TestCase):
 		)
 		self.client.force_login(self.user)
 
-	@skip(
-		'Travas de opt-in/janela de 24h desativadas a pedido (2026-09) — ver apps/acolhimento/whatsapp_rules.py. Reativar este teste junto com a trava.'
-	)
 	def test_bloqueia_mensagem_whatsapp_manual_sem_resposta_ao_template(self):
 		url = reverse('pessoas-enfileirar-mensagem', args=[self.pessoa.pk])
 		resp = self.client.post(
@@ -465,9 +462,6 @@ class BloqueioWhatsappOptInTests(TestCase):
 			).exists()
 		)
 
-	@skip(
-		'Travas de opt-in/janela de 24h desativadas a pedido (2026-09) — ver apps/acolhimento/whatsapp_rules.py. Reativar este teste junto com a trava.'
-	)
 	def test_processador_cancela_whatsapp_sem_resposta_ao_template(self):
 		mensagem = MensagemContato.objects.create(
 			pessoa=self.pessoa,
@@ -1358,9 +1352,6 @@ class JanelaWhatsappTests(TestCase):
 		self._entrada(timezone.now() - timedelta(hours=30))
 		self.assertFalse(janela_atendimento_aberta(self.pessoa))
 
-	@skip(
-		'Travas de opt-in/janela de 24h desativadas a pedido (2026-09) — ver apps/acolhimento/whatsapp_rules.py. Reativar este teste junto com a trava.'
-	)
 	def test_processador_cancela_livre_com_janela_fechada(self):
 		self._entrada(timezone.now() - timedelta(hours=30))
 		mensagem = MensagemContato.objects.create(
@@ -1393,9 +1384,6 @@ class JanelaWhatsappTests(TestCase):
 		self.assertEqual(resultado['total_processado'], 1)
 		self.assertEqual(resultado['falha'], 0)
 
-	@skip(
-		'Travas de opt-in/janela de 24h desativadas a pedido (2026-09) — ver apps/acolhimento/whatsapp_rules.py. Reativar este teste junto com a trava.'
-	)
 	def test_enfileirar_livre_bloqueado_com_janela_fechada(self):
 		self._entrada(timezone.now() - timedelta(hours=30))
 		resp = self.client.post(
@@ -1600,9 +1588,6 @@ class DisparoMassaTests(TestCase):
 			pessoa=pessoa, direcao=MensagemContato.DirecaoChoices.SAIDA
 		)
 
-	@skip(
-		'Travas de opt-in/janela de 24h desativadas a pedido (2026-09) — ver apps/acolhimento/whatsapp_rules.py. Reativar este teste junto com a trava.'
-	)
 	def test_modo_livre_so_envia_para_janela_aberta(self):
 		resp = self.client.post(
 			reverse('mensagens-disparo-massa'),
@@ -2967,15 +2952,28 @@ class DisparoQuestionarioMassaTests(TestCase):
 		self.bruno = self._pessoa('Bruno Lima', '31933330002')
 		self.carla = self._pessoa('Carla Dias', '31933330003')
 
-	def _pessoa(self, nome, telefone, status=PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO):
-		return PrimeiroContato.objects.create(
+	def _pessoa(self, nome, telefone, status=PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO, janela_aberta=True):
+		"""Por padrao a pessoa ja deu opt-in e falou ha 1h: o convite (texto livre) passa
+		nas travas da API oficial e os testes valem para qualquer provider."""
+		pessoa = PrimeiroContato.objects.create(
 			nome=nome,
 			telefone_whatsapp=telefone,
 			primeira_vez=True,
 			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
 			o_que_busca=PrimeiroContato.OQueBuscaChoices.CONHECER_DEUS,
 			status=status,
+			iniciou_interacao=True,
 		)
+		quando = timezone.now() - timedelta(hours=1 if janela_aberta else 30)
+		entrada = MensagemContato.objects.create(
+			pessoa=pessoa,
+			canal=MensagemContato.CanalChoices.WHATSAPP,
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+			conteudo='oi',
+		)
+		MensagemContato.objects.filter(pk=entrada.pk).update(enfileirada_em=quando)
+		return pessoa
 
 	def _disparar(self, pessoas, questionario=None, texto='Oi {nome}! Topa um cafe? {link}'):
 		return self.client.post(
@@ -3008,7 +3006,7 @@ class DisparoQuestionarioMassaTests(TestCase):
 		self.assertEqual(mensagem.status_fila, MensagemContato.StatusFilaChoices.PENDENTE)
 		self.assertEqual(mensagem.metadata_envio['origem'], ORIGEM_DISPARO_MASSA)
 		self.assertEqual(mensagem.metadata_envio['convite_questionario_id'], convite_ana.pk)
-		self.assertFalse(MensagemContato.objects.filter(pessoa=self.carla).exists())
+		self.assertFalse(self.carla.mensagens.filter(direcao=MensagemContato.DirecaoChoices.SAIDA).exists())
 		self.assertTrue(
 			self.ana.interacoes.filter(
 				tipo=InteracaoAcolhimento.TipoInteracao.TENTATIVA_CONTATO,
@@ -3036,7 +3034,7 @@ class DisparoQuestionarioMassaTests(TestCase):
 
 		self.assertEqual(ConviteQuestionario.objects.filter(pessoa=self.ana).count(), 1)
 		self.assertIn(self._link(pendente), self._saida(self.ana).conteudo)
-		self.assertFalse(MensagemContato.objects.filter(pessoa=self.bruno).exists())
+		self.assertFalse(self.bruno.mensagens.filter(direcao=MensagemContato.DirecaoChoices.SAIDA).exists())
 		self.assertEqual(ConviteQuestionario.objects.filter(pessoa=self.carla).count(), 1)
 		avisos = [str(m) for m in get_messages(resp.wsgi_request)]
 		self.assertIn('Ficaram de fora: 1 que ja responderam este questionario.', avisos)
@@ -3050,7 +3048,25 @@ class DisparoQuestionarioMassaTests(TestCase):
 
 		self.assertTrue(ConviteQuestionario.objects.filter(pessoa=participante, questionario=membresia).exists())
 		self.assertFalse(ConviteQuestionario.objects.filter(pessoa=self.ana).exists())
-		self.assertFalse(MensagemContato.objects.filter(pessoa=self.ana).exists())
+		self.assertFalse(self.ana.mensagens.filter(direcao=MensagemContato.DirecaoChoices.SAIDA).exists())
+
+	def test_convite_respeita_janela_de_24h_so_na_api_oficial(self):
+		fechada = self._pessoa('Edu Fechada', '31933330005', janela_aberta=False)
+
+		resp = self._disparar([self.ana, fechada])
+
+		self.assertTrue(ConviteQuestionario.objects.filter(pessoa=self.ana).exists())
+		if travas_api_oficial_ativas():
+			self.assertFalse(ConviteQuestionario.objects.filter(pessoa=fechada).exists())
+			avisos = [str(m) for m in get_messages(resp.wsgi_request)]
+			self.assertIn('Ficaram de fora: 1 com a janela de 24h fechada.', avisos)
+		else:
+			self.assertTrue(ConviteQuestionario.objects.filter(pessoa=fechada).exists())
+
+
+@override_settings(WHATSAPP_PROVIDER='evolution')
+class DisparoQuestionarioMassaEvolutionTests(DisparoQuestionarioMassaTests):
+	"""Os mesmos cenarios no modo Evolution, em que as travas de opt-in/janela nao valem."""
 
 	def test_mensagem_sem_link_nao_dispara(self):
 		resp = self._disparar([self.ana], texto='Oi {nome}, topa um cafe?')
@@ -3058,7 +3074,7 @@ class DisparoQuestionarioMassaTests(TestCase):
 		self.assertEqual(resp.status_code, 200)
 		self.assertFormError(resp.context['form'], 'texto_convite', 'Inclua {link} na mensagem: e ali que entra o link de cada pessoa.')
 		self.assertFalse(ConviteQuestionario.objects.exists())
-		self.assertFalse(MensagemContato.objects.exists())
+		self.assertFalse(MensagemContato.objects.filter(direcao=MensagemContato.DirecaoChoices.SAIDA).exists())
 
 	def test_so_lista_questionarios_ativos_com_perguntas(self):
 		Questionario.objects.create(titulo='Sem perguntas', ativo=True)

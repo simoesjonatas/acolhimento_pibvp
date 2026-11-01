@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from apps.acolhimento.fila_processor import ritmo_anti_bloqueio_ativo
 from apps.acolhimento.forms import PrimeiroContatoAdminForm
 from apps.acolhimento.models import CampanhaComunicacao, ConfiguracaoProcessamentoFila, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato, RegistroGabinete, TemplateWhatsapp
 
@@ -110,3 +111,20 @@ class ConfiguracaoProcessamentoFilaAdmin(admin.ModelAdmin):
 		}),
 		('Auditoria', {'fields': ('atualizado_por', 'atualizado_em')}),
 	)
+	# Na API oficial da Meta nao ha escalonamento, pausa nem "digitando...": so o
+	# teto diario (opcional) continua valendo.
+	fieldsets_meta = (
+		(None, {'fields': ('auto_ativo',)}),
+		('Limite de envio', {
+			'description': (
+				'Modo API oficial (Meta): as mensagens saem assim que entram na fila. '
+				'Intervalo entre mensagens, horario permitido e "digitando..." so valem '
+				'no modo Evolution (WhatsApp Web). O teto diario e opcional (0 = sem limite).'
+			),
+			'fields': ('teto_diario',),
+		}),
+		('Auditoria', {'fields': ('atualizado_por', 'atualizado_em')}),
+	)
+
+	def get_fieldsets(self, request, obj=None):
+		return self.fieldsets if ritmo_anti_bloqueio_ativo() else self.fieldsets_meta

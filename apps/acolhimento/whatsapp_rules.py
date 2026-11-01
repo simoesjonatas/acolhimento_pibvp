@@ -8,22 +8,21 @@ from apps.acolhimento.models import MensagemContato, PrimeiroContato
 
 
 # ---------------------------------------------------------------------------
-# TRAVAS DE ENVIO DESATIVADAS A PEDIDO (2026-09)
+# TRAVAS DE ENVIO LIVRE POR PROVIDER
 #
-# A equipe precisa mandar mensagem para quem ainda nao respondeu ao template de
-# primeiro contato. Foram desativadas (nao apagadas) as duas travas de envio
-# livre, porque a pedido elas devem voltar depois:
+# Na API oficial (Meta e Twilio) valem as duas travas de envio livre:
 #
 #   1. opt-in previo  -> pessoa_pode_receber_whatsapp()
 #   2. janela de 24h  -> pode_enviar_livre() e motivo_bloqueio_livre()
 #
-# Para REATIVAR: em cada uma das tres funcoes marcadas com "TRAVA DESATIVADA",
-# apague o return de bypass e descomente o corpo original logo abaixo. Fora
-# deste arquivo, ha dois pontos de UI marcados com o mesmo texto:
+# Fora da janela a Meta recusa texto livre (erro 131047 / 63016 na Twilio): so um
+# template aprovado reabre a conversa. No modo Evolution (WhatsApp Web) as travas
+# ficam desligadas, como desde 2026-09, porque ali o texto livre passa.
+# A mesma regra (`travas_api_oficial_ativas`) liga/desliga os pontos de UI:
 #   - apps/acolhimento/views.py (audiencia do disparo em massa: pode_livre)
 #   - templates/pessoa_mensagens.html e templates/mensagens_disparo_massa.html
 #
-# O que NAO foi desativado: o bloqueio de reenvio do template de continuacao
+# Independente do provider: o bloqueio de reenvio do template de continuacao
 # dentro de 24h (evita cobranca duplicada), em motivo_bloqueio_template_continuar().
 # ---------------------------------------------------------------------------
 
@@ -47,12 +46,24 @@ WHATSAPP_TEMPLATE_CONTINUAR_RECENTE_ERROR = (
 TEMPLATE_CONTINUAR_TIPO = 'continuar_conversa'
 
 
+def travas_api_oficial_ativas() -> bool:
+    """True quando valem opt-in previo e janela de 24h: API oficial (Meta ou Twilio).
+
+    So o modo Evolution (WhatsApp Web) fica de fora. Le o settings direto (e nao o
+    template_config) para nao criar ciclo de import no load dos models.
+    """
+    provider = (getattr(settings, 'WHATSAPP_PROVIDER', '') or '').strip().lower()
+    return provider != 'evolution'
+
+
 def pessoa_pode_receber_whatsapp(pessoa) -> bool:
-    """A pessoa ja deu opt-in (respondeu ao template de primeiro contato) alguma vez."""
-    # TRAVA DESATIVADA (opt-in previo): para reativar, apague o `return True` e
-    # descomente a linha original abaixo.
-    return True
-    # return bool(getattr(pessoa, 'iniciou_interacao', False))
+    """A pessoa ja deu opt-in (respondeu ao template de primeiro contato) alguma vez.
+
+    No modo Evolution a trava de opt-in nao se aplica: sempre True.
+    """
+    if not travas_api_oficial_ativas():
+        return True
+    return bool(getattr(pessoa, 'iniciou_interacao', False))
 
 
 def ultima_entrada_em(pessoa):
@@ -107,11 +118,11 @@ def contar_pessoas_janela_aberta() -> int:
 
 
 def pode_enviar_livre(pessoa) -> bool:
-    """Pode enviar uma mensagem livre (nao-template) agora: opt-in dado E janela aberta."""
-    # TRAVA DESATIVADA (opt-in + janela de 24h): para reativar, apague o
-    # `return True` e descomente a linha original abaixo.
-    return True
-    # return pessoa_pode_receber_whatsapp(pessoa) and janela_atendimento_aberta(pessoa)
+    """Pode enviar uma mensagem livre (nao-template) agora: opt-in dado E janela aberta.
+
+    No modo Evolution nenhum envio livre e bloqueado.
+    """
+    return motivo_bloqueio_livre(pessoa) is None
 
 
 def precisa_template_continuar(pessoa) -> bool:
@@ -121,14 +132,13 @@ def precisa_template_continuar(pessoa) -> bool:
 
 def motivo_bloqueio_livre(pessoa):
     """(codigo, mensagem) do bloqueio de envio livre, ou None se pode enviar."""
-    # TRAVA DESATIVADA (opt-in + janela de 24h): nenhum envio livre e bloqueado.
-    # Para reativar, apague o `return None` e descomente o corpo original abaixo.
+    if not travas_api_oficial_ativas():
+        return None
+    if not pessoa_pode_receber_whatsapp(pessoa):
+        return ('whatsapp_sem_interacao_previa', WHATSAPP_OPTIN_REQUIRED_ERROR)
+    if not janela_atendimento_aberta(pessoa):
+        return ('whatsapp_janela_24h_fechada', WHATSAPP_JANELA_FECHADA_ERROR)
     return None
-    # if not pessoa_pode_receber_whatsapp(pessoa):
-    #     return ('whatsapp_sem_interacao_previa', WHATSAPP_OPTIN_REQUIRED_ERROR)
-    # if not janela_atendimento_aberta(pessoa):
-    #     return ('whatsapp_janela_24h_fechada', WHATSAPP_JANELA_FECHADA_ERROR)
-    # return None
 
 
 # status_fila em que o template de continuacao ainda "vale" (nao falhou): enquanto isso,
