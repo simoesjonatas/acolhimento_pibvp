@@ -229,17 +229,25 @@ def send_template(
     })
 
 
-def marcar_como_lida(message_id: str) -> bool:
-    """Marca uma mensagem recebida como lida (tique azul para a pessoa). Best-effort."""
+def marcar_como_lida(message_id: str, *, digitando: bool = False, timeout: int = 3) -> bool:
+    """Marca uma mensagem recebida como lida (tique azul para a pessoa). Best-effort.
+
+    `digitando=True` tambem mostra "digitando..." para a pessoa (a Meta apaga sozinha
+    quando a resposta chega ou apos ~25s). Timeout curto: e chamada de dentro do
+    webhook, que precisa responder rapido para a Meta nao reenviar o evento.
+    """
     message_id = (message_id or '').strip()
     if not message_id:
         return False
+    payload: dict[str, Any] = {
+        'messaging_product': 'whatsapp',
+        'status': 'read',
+        'message_id': message_id,
+    }
+    if digitando:
+        payload['typing_indicator'] = {'type': 'text'}
     try:
-        _request('POST', f'{_phone_number_id()}/messages', {
-            'messaging_product': 'whatsapp',
-            'status': 'read',
-            'message_id': message_id,
-        })
+        _request('POST', f'{_phone_number_id()}/messages', payload, timeout=timeout)
     except MetaWhatsAppError:
         return False
     return True

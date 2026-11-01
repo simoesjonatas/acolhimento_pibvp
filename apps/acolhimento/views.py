@@ -1035,6 +1035,17 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 			direcao=MensagemContato.DirecaoChoices.ENTRADA,
 			visualizada_equipe_em__isnull=True,
 		).exists()
+		# A ultima coisa que a pessoa disse foi o botao "Agora nao" do template da Meta.
+		ultima_entrada = (
+			self.object.mensagens.filter(direcao=MensagemContato.DirecaoChoices.ENTRADA)
+			.order_by('-enfileirada_em', '-id')
+			.first()
+		)
+		context['pediu_falar_depois'] = (
+			ultima_entrada
+			if ultima_entrada and (ultima_entrada.metadata_resposta or {}).get('meta_botao') == 'agora_nao'
+			else None
+		)
 
 		# Fluxo evolutivo do acolhimento, na ordem de declaracao do TextChoices.
 		valores = list(PrimeiroContato.StatusAcolhimento.values)

@@ -40,6 +40,9 @@
                     {% if pessoa.iniciou_interacao %}
                     <li><span class="iniciou-badge">Iniciou conversa no WhatsApp</span></li>
                     {% endif %}
+                    {% if pediu_falar_depois %}
+                    <li><span class="falar-depois-badge" title="Respondeu &quot;{{ pediu_falar_depois.metadata_resposta.meta_botao_texto }}&quot; em {{ pediu_falar_depois.enfileirada_em|date:'d/m/Y H:i' }}">Pediu para falar depois</span></li>
+                    {% endif %}
                 </ul>
             </div>
             <div class="hero-actions person-header-actions">

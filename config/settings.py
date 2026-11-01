@@ -306,6 +306,10 @@ META_TEMPLATE_OPT_IN_VARIABLES = os.getenv('META_TEMPLATE_OPT_IN_VARIABLES', '{}
 META_TEMPLATE_CONTINUAR_NOME = os.getenv('META_TEMPLATE_CONTINUAR_NOME', '').strip()
 META_TEMPLATE_CONTINUAR_IDIOMA = os.getenv('META_TEMPLATE_CONTINUAR_IDIOMA', 'pt_BR').strip() or 'pt_BR'
 META_TEMPLATE_CONTINUAR_VARIABLES = os.getenv('META_TEMPLATE_CONTINUAR_VARIABLES', '{}')
+# Textos dos botoes de resposta rapida dos templates aprovados. Precisam bater com o
+# que esta aprovado na Meta: o clique chega no webhook com esse texto (e payload).
+META_BOTAO_SIM = (os.getenv('META_BOTAO_SIM') or 'Sim, podemos').strip()
+META_BOTAO_NAO = (os.getenv('META_BOTAO_NAO') or 'Agora não').strip()
 
 # ---------------------------------------------------------------------------
 # Opt-in-first (anti-bloqueio): faz a PESSOA iniciar a conversa.

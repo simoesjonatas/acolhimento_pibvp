@@ -50,7 +50,8 @@
 }
 
 .hero-badges .retorno-badge,
-.hero-badges .iniciou-badge {
+.hero-badges .iniciou-badge,
+.hero-badges .falar-depois-badge {
     margin-left: 0;
 }
 
@@ -2248,7 +2249,8 @@ a.queue-summary-item:hover {
 }
 
 .person-meta .retorno-badge,
-.person-meta .iniciou-badge {
+.person-meta .iniciou-badge,
+.person-meta .falar-depois-badge {
     margin-left: 0;
 }
 
@@ -4042,6 +4044,12 @@ a.kpi-card:hover {
     color: #8e3029;
 }
 
+.chat-bubble .message-botao {
+    margin: -4px 0 8px;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
 .message-error {
     margin: 8px 0 0;
     padding: 8px 10px;
@@ -4098,7 +4106,8 @@ a.kpi-card:hover {
 .admin-badge,
 .reply-badge,
 .retorno-badge,
-.iniciou-badge {
+.iniciou-badge,
+.falar-depois-badge {
     display: inline-flex;
     align-items: center;
     border-radius: 999px;
@@ -4147,7 +4156,8 @@ a.kpi-card:hover {
 }
 
 .retorno-badge,
-.iniciou-badge {
+.iniciou-badge,
+.falar-depois-badge {
     margin-left: 8px;
     padding: 3px 8px;
     font-size: 0.72rem;
@@ -4164,6 +4174,12 @@ a.kpi-card:hover {
     background: #ecf8ef;
     color: #1e6640;
     border-color: #9bd3b1;
+}
+
+.falar-depois-badge {
+    background: #f3f1fa;
+    color: #4d4678;
+    border-color: #c9c3e3;
 }
 
 /* Profile */
@@ -4926,7 +4942,8 @@ a.kpi-card:hover {
     }
 
     .retorno-badge,
-    .iniciou-badge {
+    .iniciou-badge,
+    .falar-depois-badge {
         margin: 6px 0 0;
     }
 

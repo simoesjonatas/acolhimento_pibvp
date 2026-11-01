@@ -14,6 +14,9 @@
             <span>{{ mensagem.enfileirada_em|date:'d/m/Y H:i' }}</span>
         </div>
         <p>{{ mensagem.conteudo|linebreaksbr }}</p>
+        {% if mensagem.direcao == 'entrada' and mensagem.metadata_resposta.meta_botao %}
+        <p class="message-botao">respondeu pelo botão: <strong>{{ mensagem.metadata_resposta.meta_botao_texto|default:mensagem.conteudo }}</strong>{% if mensagem.metadata_resposta.meta_botao == 'agora_nao' %} · pediu para falar depois{% endif %}</p>
+        {% endif %}
         <div class="message-footer">
             <span class="message-channel whatsapp">WhatsApp</span>
             <span class="message-status status-{{ mensagem.status_fila }}">{{ mensagem.get_status_fila_display }}</span>
