@@ -288,6 +288,36 @@ def list_templates(timeout: int = 8) -> list[dict[str, Any]]:
     return [item for item in itens if isinstance(item, dict)]
 
 
+def get_pricing_analytics(inicio_ts: int, fim_ts: int, timeout: int = 10) -> list[dict[str, Any]] | None:
+    """Custo e volume informados pela Meta no periodo (UNIX), por categoria e tipo.
+
+    Usa o campo `pricing_analytics` da WABA. Devolve a lista de `data_points`
+    ({start, end, pricing_category, pricing_type, volume, cost}) ou None quando nao
+    da para consultar (sem WABA, token sem `whatsapp_business_management`, erro).
+    O custo vem na moeda da conta de pagamento da Meta e e aproximado.
+    """
+    waba = (getattr(settings, 'META_WA_BUSINESS_ACCOUNT_ID', '') or '').strip()
+    if not waba or not configurado():
+        return None
+    campo = (
+        f'pricing_analytics.start({int(inicio_ts)}).end({int(fim_ts)})'
+        '.granularity(DAILY).dimensions(PRICING_CATEGORY,PRICING_TYPE)'
+    )
+    try:
+        status, data = _request('GET', waba, params={'fields': campo}, timeout=timeout)
+    except MetaWhatsAppError:
+        return None
+    if status != 200 or not isinstance(data, dict):
+        return None
+    analytics = data.get('pricing_analytics') or {}
+    pontos: list[dict[str, Any]] = []
+    for bloco in analytics.get('data') or []:
+        if not isinstance(bloco, dict):
+            continue
+        pontos.extend(item for item in bloco.get('data_points') or [] if isinstance(item, dict))
+    return pontos
+
+
 def configurado() -> bool:
     """True quando ha o minimo para enviar (token + phone number id)."""
     return bool(

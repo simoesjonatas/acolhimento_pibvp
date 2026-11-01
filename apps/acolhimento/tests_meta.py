@@ -741,6 +741,11 @@ class MetaWebhookTests(TestCase):
 @override_settings(**META_OK)
 class MetaEnfileiramentoViewsTests(TestCase):
 	def setUp(self):
+		# O indicador do WhatsApp no menu consulta a Meta ao renderizar qualquer tela:
+		# sem este mock o teste faria uma chamada real ao graph.facebook.com.
+		indicador = patch('apps.acolhimento.meta_service.get_phone_number_info', return_value={})
+		indicador.start()
+		self.addCleanup(indicador.stop)
 		self.user = get_user_model().objects.create_user('equipe_meta', password='x', is_staff=True)
 		self.client.force_login(self.user)
 		self.pessoa = _pessoa(nome='Visitante', telefone='31955554444')
@@ -812,6 +817,11 @@ class MetaEnfileiramentoViewsTests(TestCase):
 @override_settings(**META_OK)
 class MetaConfiguracaoTests(TestCase):
 	def setUp(self):
+		# O indicador do WhatsApp no menu consulta a Meta ao renderizar qualquer tela:
+		# sem este mock o teste faria uma chamada real ao graph.facebook.com.
+		indicador = patch('apps.acolhimento.meta_service.get_phone_number_info', return_value={})
+		indicador.start()
+		self.addCleanup(indicador.stop)
 		from django.core.cache import cache
 
 		# O indicador do menu cacheia o estado por 30s; nao vazar entre testes.
