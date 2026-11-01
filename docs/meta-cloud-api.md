@@ -30,6 +30,7 @@ so sai template.
 | `META_WA_API_VERSION` | versao do Graph API (`v22.0`) |
 | `META_TEMPLATE_OPT_IN_NOME` / `_IDIOMA` / `_VARIABLES` | template de primeiro contato aprovado |
 | `META_TEMPLATE_CONTINUAR_NOME` / `_IDIOMA` / `_VARIABLES` | template de continuacao aprovado |
+| `META_BOTAO_SIM` / `META_BOTAO_NAO` | texto exato dos botoes de resposta rapida aprovados (padrao `Sim, podemos` / `Agora não`) |
 
 Os nomes e idiomas dos templates tambem podem ser definidos pela tela
 **Configuracoes > Mensagens do WhatsApp** (o banco tem prioridade sobre o `.env`).
@@ -43,6 +44,29 @@ Os nomes e idiomas dos templates tambem podem ser definidos pela tela
    status de entrega (sent / delivered / read / failed).
 3. Todo POST chega assinado (`X-Hub-Signature-256`). Em producao, sem
    `META_WA_APP_SECRET` o webhook recusa tudo com 403 (ha um system check que avisa).
+4. Toda mensagem recebida e marcada como lida na Meta (tique azul para a pessoa),
+   sem travar o webhook se a chamada falhar. Quando o bot de menu responde e o
+   processamento automatico da fila esta ligado, vai junto o "digitando...".
+
+### Botoes de resposta rapida dos templates
+
+O clique chega como `type=button` (`button.payload` / `button.text`) ou, em
+mensagem interativa, `interactive.button_reply` (`id` / `title`). O texto e
+comparado sem acento/caixa/pontuacao com `META_BOTAO_SIM` / `META_BOTAO_NAO`
+(ids `sim` / `nao` tambem valem):
+
+- **Sim, podemos**: a pessoa vai para *Em acompanhamento* (se ainda estava em
+  Primeiro contato / Visitante), registra *Resposta recebida* na linha do tempo e
+  o bot de menu **nao** e acionado. A entrada fica no retorno pendente para a
+  equipe dar sequencia.
+- **Agora nao**: registra *Resposta recebida* ("pediu para falar depois"), a
+  entrada ja nasce vista pela equipe (fora do retorno pendente) e a tela da pessoa
+  mostra o selo *Pediu para falar depois* ate ela escrever de novo.
+- Outro botao: segue o fluxo normal (bot de menu com o texto do botao).
+
+Em todos os casos a entrada guarda `meta_botao` (`sim` / `agora_nao` /
+`desconhecido`) e `meta_botao_texto` em `metadata_resposta`, e a conversa mostra
+"respondeu pelo botao: ...".
 
 ## Templates
 

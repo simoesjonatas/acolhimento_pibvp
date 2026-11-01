@@ -19,6 +19,8 @@ import hashlib
 import hmac
 import json
 import logging
+import re
+import unicodedata
 
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
@@ -27,8 +29,13 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
-from apps.acolhimento import atendimento_bot, whatsapp_saude
-from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato
+from apps.acolhimento import atendimento_bot, meta_service, whatsapp_saude
+from apps.acolhimento.models import (
+    ConfiguracaoProcessamentoFila,
+    InteracaoAcolhimento,
+    MensagemContato,
+    PrimeiroContato,
+)
 from apps.acolhimento.phone_utils import (
     build_auto_nome_from_phone,
     find_pessoa_by_phone,
@@ -42,6 +49,17 @@ _STATUS_MAP = {
     'sent': 'enviada',
     'delivered': 'entregue',
     'read': 'lida',
+}
+
+# Marcador gravado em `metadata_resposta['meta_botao']` da entrada.
+BOTAO_SIM = 'sim'
+BOTAO_AGORA_NAO = 'agora_nao'
+BOTAO_DESCONHECIDO = 'desconhecido'
+
+# Status anteriores a "Em acompanhamento": so desses o botao "Sim" promove a pessoa.
+_STATUS_ANTES_DO_ACOMPANHAMENTO = {
+    PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO,
+    PrimeiroContato.StatusAcolhimento.ROBO,
 }
 
 
@@ -98,6 +116,55 @@ def _extrair_texto(message: dict) -> str:
     if tipo == 'unsupported':
         return '(mensagem nao suportada)'
     return ''
+
+
+def _normalizar(texto: str) -> str:
+    """'Agora não!' -> 'agora nao': sem acento, caixa, pontuacao ou espaco sobrando."""
+    texto = unicodedata.normalize('NFKD', str(texto or ''))
+    texto = ''.join(c for c in texto if not unicodedata.combining(c)).casefold()
+    return ' '.join(re.sub(r'[^\w\s]', ' ', texto).split())
+
+
+def _botao(message: dict) -> tuple[str, str] | None:
+    """Clique num botao de resposta rapida: (marcador, texto do botao). None = nao e botao.
+
+    Template aprovado chega como type='button' (`button.payload` / `button.text`);
+    mensagem interativa nossa chega como `interactive.button_reply` (`id` / `title`).
+    Os textos aceitos vem de META_BOTAO_SIM / META_BOTAO_NAO (os aprovados na Meta).
+    """
+    tipo = str(message.get('type') or '')
+    if tipo == 'button':
+        botao = message.get('button') or {}
+        texto = str(botao.get('text') or '').strip()
+        candidatos = [botao.get('payload'), texto]
+    elif tipo == 'interactive':
+        botao = (message.get('interactive') or {}).get('button_reply') or {}
+        if not botao:
+            return None
+        texto = str(botao.get('title') or '').strip()
+        candidatos = [botao.get('id'), texto]
+    else:
+        return None
+
+    candidatos = {_normalizar(c) for c in candidatos if c}
+    texto = texto or str(next(iter(candidatos), ''))
+    sim = {'sim', _normalizar(getattr(settings, 'META_BOTAO_SIM', '') or 'Sim, podemos')}
+    nao = {'nao', _normalizar(getattr(settings, 'META_BOTAO_NAO', '') or 'Agora não')}
+    if candidatos & sim:
+        return BOTAO_SIM, texto
+    if candidatos & nao:
+        return BOTAO_AGORA_NAO, texto
+    return BOTAO_DESCONHECIDO, texto
+
+
+def _marcar_como_lida(msg_id: str, *, digitando: bool = False) -> None:
+    """Tique azul para a pessoa. Best-effort: falha da Meta nao derruba o webhook."""
+    if not msg_id:
+        return
+    try:
+        meta_service.marcar_como_lida(msg_id, digitando=digitando)
+    except Exception:  # noqa: BLE001 - timeout de socket etc. nao podem virar 500 aqui.
+        logger.warning('Webhook Meta: nao foi possivel marcar a mensagem como lida.', exc_info=True)
 
 
 def _nome_contato(value: dict, wa_id: str) -> str:
@@ -207,6 +274,8 @@ class MetaWebhookView(View):
             return False
 
         texto = _extrair_texto(message) or '(mensagem sem texto)'
+        botao = _botao(message)
+        marcador_botao = botao[0] if botao else ''
         push_name = _nome_contato(value, numero)
         agora = timezone.now()
         flip_legado_pendente = False
@@ -241,6 +310,10 @@ class MetaWebhookView(View):
                 data_interacao=agora.date(),
             )
 
+        metadata_entrada = {'meta': message}
+        if botao:
+            metadata_entrada['meta_botao'] = marcador_botao
+            metadata_entrada['meta_botao_texto'] = botao[1]
         MensagemContato.objects.create(
             pessoa=pessoa,
             canal=MensagemContato.CanalChoices.WHATSAPP,
@@ -250,8 +323,10 @@ class MetaWebhookView(View):
             referencia_externa=msg_id,
             enviada_em=agora,
             entregue_em=agora,
-            visualizada_equipe_em=None,
-            metadata_resposta={'meta': message},
+            # "Agora nao" nao pede retorno da equipe: entra ja como vista, fora da fila
+            # de retorno pendente.
+            visualizada_equipe_em=agora if marcador_botao == BOTAO_AGORA_NAO else None,
+            metadata_resposta=metadata_entrada,
         )
 
         ultima_saida = (
@@ -281,19 +356,51 @@ class MetaWebhookView(View):
                 ]
             )
 
+        # Botoes do template ("Sim, podemos" / "Agora nao") ja dizem o que a pessoa quer:
+        # o bot de menu nao entra, senao ele responderia o clique com o menu numerado.
+        if marcador_botao in (BOTAO_SIM, BOTAO_AGORA_NAO):
+            self._resposta_botao(pessoa, marcador_botao, botao[1], agora)
+            _marcar_como_lida(msg_id)
+            logger.info('Webhook Meta: entrada de botao registrada (pessoa=%s, botao=%s).', pessoa.id, marcador_botao)
+            return True
+
         # Atendimento automatico (bot de menu). Se ele assumir, controla o status;
         # senao, aplica o flip legado da 1a resposta (pessoa -> Em acompanhamento).
         handled = atendimento_bot.processar_entrada(pessoa, texto)
-        if not handled and flip_legado_pendente and pessoa.status in {
-            PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO,
-            PrimeiroContato.StatusAcolhimento.ROBO,
-        }:
+        if not handled and flip_legado_pendente and pessoa.status in _STATUS_ANTES_DO_ACOMPANHAMENTO:
             pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
             pessoa.save(update_fields=['status', 'atualizado_em'])
+
+        # Com o bot respondendo e a fila saindo sozinha, mostra "digitando..." ate a resposta.
+        _marcar_como_lida(msg_id, digitando=handled and ConfiguracaoProcessamentoFila.auto_ligado())
 
         # LGPD: nao logamos telefone nem conteudo da mensagem, apenas identificadores.
         logger.info('Webhook Meta: entrada registrada (pessoa=%s, bot_atendeu=%s).', pessoa.id, handled)
         return True
+
+    def _resposta_botao(self, pessoa: PrimeiroContato, marcador: str, texto_botao: str, agora) -> None:
+        """Aplica o clique em "Sim, podemos" / "Agora nao" e registra na linha do tempo."""
+        if marcador == BOTAO_SIM:
+            descricao = f'Pessoa respondeu "{texto_botao}" pelo botao do WhatsApp'
+            if pessoa.status in _STATUS_ANTES_DO_ACOMPANHAMENTO:
+                pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
+                # Sai do menu do bot: daqui em diante a conversa e com a equipe.
+                pessoa.bot_etapa = PrimeiroContato.BotEtapaChoices.INATIVO
+                pessoa.save(update_fields=['status', 'bot_etapa', 'atualizado_em'])
+                descricao += ' e passou para Em acompanhamento.'
+            else:
+                descricao += '.'
+        else:
+            descricao = (
+                f'Pessoa respondeu "{texto_botao}" pelo botao do WhatsApp: '
+                'pediu para falar depois.'
+            )
+        InteracaoAcolhimento.objects.create(
+            pessoa=pessoa,
+            tipo=InteracaoAcolhimento.TipoInteracao.RESPOSTA_RECEBIDA,
+            descricao=descricao,
+            data_interacao=agora.date(),
+        )
 
     # ------------------------------------------------------------------- status
     def _status(self, status: dict) -> str:
