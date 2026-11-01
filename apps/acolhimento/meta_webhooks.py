@@ -27,7 +27,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
-from apps.acolhimento import atendimento_bot, whatsapp_saude
+from apps.acolhimento import atendimento_bot, custo_whatsapp, whatsapp_saude
 from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato
 from apps.acolhimento.phone_utils import (
     build_auto_nome_from_phone,
@@ -320,6 +320,9 @@ class MetaWebhookView(View):
         historico.append({'received_at': agora.isoformat(), 'status': status_raw, 'evento': status})
         metadata['meta_webhook'] = historico
         mensagem.metadata_envio = metadata
+
+        # Cobranca (categoria + regular/gratuita) vem em um dos status sent/delivered/read.
+        update_fields.extend(custo_whatsapp.aplicar_cobranca(mensagem, status))
 
         resultado = 'ok'
         if status_raw == 'failed':

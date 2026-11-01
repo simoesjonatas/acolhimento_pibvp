@@ -80,3 +80,25 @@ verify token e App Secret, a lista de templates com status de aprovacao e um
 | 132000 | numero de parametros diferente do template |
 | 131026 | numero sem WhatsApp ou que bloqueou o contato |
 | 131030 | numero nao esta na lista de teste (app ainda em modo de desenvolvimento) |
+
+## Relatorio de custo (somente administradores)
+
+Em **Configuracoes > Custo do WhatsApp** (rota `configuracoes/whatsapp/custo/`), visivel e
+acessivel apenas para superusuarios. Quem nao e administrador recebe 403; quem nao esta
+logado vai para o login.
+
+- **Custo oficial (Meta)**: consulta `pricing_analytics` da WABA no periodo. Precisa de
+  `META_WA_BUSINESS_ACCOUNT_ID` e do token com `whatsapp_business_management`. O valor e
+  aproximado, na moeda da conta de pagamento, e e cacheado por 10 minutos.
+- **Detalhamento interno**: cada status `sent`/`delivered`/`read` do webhook traz o objeto
+  `pricing`; a categoria e o tipo (`regular` = cobrada, `free_*` = gratuita) ficam gravados na
+  mensagem. O relatorio quebra por categoria, por origem (boas-vindas, continuar, disparo,
+  bot, equipe) e por dia.
+- **Custo estimado**: usa a tabela de precos editavel na propria tela (preco por mensagem
+  cobrada, por categoria). Copie os valores da tabela de precos da Meta para o Brasil.
+- **CSV**: uma linha por mensagem do periodo, para conferencia.
+- A migracao 0028 recupera a cobranca das mensagens ja enviadas a partir do historico de
+  webhooks guardado em `metadata_envio['meta_webhook']`.
+
+Desde 1/10/2026 a Meta cobra mensagens de servico acima de 1.000 por mes por numero e
+utilidade dentro da janela de atendimento; o webhook ja informa isso no `pricing.type`.

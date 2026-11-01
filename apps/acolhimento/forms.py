@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from apps.acolhimento import reports
 from apps.acolhimento.models import (
+    TabelaPrecoWhatsapp,
     ConfiguracaoAtendimentoBot,
     ConviteQuestionario,
     InteracaoAcolhimento,
@@ -662,3 +663,41 @@ class OpcaoComoConheceuForm(forms.ModelForm):
         if duplicada.exists():
             raise forms.ValidationError('Ja existe uma opcao com este nome.')
         return rotulo
+
+
+class PeriodoCustoWhatsappForm(forms.Form):
+    """Periodo do relatorio de custo do WhatsApp (datas inclusivas)."""
+
+    # O <input type="date"> so aceita AAAA-MM-DD; o formato local (dd/mm/aaaa) deixaria o campo vazio.
+    inicio = forms.DateField(label='De', widget=forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'))
+    fim = forms.DateField(label='Ate', widget=forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'))
+
+    def clean(self):
+        from apps.acolhimento.custo_whatsapp import MAX_DIAS_PERIODO
+
+        cleaned = super().clean()
+        inicio, fim = cleaned.get('inicio'), cleaned.get('fim')
+        if inicio and fim:
+            if fim < inicio:
+                self.add_error('fim', 'A data final deve ser igual ou posterior a inicial.')
+            elif (fim - inicio).days > MAX_DIAS_PERIODO:
+                self.add_error('fim', 'Escolha um periodo de ate um ano.')
+        return cleaned
+
+
+class TabelaPrecoWhatsappForm(forms.ModelForm):
+    class Meta:
+        model = TabelaPrecoWhatsapp
+        fields = ['moeda', 'preco_marketing', 'preco_utility', 'preco_authentication', 'preco_service']
+        widgets = {
+            campo: forms.NumberInput(attrs={'step': '0.0001', 'min': '0'})
+            for campo in ['preco_marketing', 'preco_utility', 'preco_authentication', 'preco_service']
+        }
+
+    def clean(self):
+        cleaned = super().clean()
+        for campo in ['preco_marketing', 'preco_utility', 'preco_authentication', 'preco_service']:
+            valor = cleaned.get(campo)
+            if valor is not None and valor < 0:
+                self.add_error(campo, 'O preco nao pode ser negativo.')
+        return cleaned

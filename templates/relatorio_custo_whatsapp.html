@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block title %}Custo do WhatsApp{% endblock %}
+
+{% block content %}
+<div class="custo-wa-page">
+    <style>
+        .custo-wa-page { max-width:100%; overflow-x:hidden; }
+        .custo-wa-cards { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:14px; margin:18px 0; }
+        @media (max-width: 960px){ .custo-wa-cards { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 520px){ .custo-wa-cards { grid-template-columns:minmax(0, 1fr); } }
+        .custo-wa-card { background:#fff; border-radius:14px; padding:16px 18px; box-shadow:0 1px 4px rgba(15,23,42,.08); min-width:0; }
+        .custo-wa-card small { display:block; color:#64748b; font-size:.82rem; font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+        .custo-wa-card strong { display:block; font-size:1.6rem; margin-top:6px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+        .custo-wa-card span { display:block; color:#64748b; font-size:.85rem; margin-top:4px; }
+        .custo-wa-card.destaque { background:#eef2ff; }
+        .custo-wa-grid { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:18px; align-items:start; }
+        @media (max-width: 1180px){ .custo-wa-grid { grid-template-columns:minmax(0, 1fr); } }
+        .custo-wa-grid > * { min-width:0; }
+        .custo-wa-table-wrap { overflow-x:auto; }
+        .custo-wa-table { width:100%; border-collapse:collapse; font-size:.92rem; }
+        .custo-wa-table th, .custo-wa-table td { padding:8px 10px; border-bottom:1px solid rgba(15,23,42,.08); text-align:left; white-space:nowrap; }
+        .custo-wa-table th { color:#64748b; font-weight:600; font-size:.8rem; text-transform:uppercase; letter-spacing:.03em; }
+        .custo-wa-table td.num, .custo-wa-table th.num { text-align:right; font-variant-numeric:tabular-nums; }
+        .custo-wa-table tfoot td { font-weight:700; border-bottom:none; }
+        .custo-wa-bar { display:inline-block; height:8px; border-radius:4px; background:#6366f1; vertical-align:middle; min-width:2px; }
+        .custo-wa-periodo { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+        .custo-wa-periodo .report-field { min-width:160px; }
+        .custo-wa-atalhos { display:flex; flex-wrap:wrap; gap:8px; }
+        .custo-wa-precos { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:12px; }
+        @media (max-width: 960px){ .custo-wa-precos { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+        .custo-wa-precos input, .custo-wa-precos select { width:100%; }
+        .custo-wa-nota { color:#64748b; font-size:.88rem; margin:8px 0 0; }
+        .custo-wa-alerta { background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; border-radius:12px; padding:12px 16px; margin-top:14px; }
+    </style>
+
+    <section class="page-hero">
+        <div>
+            <span class="section-eyebrow">Configuracoes &middot; Administrativo</span>
+            <h1>Custo do WhatsApp</h1>
+            <p>Quanto a igreja gasta com mensagens na API oficial da Meta, por categoria e por origem. Visivel apenas para administradores.</p>
+        </div>
+        <a class="btn secundario" href="{{ url_csv }}" data-no-loading>
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span class="btn-text">Exportar CSV</span>
+        </a>
+    </section>
+
+    <section class="dashboard-panel report-section">
+        <form method="get" class="custo-wa-periodo" data-no-loading>
+            <div class="report-field">
+                <label for="{{ periodo_form.inicio.id_for_label }}">{{ periodo_form.inicio.label }}</label>
+                {{ periodo_form.inicio }}
+            </div>
+            <div class="report-field">
+                <label for="{{ periodo_form.fim.id_for_label }}">{{ periodo_form.fim.label }}</label>
+                {{ periodo_form.fim }}
+            </div>
+            <button type="submit">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span class="btn-text">Ver periodo</span>
+            </button>
+            <div class="custo-wa-atalhos">
+                <a class="btn secundario" href="{% url 'relatorio-custo-whatsapp' %}" data-no-loading>Este mes</a>
+                <a class="btn secundario" href="{% url 'relatorio-custo-whatsapp' %}?atalho=mes_anterior" data-no-loading>Mes anterior</a>
+            </div>
+        </form>
+        {% if periodo_form.errors %}<p class="form-errors">{% for erros in periodo_form.errors.values %}{{ erros.0 }} {% endfor %}</p>{% endif %}
+        <p class="custo-wa-nota">Periodo exibido: {{ inicio|date:'d/m/Y' }} a {{ fim|date:'d/m/Y' }}.</p>
+    </section>
+
+    {% if not usando_meta %}
+    <div class="custo-wa-alerta">
+        O WhatsApp nao esta usando a API oficial da Meta neste ambiente. O relatorio mostra apenas o historico ja registrado.
+    </div>
+    {% endif %}
+
+    <div class="custo-wa-cards">
+        <div class="custo-wa-card destaque">
+            <small>Custo oficial (Meta)</small>
+            {% if oficial %}
+                <strong>{{ moeda }} {{ oficial.custo|floatformat:"2g" }}</strong>
+                <span>{{ oficial.volume }} mensagem(ns) entregue(s) segundo a Meta</span>
+            {% else %}
+                <strong>&mdash;</strong>
+                <span>Indisponivel agora. Precisa do ID da conta (WABA) e da permissao de gestao no token.</span>
+            {% endif %}
+        </div>
+        <div class="custo-wa-card">
+            <small>Custo estimado</small>
+            <strong>{{ moeda }} {{ total.custo_estimado|floatformat:"2g" }}</strong>
+            <span>{% if tabela_preenchida %}Pela tabela de precos abaixo{% else %}Preencha a tabela de precos abaixo{% endif %}</span>
+        </div>
+        <div class="custo-wa-card">
+            <small>Mensagens cobradas</small>
+            <strong>{{ total.cobradas }}</strong>
+            <span>de {{ total.total }} enviada(s) no periodo</span>
+        </div>
+        <div class="custo-wa-card">
+            <small>Gratuitas</small>
+            <strong>{{ total.gratuitas }}</strong>
+            <span>{% if total.sem_confirmacao %}{{ total.sem_confirmacao }} aguardando confirmacao{% else %}Atendimento na franquia ou janela gratuita{% endif %}{% if total.falhas %} &middot; {{ total.falhas }} com falha{% endif %}</span>
+        </div>
+    </div>
+
+    <div class="custo-wa-grid">
+        <section class="dashboard-panel report-section">
+            <div class="panel-header"><h2>Por categoria da Meta</h2></div>
+            {% if por_categoria %}
+            <div class="custo-wa-table-wrap">
+            <table class="custo-wa-table">
+                <thead><tr><th>Categoria</th><th class="num">Cobradas</th><th class="num">Gratuitas</th><th class="num">Estimado</th><th class="num">Oficial</th></tr></thead>
+                <tbody>
+                {% for linha in por_categoria %}
+                    <tr>
+                        <td>{{ linha.rotulo }}</td>
+                        <td class="num">{{ linha.cobradas }}</td>
+                        <td class="num">{{ linha.gratuitas }}</td>
+                        <td class="num">{{ linha.custo_estimado|floatformat:"2g" }}</td>
+                        <td class="num">{% if linha.custo_oficial is not None %}{{ linha.custo_oficial|floatformat:"2g" }}{% else %}&mdash;{% endif %}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p class="table-muted-text">Nenhuma mensagem enviada pela Meta no periodo.</p>
+            {% endif %}
+            <p class="custo-wa-nota">Marketing e utilidade sao templates. Servico e a conversa livre: gratuita ate a franquia mensal do numero.</p>
+        </section>
+
+        <section class="dashboard-panel report-section">
+            <div class="panel-header"><h2>Por origem no sistema</h2></div>
+            {% if por_origem %}
+            <div class="custo-wa-table-wrap">
+            <table class="custo-wa-table">
+                <thead><tr><th>Origem</th><th class="num">Enviadas</th><th class="num">Cobradas</th><th class="num">Estimado</th></tr></thead>
+                <tbody>
+                {% for linha in por_origem %}
+                    <tr>
+                        <td>{{ linha.rotulo }}</td>
+                        <td class="num">{{ linha.total }}</td>
+                        <td class="num">{{ linha.cobradas }}</td>
+                        <td class="num">{{ linha.custo_estimado|floatformat:"2g" }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr><td>Total</td><td class="num">{{ total.total }}</td><td class="num">{{ total.cobradas }}</td><td class="num">{{ total.custo_estimado|floatformat:"2g" }}</td></tr>
+                </tfoot>
+            </table>
+            </div>
+            {% else %}
+            <p class="table-muted-text">Nenhuma mensagem enviada pela Meta no periodo.</p>
+            {% endif %}
+        </section>
+    </div>
+
+    {% if por_dia %}
+    <section class="dashboard-panel report-section">
+        <div class="panel-header"><h2>Por dia</h2></div>
+        <div class="custo-wa-table-wrap">
+        <table class="custo-wa-table">
+            <thead><tr><th>Dia</th><th>Volume</th><th class="num">Enviadas</th><th class="num">Cobradas</th><th class="num">Estimado</th></tr></thead>
+            <tbody>
+            {% for linha in por_dia %}
+                <tr>
+                    <td>{{ linha.rotulo }}</td>
+                    <td style="width:40%"><span class="custo-wa-bar" style="width:{% widthratio linha.total maior_dia 100 %}%"></span></td>
+                    <td class="num">{{ linha.total }}</td>
+                    <td class="num">{{ linha.cobradas }}</td>
+                    <td class="num">{{ linha.custo_estimado|floatformat:"2g" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="dashboard-panel report-section" id="tabela-precos">
+        <div class="panel-header"><div>
+            <h2>Tabela de precos (custo estimado)</h2>
+            <p>Preco por mensagem cobrada, copiado da tabela da Meta para o Brasil. O custo oficial nao depende destes valores.</p>
+        </div></div>
+        <form method="post">{% csrf_token %}
+            <input type="hidden" name="consulta" value="{{ consulta }}">
+            <div class="custo-wa-precos">
+                {% for campo in preco_form %}
+                <div class="report-field">
+                    <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
+                    {{ campo }}
+                    {% if campo.errors %}<span class="form-errors">{{ campo.errors.0 }}</span>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="action-row" style="margin-top:14px">
+                <button type="submit">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                    <span class="btn-text">Salvar precos</span>
+                </button>
+            </div>
+        </form>
+        {% if tabela.atualizado_por %}<p class="custo-wa-nota">Atualizado em {{ tabela.atualizado_em|date:'d/m/Y H:i' }} por {{ tabela.atualizado_por.get_full_name|default:tabela.atualizado_por.username }}.</p>{% endif %}
+    </section>
+</div>
+{% endblock %}

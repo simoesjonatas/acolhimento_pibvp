@@ -15,6 +15,7 @@ from apps.acolhimento.como_conheceu_views import (
     OpcaoComoConheceuToggleView,
     OpcaoComoConheceuUpdateView,
 )
+from apps.acolhimento.custo_views import RelatorioCustoWhatsappView
 from apps.acolhimento.evolution_webhooks import EvolutionWebhookView
 from apps.acolhimento.meta_views import ConfiguracaoWhatsappView
 from apps.acolhimento.meta_webhooks import MetaWebhookView
@@ -69,6 +70,7 @@ urlpatterns = [
     path('mensagens/disparo/', DisparoMensagemMassaView.as_view(), name='mensagens-disparo-massa'),
     path('configuracoes/templates/', ConfiguracaoTemplatesView.as_view(), name='configuracao-templates'),
     path('configuracoes/whatsapp/', ConfiguracaoWhatsappView.as_view(), name='configuracao-whatsapp'),
+    path('configuracoes/whatsapp/custo/', RelatorioCustoWhatsappView.as_view(), name='relatorio-custo-whatsapp'),
     path('configuracoes/atendimento/', ConfiguracaoAtendimentoBotView.as_view(), name='configuracao-atendimento'),
     path('configuracoes/atendimento/opcao/nova/', OpcaoAtendimentoBotCreateView.as_view(), name='atendimento-opcao-nova'),
     path('configuracoes/atendimento/opcao/<int:pk>/editar/', OpcaoAtendimentoBotUpdateView.as_view(), name='atendimento-opcao-editar'),

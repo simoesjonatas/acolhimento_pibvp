@@ -241,7 +241,20 @@ class MensagemContato(models.Model):
 	resposta_conteudo = models.TextField(blank=True)
 	metadata_envio = models.JSONField(default=dict, blank=True)
 	metadata_resposta = models.JSONField(default=dict, blank=True)
+	# Cobranca informada pela Meta no webhook de status (objeto `pricing`). So existe
+	# para mensagens enviadas pela API oficial; vazio = ainda sem confirmacao.
+	cobranca_categoria = models.CharField(max_length=40, blank=True, db_index=True)
+	cobranca_tipo = models.CharField(max_length=40, blank=True)
+	cobranca_modelo = models.CharField(max_length=10, blank=True)
+	cobranca_registrada_em = models.DateTimeField(null=True, blank=True)
 	atualizado_em = models.DateTimeField(auto_now=True)
+
+	@property
+	def cobravel(self):
+		"""True/False quando a Meta ja informou; None enquanto nao ha confirmacao."""
+		if not self.cobranca_tipo and not self.cobranca_categoria:
+			return None
+		return self.cobranca_tipo == 'regular'
 
 	class Meta:
 		ordering = ['status_fila', 'prioridade', 'agendada_para', 'enfileirada_em']
@@ -809,3 +822,46 @@ class OpcaoComoConheceu(models.Model):
 		if rotulo:
 			return rotulo
 		return dict(PrimeiroContato.ComoConheceuChoices.choices).get(valor, valor)
+
+
+class TabelaPrecoWhatsapp(models.Model):
+	"""Singleton (pk=1): preco por mensagem cobrada, por categoria, para o custo estimado.
+
+	O custo oficial vem da propria Meta (pricing_analytics); esta tabela serve para
+	estimar por origem/pessoa e quando a consulta oficial nao esta disponivel. Os
+	valores devem ser copiados da tabela de precos da Meta para o Brasil.
+	"""
+
+	MOEDAS = [('BRL', 'Real (BRL)'), ('USD', 'Dolar (USD)')]
+
+	moeda = models.CharField(max_length=3, choices=MOEDAS, default='BRL')
+	preco_marketing = models.DecimalField('Marketing', max_digits=10, decimal_places=4, default=0)
+	preco_utility = models.DecimalField('Utilidade', max_digits=10, decimal_places=4, default=0)
+	preco_authentication = models.DecimalField('Autenticacao', max_digits=10, decimal_places=4, default=0)
+	preco_service = models.DecimalField('Servico (acima da franquia)', max_digits=10, decimal_places=4, default=0)
+	atualizado_em = models.DateTimeField(auto_now=True)
+	atualizado_por = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='+',
+	)
+
+	class Meta:
+		verbose_name = 'Tabela de precos do WhatsApp'
+		verbose_name_plural = 'Tabela de precos do WhatsApp'
+
+	def __str__(self):
+		return f'Precos WhatsApp ({self.moeda})'
+
+	@classmethod
+	def carregar(cls):
+		obj, _ = cls.objects.get_or_create(pk=1)
+		return obj
+
+	def preenchida(self) -> bool:
+		return any(
+			valor and valor > 0
+			for valor in (self.preco_marketing, self.preco_utility, self.preco_authentication, self.preco_service)
+		)
