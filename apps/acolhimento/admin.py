@@ -64,7 +64,13 @@ class MensagemContatoAdmin(admin.ModelAdmin):
 	)
 	list_filter = ('canal', 'direcao', 'status_fila', 'agendada_para', 'enviada_em')
 	search_fields = ('pessoa__nome', 'pessoa__telefone_whatsapp', 'conteudo', 'referencia_externa', 'resposta_conteudo')
-	readonly_fields = ('enfileirada_em', 'atualizado_em')
+	readonly_fields = (
+		'enfileirada_em', 'atualizado_em', 'midia_tipo', 'midia_id', 'midia_status',
+		'midia_mime', 'midia_tamanho', 'midia_nome_original', 'midia_tentativas', 'midia_erro',
+	)
+	# O arquivo nao tem URL publica (o widget do admin quebraria tentando montar uma):
+	# a midia so e vista pela conversa da pessoa.
+	exclude = ('midia_arquivo',)
 
 
 @admin.register(ExecucaoProcessamentoFila)

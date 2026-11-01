@@ -19,6 +19,7 @@ from apps.acolhimento.custo_views import RelatorioCustoWhatsappView
 from apps.acolhimento.evolution_webhooks import EvolutionWebhookView
 from apps.acolhimento.meta_views import ConfiguracaoWhatsappView
 from apps.acolhimento.meta_webhooks import MetaWebhookView
+from apps.acolhimento.midia_views import MidiaMensagemView
 from apps.acolhimento.views import (
     AguardandoRespostaView,
     AutoCadastroCreateView,
@@ -87,6 +88,7 @@ urlpatterns = [
     path('mensagens/webhook/evolution/', EvolutionWebhookView.as_view(), name='mensagens-webhook-evolution'),
     path('mensagens/webhook/meta/', MetaWebhookView.as_view(), name='mensagens-webhook-meta'),
     path('mensagens/<int:pk>/excluir/', MensagemContatoExcluirView.as_view(), name='mensagens-excluir'),
+    path('mensagens/<int:pk>/midia/', MidiaMensagemView.as_view(), name='mensagens-midia'),
     path('pessoas/novo/', PrimeiroContatoCreateView.as_view(), name='pessoas-novo'),
     path('pessoas/relatorios/', RelatorioPessoasView.as_view(), name='pessoas-relatorios'),
     path('pessoas/<int:pk>/', PrimeiroContatoDetailView.as_view(), name='pessoas-detalhe'),

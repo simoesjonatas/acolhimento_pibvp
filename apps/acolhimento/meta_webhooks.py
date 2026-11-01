@@ -29,7 +29,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
-from apps.acolhimento import atendimento_bot, custo_whatsapp, meta_service, whatsapp_saude
+from apps.acolhimento import atendimento_bot, custo_whatsapp, meta_service, midia_whatsapp, whatsapp_saude
 from apps.acolhimento.models import (
     ConfiguracaoProcessamentoFila,
     InteracaoAcolhimento,
@@ -314,7 +314,9 @@ class MetaWebhookView(View):
         if botao:
             metadata_entrada['meta_botao'] = marcador_botao
             metadata_entrada['meta_botao_texto'] = botao[1]
-        MensagemContato.objects.create(
+        # Midia: so o id agora; o download roda depois da resposta (a Meta exige rapidez).
+        campos_midia = midia_whatsapp.campos_midia_entrada(message)
+        entrada = MensagemContato.objects.create(
             pessoa=pessoa,
             canal=MensagemContato.CanalChoices.WHATSAPP,
             direcao=MensagemContato.DirecaoChoices.ENTRADA,
@@ -327,7 +329,10 @@ class MetaWebhookView(View):
             # de retorno pendente.
             visualizada_equipe_em=agora if marcador_botao == BOTAO_AGORA_NAO else None,
             metadata_resposta=metadata_entrada,
+            **campos_midia,
         )
+        if campos_midia:
+            midia_whatsapp.agendar_download(entrada.pk)
 
         ultima_saida = (
             MensagemContato.objects.filter(
