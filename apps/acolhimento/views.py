@@ -763,8 +763,14 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 				},
 			}
 
-		mensagens = [
-			MensagemContato(
+		def _mensagem_para(pessoa):
+			metadata = _metadata_para(pessoa)
+			marcador = f'[Template] {content_sid}'
+			conteudo = (
+				template_config.conteudo_template(metadata['meta_template'], marcador)
+				if usa_meta else marcador
+			)
+			return MensagemContato(
 				pessoa=pessoa,
 				criado_por=self.request.user,
 				canal=MensagemContato.CanalChoices.WHATSAPP,
@@ -772,11 +778,11 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 				status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
 				prioridade=5,
 				agendada_para=None,
-				conteudo=f'[Template] {content_sid}',
-				metadata_envio=_metadata_para(pessoa),
+				conteudo=conteudo,
+				metadata_envio=metadata,
 			)
-			for pessoa in pessoas
-		]
+
+		mensagens = [_mensagem_para(pessoa) for pessoa in pessoas]
 		MensagemContato.objects.bulk_create(mensagens)
 		messages.success(self.request, f'{len(mensagens)} template(s) enfileirado(s) para disparo em massa.')
 		return super().form_valid(form)
@@ -1533,6 +1539,10 @@ class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoM
 			texto_evolution = template_config.continuar_texto_evolution().replace('{nome}', nome)
 			metadata_envio['evolution_texto'] = texto_evolution
 			conteudo = texto_evolution
+		elif usa_meta:
+			conteudo = template_config.conteudo_template(
+				metadata_envio['meta_template'], 'Template de continuacao enfileirado',
+			)
 		else:
 			conteudo = 'Template de continuacao enfileirado'
 

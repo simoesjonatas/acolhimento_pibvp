@@ -12,6 +12,7 @@ import urllib.error
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -746,6 +747,11 @@ class MetaEnfileiramentoViewsTests(TestCase):
 		indicador = patch('apps.acolhimento.meta_service.get_phone_number_info', return_value={})
 		indicador.start()
 		self.addCleanup(indicador.stop)
+		# O texto do template e consultado na Meta ao enfileirar (coberto em tests_template_texto).
+		texto = patch('apps.acolhimento.meta_service.get_template', return_value=None)
+		texto.start()
+		self.addCleanup(texto.stop)
+		cache.clear()
 		self.user = get_user_model().objects.create_user('equipe_meta', password='x', is_staff=True)
 		self.client.force_login(self.user)
 		self.pessoa = _pessoa(nome='Visitante', telefone='31955554444')

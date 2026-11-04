@@ -288,6 +288,79 @@ def list_templates(timeout: int = 8) -> list[dict[str, Any]]:
     return [item for item in itens if isinstance(item, dict)]
 
 
+def get_template(nome: str, idioma: str = 'pt_BR', timeout: int = 5) -> dict[str, Any] | None:
+    """Um template da WABA com os `components` (cabecalho, corpo, rodape, botoes).
+
+    Prefere o idioma pedido; se nao achar, devolve o primeiro com o mesmo nome.
+    None quando nao da para consultar (sem WABA, token sem permissao, erro).
+    """
+    waba = (getattr(settings, 'META_WA_BUSINESS_ACCOUNT_ID', '') or '').strip()
+    nome = (nome or '').strip()
+    if not waba or not nome or not configurado():
+        return None
+    try:
+        status, data = _request(
+            'GET',
+            f'{waba}/message_templates',
+            params={'name': nome, 'fields': 'name,language,status,components', 'limit': 50},
+            timeout=timeout,
+        )
+    except MetaWhatsAppError:
+        return None
+    if status != 200 or not isinstance(data, dict):
+        return None
+    itens = [item for item in (data.get('data') or []) if isinstance(item, dict) and item.get('name') == nome]
+    if not itens:
+        return None
+    idioma = (idioma or '').strip()
+    for item in itens:
+        if item.get('language') == idioma:
+            return item
+    return itens[0]
+
+
+_PLACEHOLDER_RE = re.compile(r'\{\{\s*([A-Za-z0-9_]+)\s*\}\}')
+
+
+def renderizar_template(template: dict[str, Any] | None, parametros: dict[str, Any] | None = None) -> str:
+    """Texto que a pessoa ve no WhatsApp: cabecalho, corpo, rodape e botoes.
+
+    As variaveis ({{1}} ou {{nome}}) sao trocadas pelos `parametros` enviados;
+    uma variavel sem valor fica como esta. Devolve '' se o template nao tem texto.
+    """
+    if not isinstance(template, dict):
+        return ''
+    valores = {str(chave): str(valor) for chave, valor in (parametros or {}).items()}
+
+    def _trocar(texto: str) -> str:
+        return _PLACEHOLDER_RE.sub(lambda m: valores.get(m.group(1), m.group(0)), texto or '').strip()
+
+    cabecalho = corpo = rodape = ''
+    botoes: list[str] = []
+    for componente in template.get('components') or []:
+        if not isinstance(componente, dict):
+            continue
+        tipo = str(componente.get('type') or '').upper()
+        if tipo == 'HEADER' and str(componente.get('format') or 'TEXT').upper() == 'TEXT':
+            cabecalho = _trocar(componente.get('text'))
+        elif tipo == 'BODY':
+            corpo = _trocar(componente.get('text'))
+        elif tipo == 'FOOTER':
+            rodape = _trocar(componente.get('text'))
+        elif tipo == 'BUTTONS':
+            botoes = [
+                str(botao.get('text') or '').strip()
+                for botao in componente.get('buttons') or []
+                if isinstance(botao, dict) and str(botao.get('text') or '').strip()
+            ]
+    if not corpo:
+        return ''
+    partes = [f'*{cabecalho}*' if cabecalho else '', corpo, f'_{rodape}_' if rodape else '']
+    if botoes:
+        partes.append(' | '.join(f'[{texto}]' for texto in botoes))
+    return '\n\n'.join(parte for parte in partes if parte)
+
+
 def get_pricing_analytics(inicio_ts: int, fim_ts: int, timeout: int = 10) -> list[dict[str, Any]] | None:
     """Custo e volume informados pela Meta no periodo (UNIX), por categoria e tipo.
 

@@ -4050,6 +4050,20 @@ a.kpi-card:hover {
     font-size: 0.82rem;
 }
 
+.chat-bubble .message-template {
+    margin: -4px 0 8px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+}
+
+.queue-reference.queue-template {
+    margin-right: 6px;
+    background: #eef2ff;
+    border-color: #c7d2fe;
+    color: #3730a3;
+}
+
 .message-error {
     margin: 8px 0 0;
     padding: 8px 10px;

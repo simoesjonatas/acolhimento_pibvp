@@ -223,6 +223,9 @@
                                 {% endif %}
                             </div>
                             <p class="queue-content-preview">{{ mensagem.conteudo|truncatechars:180 }}</p>
+                            {% if mensagem.metadata_envio.meta_template.nome %}
+                            <span class="queue-reference queue-template" title="Modelo aprovado pela Meta. A pessoa recebe o texto acima, com o nome dela.">Modelo {{ mensagem.metadata_envio.meta_template.nome }}</span>
+                            {% endif %}
                             {% if mensagem.referencia_externa %}
                             <span class="queue-reference">SID {{ mensagem.referencia_externa }}</span>
                             {% endif %}
