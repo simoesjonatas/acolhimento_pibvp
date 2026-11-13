@@ -17,7 +17,7 @@ manualmente pela tela de processamento. Exemplos (a cada minuto):
 """
 from django.core.management.base import BaseCommand
 
-from apps.acolhimento import fila_auto
+from apps.acolhimento import fila_auto, midia_whatsapp
 from apps.acolhimento.models import ExecucaoProcessamentoFila
 
 
@@ -37,6 +37,13 @@ class Command(BaseCommand):
         limit = max(int(options['limit']), 1)
         dry_run = bool(options.get('dry_run'))
         force = bool(options.get('force'))
+
+        # Retentativa das midias recebidas que a thread do webhook nao conseguiu baixar.
+        # Antes dos returns abaixo: roda mesmo sem mensagem de saida na fila.
+        if not dry_run:
+            baixadas = midia_whatsapp.baixar_midias_pendentes()
+            if baixadas:
+                self.stdout.write(f'{baixadas} midia(s) recebida(s) baixada(s).')
 
         recuperadas = fila_auto.recuperar_execucoes_presas()
         if recuperadas:

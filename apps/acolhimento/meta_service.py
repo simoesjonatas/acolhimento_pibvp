@@ -254,6 +254,57 @@ def marcar_como_lida(message_id: str, *, digitando: bool = False, timeout: int =
 
 
 # ---------------------------------------------------------------------------
+# Midia recebida (audio, imagem, video, documento).
+# ---------------------------------------------------------------------------
+class MidiaGrandeDemaisError(MetaWhatsAppError):
+    """Arquivo maior que META_WA_MIDIA_MAX_MB: nao adianta tentar de novo."""
+
+
+def limite_midia_bytes() -> int:
+    return int(getattr(settings, 'META_WA_MIDIA_MAX_MB', 0) or 20) * 1024 * 1024
+
+
+def obter_url_midia(media_id: str, timeout: int | None = None) -> dict[str, Any]:
+    """GET /{media_id}: devolve {url, mime_type, file_size, sha256}.
+
+    A URL devolvida expira em poucos minutos: baixe logo em seguida com `baixar_midia`.
+    """
+    media_id = (media_id or '').strip()
+    if not media_id:
+        raise MetaWhatsAppError('Id de midia nao informado.')
+    _status, data = _request('GET', urllib.parse.quote(media_id, safe=''), timeout=timeout)
+    if not isinstance(data, dict) or not str(data.get('url') or '').strip():
+        raise MetaWhatsAppError(f'API da Meta nao retornou URL para a midia: {data!r}')
+    return data
+
+
+def baixar_midia(url: str, *, limite_bytes: int | None = None, timeout: int | None = None) -> bytes:
+    """Baixa o binario da URL de midia (mesmo Bearer token). Recusa acima do limite."""
+    url = (url or '').strip()
+    if not url.startswith('https://'):
+        raise MetaWhatsAppError('URL de midia invalida (esperado https).')
+    limite = limite_bytes or limite_midia_bytes()
+    if timeout is None:
+        timeout = getattr(settings, 'META_WA_REQUEST_TIMEOUT_SECONDS', 20)
+    req = urllib.request.Request(url, method='GET')
+    req.add_header('Authorization', f'Bearer {_token()}')
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            tamanho_declarado = int(resp.headers.get('Content-Length') or 0) if resp.headers else 0
+            if tamanho_declarado > limite:
+                raise MidiaGrandeDemaisError(f'Midia com {tamanho_declarado} bytes passa do limite de {limite}.')
+            # Le um byte a mais para saber se passou do limite sem carregar tudo.
+            conteudo = resp.read(limite + 1)
+    except urllib.error.HTTPError as exc:
+        raise MetaWhatsAppError(f'Falha ao baixar a midia (HTTP {exc.code}).', http_status=exc.code) from exc
+    except urllib.error.URLError as exc:
+        raise MetaWhatsAppError(f'Falha ao conectar para baixar a midia: {exc.reason}.') from exc
+    if len(conteudo) > limite:
+        raise MidiaGrandeDemaisError(f'Midia passa do limite de {limite} bytes.')
+    return conteudo
+
+
+# ---------------------------------------------------------------------------
 # Consultas usadas pela pagina de configuracao e pelo indicador do menu.
 # ---------------------------------------------------------------------------
 def get_phone_number_info(timeout: int = 5) -> dict[str, Any] | None:

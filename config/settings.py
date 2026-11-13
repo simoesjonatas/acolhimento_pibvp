@@ -310,6 +310,11 @@ META_TEMPLATE_CONTINUAR_VARIABLES = os.getenv('META_TEMPLATE_CONTINUAR_VARIABLES
 # que esta aprovado na Meta: o clique chega no webhook com esse texto (e payload).
 META_BOTAO_SIM = (os.getenv('META_BOTAO_SIM') or 'Sim, podemos').strip()
 META_BOTAO_NAO = (os.getenv('META_BOTAO_NAO') or 'Agora não').strip()
+# Midia recebida (audio/imagem/video/documento): baixada da Meta logo apos o webhook
+# e guardada FORA das pastas publicas (static/media). So sai por uma view autenticada
+# com a permissao de conversar com pessoas (LGPD). No Docker, aponta para um volume.
+META_WA_MIDIA_MAX_MB = int(os.getenv('META_WA_MIDIA_MAX_MB') or '20')
+MIDIA_PRIVADA_ROOT = Path(os.getenv('MIDIA_PRIVADA_ROOT') or BASE_DIR / 'data' / 'midia_privada')
 
 # ---------------------------------------------------------------------------
 # Opt-in-first (anti-bloqueio): faz a PESSOA iniciar a conversa.

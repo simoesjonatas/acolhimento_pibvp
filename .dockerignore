@@ -8,3 +8,4 @@ venv/
 .gitignore
 staticfiles/
 media/
+data/midia_privada/

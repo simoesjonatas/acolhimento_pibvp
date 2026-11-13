@@ -7,6 +7,8 @@ __pycache__/
 *.sqlite3
 /staticfiles/
 /media/
+# Midia recebida pelo WhatsApp (dados pessoais, LGPD)
+/data/midia_privada/
 
 # Environment
 .env
