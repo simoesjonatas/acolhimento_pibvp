@@ -1,8 +1,11 @@
+import os
 import random
 import uuid
 from datetime import timedelta
 
+from django.core.files.storage import FileSystemStorage
 from django.db import models
+from django.utils.deconstruct import deconstructible
 from django.core.validators import RegexValidator
 from django.conf import settings
 from django.utils import timezone
@@ -11,6 +14,37 @@ from django.utils.text import slugify
 
 def hora_local_atual():
 	return timezone.localtime().time().replace(microsecond=0)
+
+
+@deconstructible
+class MidiaPrivadaStorage(FileSystemStorage):
+	"""Arquivos recebidos pelo WhatsApp: em MIDIA_PRIVADA_ROOT e SEM URL publica.
+
+	Lido de settings a cada uso (e nao no import) para respeitar override_settings.
+	`url()` falha de proposito: o arquivo so sai pela view autenticada da conversa.
+	"""
+
+	@property
+	def base_location(self):
+		return str(settings.MIDIA_PRIVADA_ROOT)
+
+	@property
+	def location(self):
+		return os.path.abspath(self.base_location)
+
+	@property
+	def base_url(self):
+		return None
+
+
+midia_privada_storage = MidiaPrivadaStorage()
+
+
+def caminho_midia_whatsapp(instance, filename):
+	# Nome aleatorio no disco: o nome original (dado da pessoa) fica so no banco.
+	_raiz, extensao = os.path.splitext(filename or '')
+	agora = timezone.now()
+	return f'whatsapp/{agora:%Y/%m}/{uuid.uuid4().hex}{extensao.lower()[:10]}'
 
 
 class PrimeiroContato(models.Model):
@@ -200,6 +234,18 @@ class MensagemContato(models.Model):
 		FALHA = 'falha', 'Falha'
 		CANCELADA = 'cancelada', 'Cancelada'
 
+	class MidiaTipoChoices(models.TextChoices):
+		AUDIO = 'audio', 'Audio'
+		IMAGEM = 'image', 'Imagem'
+		VIDEO = 'video', 'Video'
+		DOCUMENTO = 'document', 'Documento'
+		FIGURINHA = 'sticker', 'Figurinha'
+
+	class MidiaStatusChoices(models.TextChoices):
+		PENDENTE = 'pendente', 'Pendente'
+		BAIXADA = 'baixada', 'Baixada'
+		FALHA = 'falha', 'Falha'
+
 	pessoa = models.ForeignKey(
 		PrimeiroContato,
 		on_delete=models.CASCADE,
@@ -247,6 +293,22 @@ class MensagemContato(models.Model):
 	cobranca_tipo = models.CharField(max_length=40, blank=True)
 	cobranca_modelo = models.CharField(max_length=10, blank=True)
 	cobranca_registrada_em = models.DateTimeField(null=True, blank=True)
+	# Midia recebida (so entradas da API oficial). `midia_id` e o id da Meta; o
+	# binario e baixado depois do webhook (ver `midia_whatsapp`). Vazio = sem midia.
+	midia_tipo = models.CharField(max_length=20, choices=MidiaTipoChoices.choices, blank=True)
+	midia_id = models.CharField(max_length=120, blank=True)
+	midia_status = models.CharField(max_length=20, choices=MidiaStatusChoices.choices, blank=True, db_index=True)
+	midia_arquivo = models.FileField(
+		storage=midia_privada_storage,
+		upload_to=caminho_midia_whatsapp,
+		max_length=255,
+		blank=True,
+	)
+	midia_mime = models.CharField(max_length=120, blank=True)
+	midia_tamanho = models.PositiveIntegerField(null=True, blank=True)
+	midia_nome_original = models.CharField(max_length=255, blank=True)
+	midia_tentativas = models.PositiveSmallIntegerField(default=0)
+	midia_erro = models.CharField(max_length=255, blank=True)
 	atualizado_em = models.DateTimeField(auto_now=True)
 
 	@property
@@ -255,6 +317,32 @@ class MensagemContato(models.Model):
 		if not self.cobranca_tipo and not self.cobranca_categoria:
 			return None
 		return self.cobranca_tipo == 'regular'
+
+	# Texto que o webhook grava quando a midia vem sem legenda.
+	_MARCADORES_MIDIA = {'(audio)', '(imagem)', '(video)', '(documento)', '(figurinha)'}
+
+	@property
+	def legenda_midia(self):
+		"""Texto a mostrar junto da midia: a legenda, ou '' quando e so o marcador."""
+		if self.midia_tipo and self.conteudo.strip() in self._MARCADORES_MIDIA:
+			return ''
+		return self.conteudo
+
+	@property
+	def midia_disponivel(self):
+		return self.midia_status == self.MidiaStatusChoices.BAIXADA and bool(self.midia_arquivo)
+
+	@property
+	def midia_url(self):
+		"""URL autenticada da midia (recebida ou anexo do bot), ou '' se indisponivel."""
+		from django.urls import reverse
+
+		if self.midia_disponivel:
+			return reverse('mensagens-midia', args=[self.pk])
+		opcao_id = (self.metadata_envio or {}).get('bot_midia_opcao_id')
+		if self.direcao == self.DirecaoChoices.SAIDA and opcao_id:
+			return reverse('atendimento-opcao-midia', args=[opcao_id])
+		return ''
 
 	class Meta:
 		ordering = ['status_fila', 'prioridade', 'agendada_para', 'enfileirada_em']
@@ -319,6 +407,14 @@ class RegistroGabinete(models.Model):
 	data = models.DateField(default=timezone.localdate)
 	hora = models.TimeField(default=hora_local_atual)
 	observacoes = models.TextField(blank=True, verbose_name='Observacoes')
+	# Pastor que atende o gabinete (usuario com o perfil Pastor).
+	pastor = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='gabinetes_como_pastor',
+	)
 	criado_por = models.ForeignKey(
 		settings.AUTH_USER_MODEL,
 		on_delete=models.SET_NULL,
@@ -327,6 +423,9 @@ class RegistroGabinete(models.Model):
 		related_name='registros_gabinete',
 	)
 	criado_em = models.DateTimeField(auto_now_add=True)
+	# Resultado dos avisos automaticos do agendamento (texto curto para a tela).
+	aviso_pessoa = models.CharField(max_length=255, blank=True)
+	aviso_pastor = models.CharField(max_length=255, blank=True)
 
 	class Meta:
 		ordering = ['-data', '-hora', '-criado_em']
@@ -673,6 +772,8 @@ class TemplateWhatsapp(models.Model):
 	class Tipo(models.TextChoices):
 		PRIMEIRO_CONTATO = 'primeiro_contato_opt_in', 'Primeiro contato (opt-in)'
 		CONTINUAR = 'continuar_conversa', 'Continuar conversa'
+		GABINETE_PESSOA = 'gabinete_agendado_pessoa', 'Gabinete agendado (para a pessoa)'
+		GABINETE_PASTOR = 'gabinete_agendado_pastor', 'Gabinete agendado (aviso ao pastor)'
 
 	tipo = models.CharField(max_length=40, choices=Tipo.choices, unique=True)
 	content_sid = models.CharField('Content Template SID', max_length=64, blank=True)
@@ -759,6 +860,20 @@ class OpcaoAtendimentoBot(models.Model):
 	# Aparece no menu = listada e numerada. Fora do menu (e ativa) = so responde pelas
 	# palavras-chave, sem numero; serve para atalhos que nao precisam ficar visiveis.
 	aparece_no_menu = models.BooleanField('Aparece no menu', default=True)
+	# Arquivo opcional enviado logo depois da resposta (imagem, PDF, audio ou video).
+	midia_arquivo = models.FileField(
+		'Arquivo (opcional)',
+		storage=midia_privada_storage,
+		upload_to='bot/',
+		max_length=255,
+		blank=True,
+	)
+	midia_tipo = models.CharField(max_length=20, blank=True)
+	midia_mime = models.CharField(max_length=120, blank=True)
+	midia_nome_original = models.CharField(max_length=255, blank=True)
+	# Id do arquivo ja enviado para a Meta (vale ~30 dias); vazio = enviar de novo.
+	midia_meta_id = models.CharField(max_length=120, blank=True)
+	midia_meta_enviada_em = models.DateTimeField(null=True, blank=True)
 	atualizado_em = models.DateTimeField(auto_now=True)
 
 	class Meta:

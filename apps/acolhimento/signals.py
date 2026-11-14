@@ -6,7 +6,8 @@ o switch (ConfiguracaoProcessamentoFila) estiver ligado — ver `fila_auto`.
 """
 from __future__ import annotations
 
-from django.db.models.signals import post_save
+from django.db import transaction
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from apps.acolhimento.models import MensagemContato
@@ -28,3 +29,13 @@ def _disparar_auto_ao_enfileirar(sender, instance, created, **kwargs):
 
     from apps.acolhimento import fila_auto
     fila_auto.agendar_disparo_auto()
+
+
+@receiver(post_delete, sender=MensagemContato, dispatch_uid='acolhimento_apagar_midia_recebida')
+def _apagar_midia_ao_excluir(sender, instance, **kwargs):
+    # LGPD: excluir a mensagem (ou a pessoa, em cascata) apaga tambem o arquivo do disco.
+    # So depois do commit, para um rollback nao deixar a mensagem sem o arquivo.
+    arquivo = instance.midia_arquivo
+    if arquivo and arquivo.name:
+        storage, nome = arquivo.storage, arquivo.name
+        transaction.on_commit(lambda: storage.delete(nome))

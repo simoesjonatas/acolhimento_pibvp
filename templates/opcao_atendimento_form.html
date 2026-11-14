@@ -8,7 +8,7 @@
         <div>
             <span class="section-eyebrow">Atendimento automatico</span>
             <h1>{{ titulo|default:'Opcao do menu' }}</h1>
-            <p>Defina o rotulo, as palavras-chave que a acionam, a resposta, a acao e se ela aparece no menu.</p>
+            <p>Defina o rotulo, as palavras-chave que a acionam, a resposta (com um arquivo opcional), a acao e se ela aparece no menu.</p>
         </div>
         <a class="btn secundario" href="{% url 'configuracao-atendimento' %}">
             <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
@@ -17,7 +17,7 @@
     </section>
 
     <section class="profile-form-card">
-        <form method="post">
+        <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
             {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
 
@@ -39,6 +39,19 @@
                 {{ form.resposta }}
                 {% if form.resposta.errors %}<span class="form-errors">{{ form.resposta.errors.0 }}</span>{% endif %}
             </p>
+
+            <div class="builder-field">
+                <label for="{{ form.midia_arquivo.id_for_label }}">Arquivo enviado junto (opcional)</label>
+                {% if opcao and opcao.midia_arquivo %}
+                <p class="opcao-midia-atual">
+                    Atual: <a href="{% url 'atendimento-opcao-midia' opcao.pk %}" target="_blank" rel="noopener">{{ opcao.midia_nome_original|default:'arquivo' }}</a>
+                    <label class="processar-check" for="{{ form.remover_midia.id_for_label }}">{{ form.remover_midia }} Remover</label>
+                </p>
+                {% endif %}
+                {{ form.midia_arquivo }}
+                <small class="table-muted-text">Imagem (JPG/PNG, até 5 MB), PDF/Word/Excel (até 25 MB), áudio (MP3/OGG/M4A) ou vídeo (MP4) até 16 MB. O bot envia o texto e, logo depois, o arquivo. Só funciona na API oficial da Meta.</small>
+                {% if form.midia_arquivo.errors %}<span class="form-errors">{{ form.midia_arquivo.errors.0 }}</span>{% endif %}
+            </div>
 
             <p class="builder-field">
                 <label for="{{ form.acao.id_for_label }}">Acao</label>

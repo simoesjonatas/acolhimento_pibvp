@@ -51,6 +51,26 @@
         </select>
     </div>
     <div>
+        <label for="como_conheceu">Como conheceu</label>
+        <select id="como_conheceu" name="como_conheceu">
+            <option value="">Todos</option>
+            {% for valor, rotulo in como_conheceu_choices %}
+            <option value="{{ valor }}" {% if como_conheceu_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% if pode_ver_gabinete %}
+    <div>
+        <label for="pastor">Pastor do gabinete</label>
+        <select id="pastor" name="pastor">
+            <option value="">Todos</option>
+            {% for valor, rotulo in pastores_choices %}
+            <option value="{{ valor }}" {% if pastor_atual == valor|stringformat:'s' %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+    <div>
         <label for="iniciou_interacao">Iniciou interação</label>
         <select id="iniciou_interacao" name="iniciou_interacao">
             <option value="">Todos</option>

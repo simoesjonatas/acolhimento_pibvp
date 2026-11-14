@@ -13,7 +13,38 @@
             </strong>
             <span>{{ mensagem.enfileirada_em|date:'d/m/Y H:i' }}</span>
         </div>
+        {% if mensagem.midia_tipo %}
+        <div class="message-midia midia-{{ mensagem.midia_tipo }}">
+            {% with midia_url=mensagem.midia_url %}
+            {% if midia_url %}
+                {% if mensagem.midia_tipo == 'audio' %}
+                <audio controls preload="metadata" src="{{ midia_url }}">
+                    <a href="{{ midia_url }}">Baixar áudio</a>
+                </audio>
+                {% elif mensagem.midia_tipo == 'image' or mensagem.midia_tipo == 'sticker' %}
+                <a href="{{ midia_url }}" target="_blank" rel="noopener" class="midia-miniatura" title="Abrir imagem">
+                    <img src="{{ midia_url }}" alt="{% if mensagem.midia_tipo == 'sticker' %}Figurinha{% else %}Imagem{% endif %}{% if mensagem.direcao == 'entrada' %} enviada por {{ pessoa.nome }}{% endif %}" loading="lazy">
+                </a>
+                {% elif mensagem.midia_tipo == 'video' %}
+                <video controls preload="metadata" src="{{ midia_url }}">
+                    <a href="{{ midia_url }}">Baixar vídeo</a>
+                </video>
+                {% else %}
+                <a href="{{ midia_url }}" class="midia-documento">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span>{{ mensagem.midia_nome_original|default:'Baixar documento' }}</span>
+                    {% if mensagem.midia_tamanho %}<small>{{ mensagem.midia_tamanho|filesizeformat }}</small>{% endif %}
+                </a>
+                {% endif %}
+            {% else %}
+                <span class="midia-indisponivel">({% if mensagem.midia_tipo == 'audio' %}áudio{% elif mensagem.midia_tipo == 'image' %}imagem{% elif mensagem.midia_tipo == 'video' %}vídeo{% elif mensagem.midia_tipo == 'sticker' %}figurinha{% else %}documento{% endif %} indisponível)</span>
+            {% endif %}
+            {% endwith %}
+        </div>
+        {% if mensagem.legenda_midia %}<p>{{ mensagem.legenda_midia|linebreaksbr }}</p>{% endif %}
+        {% else %}
         <p>{{ mensagem.conteudo|linebreaksbr }}</p>
+        {% endif %}
         {% if mensagem.direcao == 'saida' and mensagem.metadata_envio.meta_template.nome %}
         <p class="message-template" title="Modelo aprovado pela Meta. A pessoa recebe o texto acima, com o nome dela.">Enviada pelo modelo aprovado <strong>{{ mensagem.metadata_envio.meta_template.nome }}</strong></p>
         {% endif %}

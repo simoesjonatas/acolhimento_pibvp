@@ -17,6 +17,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from typing import Any
 
 from django.conf import settings
@@ -182,16 +183,44 @@ def send_text(*, to_phone: str, text: str) -> dict[str, Any]:
     })
 
 
-def montar_componentes(parametros: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Converte as variaveis ({"1": "Maria"}) nos `components` do template.
+# Midia que um template pode ter no cabecalho (formato na Meta -> tipo no envio).
+FORMATOS_CABECALHO_MIDIA = {'IMAGE': 'image', 'VIDEO': 'video', 'DOCUMENT': 'document'}
+
+
+def _componente_cabecalho(cabecalho: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Componente `header` com a midia ({tipo, id, nome}) ja enviada para a Meta."""
+    if not cabecalho:
+        return None
+    tipo = str(cabecalho.get('tipo') or '').strip()
+    media_id = str(cabecalho.get('id') or '').strip()
+    if tipo not in FORMATOS_CABECALHO_MIDIA.values() or not media_id:
+        raise MetaWhatsAppError('Midia do cabecalho do template invalida (tipo ou id ausente).')
+    bloco: dict[str, Any] = {'id': media_id}
+    nome_arquivo = str(cabecalho.get('nome') or '').strip()
+    if tipo == 'document' and nome_arquivo:
+        bloco['filename'] = nome_arquivo[:240]
+    return {'type': 'header', 'parameters': [{'type': tipo, tipo: bloco}]}
+
+
+def montar_componentes(
+    parametros: dict[str, Any] | None,
+    cabecalho: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Converte as variaveis ({"1": "Maria"}) e a midia do cabecalho nos `components`.
 
     Chaves numericas => parametros posicionais ({{1}}, {{2}}...), na ordem numerica.
     Chaves com nome => parametros nomeados ({{nome}}), com `parameter_name`.
-    Sem variaveis => sem components (template sem placeholders).
+    `cabecalho` ({tipo, id, nome}) => componente `header` com a imagem/video/PDF.
+    Sem variaveis nem cabecalho => sem components (template sem placeholders).
     """
+    componentes: list[dict[str, Any]] = []
+    header = _componente_cabecalho(cabecalho)
+    if header:
+        componentes.append(header)
+
     parametros = {str(k): v for k, v in (parametros or {}).items() if str(k).strip()}
     if not parametros:
-        return []
+        return componentes
 
     if all(chave.isdigit() for chave in parametros):
         ordenados = sorted(parametros.items(), key=lambda item: int(item[0]))
@@ -201,7 +230,8 @@ def montar_componentes(parametros: dict[str, Any] | None) -> list[dict[str, Any]
             {'type': 'text', 'parameter_name': chave, 'text': str(valor)}
             for chave, valor in parametros.items()
         ]
-    return [{'type': 'body', 'parameters': lista}]
+    componentes.append({'type': 'body', 'parameters': lista})
+    return componentes
 
 
 def send_template(
@@ -210,8 +240,13 @@ def send_template(
     nome: str,
     idioma: str = 'pt_BR',
     parametros: dict[str, Any] | None = None,
+    cabecalho: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Template aprovado pela Meta (abre/reabre a conversa fora da janela de 24h)."""
+    """Template aprovado pela Meta (abre/reabre a conversa fora da janela de 24h).
+
+    `cabecalho` ({tipo, id, nome}) e obrigatorio quando o template foi aprovado com
+    imagem, video ou documento no cabecalho: a Meta exige a midia em cada envio.
+    """
     nome = (nome or '').strip()
     if not nome:
         raise MetaWhatsAppError('Nome do template nao informado.')
@@ -219,7 +254,7 @@ def send_template(
         'name': nome,
         'language': {'code': (idioma or 'pt_BR').strip() or 'pt_BR'},
     }
-    componentes = montar_componentes(parametros)
+    componentes = montar_componentes(parametros, cabecalho)
     if componentes:
         template['components'] = componentes
     return _post_messages({
@@ -251,6 +286,138 @@ def marcar_como_lida(message_id: str, *, digitando: bool = False, timeout: int =
     except MetaWhatsAppError:
         return False
     return True
+
+
+# ---------------------------------------------------------------------------
+# Midia recebida (audio, imagem, video, documento).
+# ---------------------------------------------------------------------------
+class MidiaGrandeDemaisError(MetaWhatsAppError):
+    """Arquivo maior que META_WA_MIDIA_MAX_MB: nao adianta tentar de novo."""
+
+
+def limite_midia_bytes() -> int:
+    return int(getattr(settings, 'META_WA_MIDIA_MAX_MB', 0) or 20) * 1024 * 1024
+
+
+def obter_url_midia(media_id: str, timeout: int | None = None) -> dict[str, Any]:
+    """GET /{media_id}: devolve {url, mime_type, file_size, sha256}.
+
+    A URL devolvida expira em poucos minutos: baixe logo em seguida com `baixar_midia`.
+    """
+    media_id = (media_id or '').strip()
+    if not media_id:
+        raise MetaWhatsAppError('Id de midia nao informado.')
+    _status, data = _request('GET', urllib.parse.quote(media_id, safe=''), timeout=timeout)
+    if not isinstance(data, dict) or not str(data.get('url') or '').strip():
+        raise MetaWhatsAppError(f'API da Meta nao retornou URL para a midia: {data!r}')
+    return data
+
+
+def baixar_midia(url: str, *, limite_bytes: int | None = None, timeout: int | None = None) -> bytes:
+    """Baixa o binario da URL de midia (mesmo Bearer token). Recusa acima do limite."""
+    url = (url or '').strip()
+    if not url.startswith('https://'):
+        raise MetaWhatsAppError('URL de midia invalida (esperado https).')
+    limite = limite_bytes or limite_midia_bytes()
+    if timeout is None:
+        timeout = getattr(settings, 'META_WA_REQUEST_TIMEOUT_SECONDS', 20)
+    req = urllib.request.Request(url, method='GET')
+    req.add_header('Authorization', f'Bearer {_token()}')
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            tamanho_declarado = int(resp.headers.get('Content-Length') or 0) if resp.headers else 0
+            if tamanho_declarado > limite:
+                raise MidiaGrandeDemaisError(f'Midia com {tamanho_declarado} bytes passa do limite de {limite}.')
+            # Le um byte a mais para saber se passou do limite sem carregar tudo.
+            conteudo = resp.read(limite + 1)
+    except urllib.error.HTTPError as exc:
+        raise MetaWhatsAppError(f'Falha ao baixar a midia (HTTP {exc.code}).', http_status=exc.code) from exc
+    except urllib.error.URLError as exc:
+        raise MetaWhatsAppError(f'Falha ao conectar para baixar a midia: {exc.reason}.') from exc
+    if len(conteudo) > limite:
+        raise MidiaGrandeDemaisError(f'Midia passa do limite de {limite} bytes.')
+    return conteudo
+
+
+def enviar_arquivo_para_meta(conteudo: bytes, *, mime: str, nome: str, timeout: int | None = None) -> str:
+    """POST /{phone_number_id}/media (multipart). Devolve o id da midia (vale ~30 dias)."""
+    if not conteudo:
+        raise MetaWhatsAppError('Arquivo vazio: nada para enviar a Meta.')
+    mime = (mime or 'application/octet-stream').split(';')[0].strip()
+    nome = re.sub(r'[\r\n"]', '', nome or 'arquivo') or 'arquivo'
+    fronteira = f'----acolhimento{uuid.uuid4().hex}'
+    partes = []
+    for campo, valor in (('messaging_product', 'whatsapp'), ('type', mime)):
+        partes.append(
+            f'--{fronteira}\r\nContent-Disposition: form-data; name="{campo}"\r\n\r\n{valor}\r\n'.encode('utf-8')
+        )
+    partes.append(
+        (
+            f'--{fronteira}\r\nContent-Disposition: form-data; name="file"; filename="{nome}"\r\n'
+            f'Content-Type: {mime}\r\n\r\n'
+        ).encode('utf-8')
+        + conteudo
+        + b'\r\n'
+    )
+    partes.append(f'--{fronteira}--\r\n'.encode('utf-8'))
+    corpo = b''.join(partes)
+
+    url = f'{_base_url()}/{_phone_number_id()}/media'
+    req = urllib.request.Request(url, data=corpo, method='POST')
+    req.add_header('Authorization', f'Bearer {_token()}')
+    req.add_header('Content-Type', f'multipart/form-data; boundary={fronteira}')
+    if timeout is None:
+        timeout = max(getattr(settings, 'META_WA_REQUEST_TIMEOUT_SECONDS', 20), 60)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode('utf-8', 'replace') or '{}')
+    except urllib.error.HTTPError as exc:
+        try:
+            detalhe = json.loads(exc.read().decode('utf-8', 'replace'))
+        except ValueError:
+            detalhe = {}
+        erro = detalhe.get('error') if isinstance(detalhe, dict) else None
+        erro = erro if isinstance(erro, dict) else {}
+        code = int(erro.get('code') or 0)
+        raise MetaWhatsAppError(
+            _traduzir_erro(code, str(erro.get('message') or f'HTTP {exc.code}')),
+            code=code,
+            http_status=exc.code,
+            detalhe=detalhe,
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise MetaWhatsAppError(f'Falha ao conectar na API da Meta: {exc.reason}.') from exc
+    except ValueError as exc:
+        raise MetaWhatsAppError('Resposta invalida da Meta ao enviar o arquivo.') from exc
+    media_id = str((data or {}).get('id') or '').strip()
+    if not media_id:
+        raise MetaWhatsAppError(f'API da Meta nao retornou id para o arquivo: {data!r}')
+    return media_id
+
+
+TIPOS_MIDIA_ENVIO = ('image', 'video', 'audio', 'document')
+
+
+def send_media(
+    *,
+    to_phone: str,
+    tipo: str,
+    media_id: str,
+    legenda: str = '',
+    nome_arquivo: str = '',
+) -> dict[str, Any]:
+    """Imagem, video, audio ou documento ja enviado para a Meta (somente na janela de 24h)."""
+    if tipo not in TIPOS_MIDIA_ENVIO:
+        raise MetaWhatsAppError(f'Tipo de midia nao suportado: {tipo!r}.')
+    if not (media_id or '').strip():
+        raise MetaWhatsAppError('Id de midia nao informado.')
+    bloco: dict[str, Any] = {'id': media_id.strip()}
+    # Audio nao aceita legenda na Cloud API.
+    if legenda.strip() and tipo != 'audio':
+        bloco['caption'] = legenda.strip()[:1024]
+    if tipo == 'document' and nome_arquivo.strip():
+        bloco['filename'] = nome_arquivo.strip()[:240]
+    return _post_messages({'to': _digits(to_phone), 'type': tipo, tipo: bloco})
 
 
 # ---------------------------------------------------------------------------
@@ -288,11 +455,11 @@ def list_templates(timeout: int = 8) -> list[dict[str, Any]]:
     return [item for item in itens if isinstance(item, dict)]
 
 
-def get_template(nome: str, idioma: str = 'pt_BR', timeout: int = 5) -> dict[str, Any] | None:
-    """Um template da WABA com os `components` (cabecalho, corpo, rodape, botoes).
+def obter_template(nome: str, idioma: str, timeout: int = 6) -> dict[str, Any] | None:
+    """Definicao de um template (com `components`) para conferir antes de enfileirar.
 
-    Prefere o idioma pedido; se nao achar, devolve o primeiro com o mesmo nome.
-    None quando nao da para consultar (sem WABA, token sem permissao, erro).
+    None = nao deu para consultar (sem WABA, rede, token sem permissao): quem chama
+    segue sem a conferencia. {} = consultou e o template nao existe para o idioma.
     """
     waba = (getattr(settings, 'META_WA_BUSINESS_ACCOUNT_ID', '') or '').strip()
     nome = (nome or '').strip()
@@ -302,21 +469,62 @@ def get_template(nome: str, idioma: str = 'pt_BR', timeout: int = 5) -> dict[str
         status, data = _request(
             'GET',
             f'{waba}/message_templates',
-            params={'name': nome, 'fields': 'name,language,status,components', 'limit': 50},
+            params={'name': nome, 'fields': 'name,language,status,category,components', 'limit': 50},
             timeout=timeout,
         )
     except MetaWhatsAppError:
         return None
     if status != 200 or not isinstance(data, dict):
         return None
-    itens = [item for item in (data.get('data') or []) if isinstance(item, dict) and item.get('name') == nome]
-    if not itens:
-        return None
-    idioma = (idioma or '').strip()
-    for item in itens:
-        if item.get('language') == idioma:
+    idioma = (idioma or 'pt_BR').strip() or 'pt_BR'
+    for item in data.get('data') or []:
+        # O filtro `name` da Graph API e por prefixo: confere o nome exato.
+        if isinstance(item, dict) and item.get('name') == nome and item.get('language') == idioma:
             return item
-    return itens[0]
+    return {}
+
+
+_VARIAVEL_POSICIONAL_RE = re.compile(r'\{\{\s*(\d+)\s*\}\}')
+_VARIAVEL_NOMEADA_RE = re.compile(r'\{\{\s*([a-z_][a-z0-9_]*)\s*\}\}')
+
+
+def requisitos_template(template: dict[str, Any]) -> dict[str, Any]:
+    """O que o envio precisa mandar para este template.
+
+    cabecalho: '' (sem cabecalho), 'TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT' ou 'LOCATION'.
+    corpo_posicionais: maior {{n}} do corpo. corpo_nomeados: nomes de {{nome}} no corpo.
+    variaveis_nao_suportadas: variavel no cabecalho de texto ou em botao de URL, que o
+    disparo ainda nao preenche.
+    """
+    cabecalho = ''
+    corpo_posicionais = 0
+    corpo_nomeados: list[str] = []
+    nao_suportadas: list[str] = []
+    for componente in template.get('components') or []:
+        if not isinstance(componente, dict):
+            continue
+        tipo = str(componente.get('type') or '').upper()
+        texto = str(componente.get('text') or '')
+        if tipo == 'HEADER':
+            cabecalho = str(componente.get('format') or 'TEXT').upper()
+            if cabecalho == 'TEXT' and '{{' in texto:
+                nao_suportadas.append('cabecalho')
+        elif tipo == 'BODY':
+            corpo_posicionais = max((int(n) for n in _VARIAVEL_POSICIONAL_RE.findall(texto)), default=0)
+            corpo_nomeados = sorted(set(_VARIAVEL_NOMEADA_RE.findall(texto)))
+        elif tipo == 'BUTTONS':
+            for botao in componente.get('buttons') or []:
+                if isinstance(botao, dict) and '{{' in str(botao.get('url') or ''):
+                    nao_suportadas.append('botao')
+                    break
+    return {
+        'status': str(template.get('status') or '').upper(),
+        'cabecalho': cabecalho,
+        'cabecalho_midia': FORMATOS_CABECALHO_MIDIA.get(cabecalho, ''),
+        'corpo_posicionais': corpo_posicionais,
+        'corpo_nomeados': corpo_nomeados,
+        'variaveis_nao_suportadas': nao_suportadas,
+    }
 
 
 _PLACEHOLDER_RE = re.compile(r'\{\{\s*([A-Za-z0-9_]+)\s*\}\}')

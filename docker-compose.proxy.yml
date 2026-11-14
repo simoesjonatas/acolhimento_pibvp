@@ -1,0 +1,17 @@
+# Override para rodar atras do Nginx Proxy Manager (stack em ~/projetos/proxy-manager).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d --build
+#
+# - O `web` entra na rede externa "proxy", a mesma do NPM.
+# - A porta 8183 deixa de ser publicada no host: o unico acesso e pelo NPM,
+#   que encaminha para http://pibvp-acolhimento-web:8000.
+services:
+  web:
+    ports: !reset []
+    networks:
+      - default
+      - proxy
+
+networks:
+  proxy:
+    external: true

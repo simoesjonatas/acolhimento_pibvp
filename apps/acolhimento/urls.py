@@ -19,6 +19,7 @@ from apps.acolhimento.custo_views import RelatorioCustoWhatsappView
 from apps.acolhimento.evolution_webhooks import EvolutionWebhookView
 from apps.acolhimento.meta_views import ConfiguracaoWhatsappView
 from apps.acolhimento.meta_webhooks import MetaWebhookView
+from apps.acolhimento.midia_views import MidiaMensagemView, MidiaOpcaoBotView
 from apps.acolhimento.views import (
     AguardandoRespostaView,
     AutoCadastroCreateView,
@@ -76,6 +77,7 @@ urlpatterns = [
     path('configuracoes/atendimento/opcao/<int:pk>/editar/', OpcaoAtendimentoBotUpdateView.as_view(), name='atendimento-opcao-editar'),
     path('configuracoes/atendimento/opcao/<int:pk>/excluir/', OpcaoAtendimentoBotDeleteView.as_view(), name='atendimento-opcao-excluir'),
     path('configuracoes/atendimento/opcao/<int:pk>/mover/', OpcaoAtendimentoBotMoverView.as_view(), name='atendimento-opcao-mover'),
+    path('configuracoes/atendimento/opcao/<int:pk>/midia/', MidiaOpcaoBotView.as_view(), name='atendimento-opcao-midia'),
     path('configuracoes/como-conheceu/', OpcaoComoConheceuListView.as_view(), name='configuracao-como-conheceu'),
     path('configuracoes/como-conheceu/opcao/nova/', OpcaoComoConheceuCreateView.as_view(), name='como-conheceu-opcao-nova'),
     path('configuracoes/como-conheceu/opcao/<int:pk>/editar/', OpcaoComoConheceuUpdateView.as_view(), name='como-conheceu-opcao-editar'),
@@ -87,6 +89,7 @@ urlpatterns = [
     path('mensagens/webhook/evolution/', EvolutionWebhookView.as_view(), name='mensagens-webhook-evolution'),
     path('mensagens/webhook/meta/', MetaWebhookView.as_view(), name='mensagens-webhook-meta'),
     path('mensagens/<int:pk>/excluir/', MensagemContatoExcluirView.as_view(), name='mensagens-excluir'),
+    path('mensagens/<int:pk>/midia/', MidiaMensagemView.as_view(), name='mensagens-midia'),
     path('pessoas/novo/', PrimeiroContatoCreateView.as_view(), name='pessoas-novo'),
     path('pessoas/relatorios/', RelatorioPessoasView.as_view(), name='pessoas-relatorios'),
     path('pessoas/<int:pk>/', PrimeiroContatoDetailView.as_view(), name='pessoas-detalhe'),

@@ -19,7 +19,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento import template_config
-from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato, TemplateWhatsapp
+from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato, RegistroGabinete, TemplateWhatsapp
 from apps.acolhimento.whatsapp_rules import contar_pessoas_janela_aberta
 from apps.core.forms import PerfilForm, QrCodeDinamicoForm, UsuarioCreateForm, UsuarioUpdateForm, eh_pastor
 from apps.core.models import QrCodeDinamico, telefone_do_usuario
@@ -182,6 +182,37 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 		)
 		return redirect('dashboard')
 
+	@staticmethod
+	def gabinetes_do_pastor(pastor):
+		"""Pessoas com gabinete atribuido ao pastor: proximos agendados primeiro, depois os demais.
+
+		Cada item: {'pessoa', 'proximo' (agendado de hoje em diante), 'ultimo' (ate hoje)}.
+		"""
+		hoje = timezone.localdate()
+		registros = (
+			RegistroGabinete.objects.filter(pastor=pastor)
+			.select_related('pessoa')
+			.order_by('data', 'hora', 'id')
+		)
+		por_pessoa = {}
+		for registro in registros:
+			item = por_pessoa.setdefault(registro.pessoa_id, {'pessoa': registro.pessoa, 'proximo': None, 'ultimo': None})
+			if registro.data >= hoje and registro.tipo == RegistroGabinete.Tipo.AGENDADO:
+				if item['proximo'] is None:
+					item['proximo'] = registro
+			else:
+				item['ultimo'] = registro
+		com_proximo = sorted(
+			(item for item in por_pessoa.values() if item['proximo']),
+			key=lambda item: (item['proximo'].data, item['proximo'].hora),
+		)
+		sem_proximo = sorted(
+			(item for item in por_pessoa.values() if not item['proximo'] and item['ultimo']),
+			key=lambda item: (item['ultimo'].data, item['ultimo'].hora),
+			reverse=True,
+		)
+		return com_proximo + sem_proximo
+
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
 
@@ -210,6 +241,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 		total_janela_aberta = contar_pessoas_janela_aberta()
 
 		ultimos_passos = InteracaoAcolhimento.objects.select_related('pessoa')[:8]
+		if eh_pastor(self.request.user):
+			context['gabinetes_do_pastor'] = self.gabinetes_do_pastor(self.request.user)
 
 		context.update(
 			{

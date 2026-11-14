@@ -747,10 +747,11 @@ class MetaEnfileiramentoViewsTests(TestCase):
 		indicador = patch('apps.acolhimento.meta_service.get_phone_number_info', return_value={})
 		indicador.start()
 		self.addCleanup(indicador.stop)
-		# O texto do template e consultado na Meta ao enfileirar (coberto em tests_template_texto).
-		texto = patch('apps.acolhimento.meta_service.get_template', return_value=None)
-		texto.start()
-		self.addCleanup(texto.stop)
+		# O disparo por template confere o template na Meta e grava o texto dele:
+		# None = "sem consulta" (segue com o marcador). Texto coberto em tests_template_texto.
+		conferencia = patch('apps.acolhimento.meta_service.obter_template', return_value=None)
+		conferencia.start()
+		self.addCleanup(conferencia.stop)
 		cache.clear()
 		self.user = get_user_model().objects.create_user('equipe_meta', password='x', is_staff=True)
 		self.client.force_login(self.user)

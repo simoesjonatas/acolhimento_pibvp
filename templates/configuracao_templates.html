@@ -177,6 +177,70 @@
                 {% if cfg %}<p class="config-meta">Salvo em {{ cfg.atualizado_em|date:'d/m/Y H:i' }}{% if cfg.atualizado_por %} por {{ cfg.atualizado_por.get_full_name|default:cfg.atualizado_por.username }}{% endif %}.</p>{% endif %}
                 {% endwith %}
             </section>
+
+            <section class="profile-form-card config-template-card">
+                <div class="panel-header">
+                    <div>
+                        <h2>Gabinete agendado — pessoa</h2>
+                        <p>Confirmação enviada à pessoa ao agendar um gabinete. Com a janela de 24h aberta sai o texto; fechada, só pelo template aprovado na Meta.</p>
+                    </div>
+                </div>
+                <p class="builder-field">
+                    <label for="{{ form.gab_pessoa_texto.id_for_label }}">Mensagem (texto livre)</label>
+                    {{ form.gab_pessoa_texto }}
+                    <small class="table-muted-text">Marcadores: <code>{nome}</code>, <code>{data}</code>, <code>{hora}</code>, <code>{pastor}</code>.</small>
+                </p>
+                {% if usa_meta or form.gab_pessoa_meta_nome.errors or form.gab_pessoa_variables.errors %}
+                <p class="builder-field">
+                    <label for="{{ form.gab_pessoa_meta_nome.id_for_label }}">Nome do template (Meta)</label>
+                    {{ form.gab_pessoa_meta_nome }}
+                    <small class="table-muted-text">Vazio = sem template: fora da janela de 24h a confirmação não é enviada.</small>
+                    {% if form.gab_pessoa_meta_nome.errors %}<span class="form-errors">{{ form.gab_pessoa_meta_nome.errors.0 }}</span>{% endif %}
+                </p>
+                <p class="builder-field">
+                    <label for="{{ form.gab_pessoa_meta_idioma.id_for_label }}">Idioma do template (Meta)</label>
+                    {{ form.gab_pessoa_meta_idioma }}
+                    {% if form.gab_pessoa_meta_idioma.errors %}<span class="form-errors">{{ form.gab_pessoa_meta_idioma.errors.0 }}</span>{% endif %}
+                </p>
+                <p class="builder-field">
+                    <label for="{{ form.gab_pessoa_variables.id_for_label }}">Variáveis do template (JSON)</label>
+                    {{ form.gab_pessoa_variables }}
+                    <small class="table-muted-text">Ordem das variáveis do template aprovado, com os mesmos marcadores do texto.</small>
+                    {% if form.gab_pessoa_variables.errors %}<span class="form-errors">{{ form.gab_pessoa_variables.errors.0 }}</span>{% endif %}
+                </p>
+                {% else %}{{ form.gab_pessoa_meta_nome.as_hidden }}{{ form.gab_pessoa_meta_idioma.as_hidden }}{{ form.gab_pessoa_variables.as_hidden }}{% endif %}
+            </section>
+
+            <section class="profile-form-card config-template-card">
+                <div class="panel-header">
+                    <div>
+                        <h2>Gabinete agendado — aviso ao pastor</h2>
+                        <p>Vai para o telefone cadastrado no perfil do pastor. Na Meta, sem template o texto só chega se o pastor escreveu para o número nas últimas 24h.</p>
+                    </div>
+                </div>
+                <p class="builder-field">
+                    <label for="{{ form.gab_pastor_texto.id_for_label }}">Mensagem (texto livre)</label>
+                    {{ form.gab_pastor_texto }}
+                    <small class="table-muted-text">Marcadores: <code>{pessoa}</code>, <code>{data}</code>, <code>{hora}</code>, <code>{pastor}</code>.</small>
+                </p>
+                {% if usa_meta or form.gab_pastor_meta_nome.errors or form.gab_pastor_variables.errors %}
+                <p class="builder-field">
+                    <label for="{{ form.gab_pastor_meta_nome.id_for_label }}">Nome do template (Meta)</label>
+                    {{ form.gab_pastor_meta_nome }}
+                    {% if form.gab_pastor_meta_nome.errors %}<span class="form-errors">{{ form.gab_pastor_meta_nome.errors.0 }}</span>{% endif %}
+                </p>
+                <p class="builder-field">
+                    <label for="{{ form.gab_pastor_meta_idioma.id_for_label }}">Idioma do template (Meta)</label>
+                    {{ form.gab_pastor_meta_idioma }}
+                    {% if form.gab_pastor_meta_idioma.errors %}<span class="form-errors">{{ form.gab_pastor_meta_idioma.errors.0 }}</span>{% endif %}
+                </p>
+                <p class="builder-field">
+                    <label for="{{ form.gab_pastor_variables.id_for_label }}">Variáveis do template (JSON)</label>
+                    {{ form.gab_pastor_variables }}
+                    {% if form.gab_pastor_variables.errors %}<span class="form-errors">{{ form.gab_pastor_variables.errors.0 }}</span>{% endif %}
+                </p>
+                {% else %}{{ form.gab_pastor_meta_nome.as_hidden }}{{ form.gab_pastor_meta_idioma.as_hidden }}{{ form.gab_pastor_variables.as_hidden }}{% endif %}
+            </section>
         </div>
 
         <div class="action-row">

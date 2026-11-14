@@ -1,7 +1,10 @@
 import json
+import os
 import re
 
 from django import forms
+from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.acolhimento import reports
@@ -185,21 +188,73 @@ class InteracaoAcolhimentoForm(forms.ModelForm):
         }
 
 
+def pastores_queryset():
+    """Usuarios ativos com o perfil Pastor (permissao do gabinete dada ao proprio usuario).
+
+    Mesmo criterio de `apps.core.forms.eh_pastor`: superusuario nao conta como pastor.
+    """
+    return (
+        get_user_model().objects.filter(
+            is_active=True,
+            user_permissions__codename='pode_ver_gabinete',
+            user_permissions__content_type__app_label='acolhimento',
+        )
+        .distinct()
+        .order_by('first_name', 'last_name', 'username')
+    )
+
+
+def responsaveis_queryset(incluir=None):
+    """Quem pode ser responsavel por uma pessoa: perfil "Mensagens das pessoas" ou Pastor.
+
+    `incluir` mantem na lista o responsavel atual, mesmo que tenha perdido o perfil
+    (senao o select mostraria outra pessoa como selecionada).
+    """
+    filtro = Q(
+        user_permissions__codename__in=['pode_conversar_pessoas', 'pode_ver_gabinete'],
+        user_permissions__content_type__app_label='acolhimento',
+    ) | Q(
+        groups__permissions__codename__in=['pode_conversar_pessoas', 'pode_ver_gabinete'],
+        groups__permissions__content_type__app_label='acolhimento',
+    )
+    filtro = Q(is_active=True) & filtro
+    if incluir is not None:
+        filtro |= Q(pk=getattr(incluir, 'pk', incluir))
+    return get_user_model().objects.filter(filtro).distinct().order_by('first_name', 'last_name', 'username')
+
+
+def rotulo_usuario(usuario):
+    return usuario.get_full_name() or usuario.get_username()
+
+
 class RegistroGabineteForm(forms.ModelForm):
     """Caixa "Gabinete" da ficha da pessoa (so administradores e pastores)."""
 
     prefix = 'gabinete'  # a ficha tambem tem o form do Novo passo, com um campo `tipo`
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, usuario=None, **kwargs):
         super().__init__(*args, **kwargs)
         if not self.is_bound and not self.instance.pk:
             self.fields['data'].initial = timezone.localdate
             self.fields['hora'].initial = hora_local_atual
         self.fields['tipo'].choices = [('', 'Tipo de gabinete')] + list(RegistroGabinete.Tipo.choices)
+        pastores = pastores_queryset()
+        self.fields['pastor'].queryset = pastores
+        self.fields['pastor'].empty_label = 'Pastor responsável'
+        self.fields['pastor'].label_from_instance = rotulo_usuario
+        # Pastor registrando o proprio gabinete: ja vem selecionado.
+        if not self.is_bound and usuario is not None and pastores.filter(pk=usuario.pk).exists():
+            self.fields['pastor'].initial = usuario.pk
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get('tipo') == RegistroGabinete.Tipo.AGENDADO and not cleaned.get('pastor'):
+            self.add_error('pastor', 'Informe o pastor responsável pelo gabinete agendado.')
+        return cleaned
 
     class Meta:
         model = RegistroGabinete
-        fields = ['tipo', 'data', 'hora', 'observacoes']
+        fields = ['tipo', 'pastor', 'data', 'hora', 'observacoes']
         widgets = {
             'data': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
             'hora': forms.TimeInput(attrs={'type': 'time'}, format='%H:%M'),
@@ -231,7 +286,7 @@ class DisparoMensagemMassaForm(forms.Form):
     MODO_QUESTIONARIO = 'questionario'
     MODO_CHOICES = [
         (MODO_LIVRE, 'Mensagem livre — so para quem esta com a janela de 24h aberta'),
-        (MODO_TEMPLATE, 'Template — para qualquer pessoa fora do primeiro contato (marketing)'),
+        (MODO_TEMPLATE, 'Template — para qualquer pessoa selecionada, mesmo com a janela fechada'),
         (MODO_QUESTIONARIO, 'Questionario — cada pessoa recebe o proprio link de resposta'),
     ]
     TEXTO_CONVITE_PADRAO = 'Olá, {nome}! Segue o link para responder o questionário "{questionario}": {link}'
@@ -261,6 +316,12 @@ class DisparoMensagemMassaForm(forms.Form):
         required=False,
         label='Variaveis do template (JSON)',
         widget=forms.Textarea(attrs={'rows': 2, 'placeholder': '{"1": "{nome}"}'}),
+    )
+    # Somente na API oficial da Meta: imagem/video/PDF do cabecalho do template.
+    cabecalho_midia = forms.FileField(
+        required=False,
+        label='Midia do cabecalho',
+        widget=forms.FileInput(attrs={'accept': '.mp4,.3gp,.jpg,.jpeg,.png,.pdf'}),
     )
     questionario = forms.ModelChoiceField(
         queryset=Questionario.objects.none(),
@@ -324,6 +385,9 @@ class DisparoMensagemMassaForm(forms.Form):
                 if not META_IDIOMA_RE.match(idioma):
                     self.add_error('template_idioma', META_IDIOMA_ERRO)
                 cleaned['template_idioma'] = idioma
+                cleaned['cabecalho_info'] = self._validar_arquivo_cabecalho(cleaned.get('cabecalho_midia'))
+                if not self.has_error('content_sid') and not self.has_error('template_idioma'):
+                    self._conferir_template_meta(cleaned, sid, idioma)
             elif not sid:
                 self.add_error('content_sid', 'Informe o Content Template SID para o disparo por template.')
             elif not sid.startswith('HX'):
@@ -340,6 +404,126 @@ class DisparoMensagemMassaForm(forms.Form):
             if not (cleaned.get('conteudo') or '').strip():
                 self.add_error('conteudo', 'Escreva a mensagem que sera enviada.')
         return cleaned
+
+    def _validar_arquivo_cabecalho(self, arquivo):
+        """{tipo, mime, nome} do arquivo do cabecalho, ou None (sem arquivo/invalido)."""
+        if not arquivo:
+            return None
+        from apps.acolhimento import bot_midia  # lazy: evita ciclo de import no load
+
+        classificado = bot_midia.classificar(arquivo.name)
+        # No cabecalho de template a Meta so aceita documento em PDF.
+        if (
+            not classificado
+            or classificado[0] not in ROTULO_MIDIA_CABECALHO
+            or (classificado[0] == 'document' and classificado[1] != 'application/pdf')
+        ):
+            self.add_error(
+                'cabecalho_midia',
+                'Formato nao aceito no cabecalho: use video MP4, imagem JPG/PNG ou PDF.',
+            )
+            return None
+        tipo, mime = classificado
+        limite_mb = bot_midia.LIMITE_MB[tipo]
+        if arquivo.size > limite_mb * 1024 * 1024:
+            self.add_error(
+                'cabecalho_midia',
+                f'O arquivo passa do limite de {limite_mb} MB que a Meta aceita para {ROTULO_MIDIA_CABECALHO[tipo]}.',
+            )
+            return None
+        return {'tipo': tipo, 'mime': mime, 'nome': os.path.basename(arquivo.name)}
+
+    def _conferir_template_meta(self, cleaned, nome, idioma):
+        """Confere na Meta o que o template exige (midia no cabecalho e variaveis).
+
+        Sem isto o erro so aparecia depois, na fila (ex.: Meta #132000 em cada envio).
+        Se a Meta nao puder ser consultada, segue sem conferir.
+        """
+        from apps.acolhimento import meta_service  # lazy: evita ciclo de import no load
+
+        template = meta_service.obter_template(nome, idioma)
+        if template is None:
+            return
+        if not template:
+            self.add_error(
+                'content_sid',
+                f'Template "{nome}" ({idioma}) nao encontrado na Meta. Confira o nome e o idioma no painel.',
+            )
+            return
+
+        requisitos = meta_service.requisitos_template(template)
+        if requisitos['status'] and requisitos['status'] != 'APPROVED':
+            self.add_error(
+                'content_sid',
+                f'Template "{nome}" esta com status {requisitos["status"]} na Meta: so templates aprovados podem ser enviados.',
+            )
+            return
+        if requisitos['variaveis_nao_suportadas']:
+            self.add_error(
+                'content_sid',
+                'Este template tem variavel no cabecalho de texto ou no link de um botao, '
+                'o que o disparo ainda nao preenche.',
+            )
+            return
+        if requisitos['cabecalho'] == 'LOCATION':
+            self.add_error('content_sid', 'Template com localizacao no cabecalho ainda nao e suportado no disparo.')
+            return
+
+        self._conferir_cabecalho(cleaned, requisitos)
+        self._conferir_variaveis(cleaned, requisitos)
+
+    def _conferir_cabecalho(self, cleaned, requisitos):
+        esperado = requisitos['cabecalho_midia']
+        arquivo = cleaned.get('cabecalho_info')
+        if esperado and not arquivo:
+            if not self.has_error('cabecalho_midia'):
+                self.add_error(
+                    'cabecalho_midia',
+                    f'Este template tem {ROTULO_MIDIA_CABECALHO[esperado]} no cabecalho: anexe o arquivo.',
+                )
+        elif arquivo and not esperado:
+            self.add_error('cabecalho_midia', 'Este template nao tem midia no cabecalho: remova o arquivo.')
+            cleaned['cabecalho_info'] = None
+        elif arquivo and arquivo['tipo'] != esperado:
+            self.add_error(
+                'cabecalho_midia',
+                f'O cabecalho deste template e {ROTULO_MIDIA_CABECALHO[esperado]}, '
+                f'mas o arquivo enviado e {ROTULO_MIDIA_CABECALHO[arquivo["tipo"]]}.',
+            )
+            cleaned['cabecalho_info'] = None
+
+    def _conferir_variaveis(self, cleaned, requisitos):
+        if self.has_error('content_variables'):
+            return
+        chaves = {str(chave) for chave in (cleaned.get('content_variables') or {})}
+        posicionais = requisitos['corpo_posicionais']
+        nomeados = set(requisitos['corpo_nomeados'])
+        if posicionais:
+            esperadas = {str(n) for n in range(1, posicionais + 1)}
+            if chaves != esperadas:
+                exemplo = json.dumps(
+                    {str(n): ('{nome}' if n == 1 else '...') for n in range(1, posicionais + 1)},
+                    ensure_ascii=False,
+                )
+                self.add_error(
+                    'content_variables',
+                    f'O texto deste template tem {posicionais} variavel(is) '
+                    f'({", ".join("{{%d}}" % n for n in range(1, posicionais + 1))}). '
+                    f'Preencha todas, ex.: {exemplo}',
+                )
+        elif nomeados:
+            if chaves != nomeados:
+                self.add_error(
+                    'content_variables',
+                    'O texto deste template usa as variaveis '
+                    f'{", ".join(sorted(nomeados))}: preencha exatamente essas.',
+                )
+        elif chaves:
+            self.add_error('content_variables', 'Este template nao tem variaveis no texto: deixe o campo vazio.')
+
+
+# Rotulo de cada tipo de midia aceito no cabecalho de um template da Meta.
+ROTULO_MIDIA_CABECALHO = {'image': 'uma imagem', 'video': 'um video', 'document': 'um PDF'}
 
 
 class RelatorioPessoasForm(forms.Form):
@@ -578,6 +762,31 @@ class TemplatesWhatsappForm(forms.Form):
         label='Continuar conversa — Idioma do template (Meta)',
         widget=forms.TextInput(attrs={'placeholder': 'pt_BR'}),
     )
+    # Avisos do gabinete agendado (pessoa e pastor): texto livre + template da Meta.
+    gab_pessoa_texto = forms.CharField(
+        required=False,
+        label='Gabinete — Mensagem para a pessoa',
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+    gab_pessoa_meta_nome = forms.CharField(
+        required=False,
+        label='Gabinete (pessoa) — Nome do template (Meta)',
+        widget=forms.TextInput(attrs={'placeholder': 'gabinete_agendado'}),
+    )
+    gab_pessoa_meta_idioma = forms.CharField(required=False, widget=forms.TextInput(attrs={'placeholder': 'pt_BR'}))
+    gab_pessoa_variables = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}))
+    gab_pastor_texto = forms.CharField(
+        required=False,
+        label='Gabinete — Aviso para o pastor',
+        widget=forms.Textarea(attrs={'rows': 2}),
+    )
+    gab_pastor_meta_nome = forms.CharField(
+        required=False,
+        label='Gabinete (pastor) — Nome do template (Meta)',
+        widget=forms.TextInput(attrs={'placeholder': 'gabinete_aviso_pastor'}),
+    )
+    gab_pastor_meta_idioma = forms.CharField(required=False, widget=forms.TextInput(attrs={'placeholder': 'pt_BR'}))
+    gab_pastor_variables = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}))
 
     def clean(self):
         cleaned = super().clean()
@@ -586,17 +795,17 @@ class TemplatesWhatsappForm(forms.Form):
             if sid and not sid.startswith('HX'):
                 self.add_error(campo, 'O Content SID da Twilio comeca com "HX".')
             cleaned[campo] = sid
-        for campo in ('opt_in_meta_nome', 'continuar_meta_nome'):
+        for campo in ('opt_in_meta_nome', 'continuar_meta_nome', 'gab_pessoa_meta_nome', 'gab_pastor_meta_nome'):
             nome = (cleaned.get(campo) or '').strip()
             if nome and not META_TEMPLATE_NOME_RE.match(nome):
                 self.add_error(campo, META_TEMPLATE_NOME_ERRO)
             cleaned[campo] = nome
-        for campo in ('opt_in_meta_idioma', 'continuar_meta_idioma'):
+        for campo in ('opt_in_meta_idioma', 'continuar_meta_idioma', 'gab_pessoa_meta_idioma', 'gab_pastor_meta_idioma'):
             idioma = (cleaned.get(campo) or '').strip() or 'pt_BR'
             if not META_IDIOMA_RE.match(idioma):
                 self.add_error(campo, META_IDIOMA_ERRO)
             cleaned[campo] = idioma
-        for campo in ('opt_in_variables', 'continuar_variables'):
+        for campo in ('opt_in_variables', 'continuar_variables', 'gab_pessoa_variables', 'gab_pastor_variables'):
             raw = (cleaned.get(campo) or '').strip() or '{}'
             try:
                 parsed = json.loads(raw)
@@ -605,7 +814,7 @@ class TemplatesWhatsappForm(forms.Form):
             except ValueError:
                 self.add_error(campo, 'JSON invalido. Use um objeto, ex.: {"1": "{nome}"}.')
             cleaned[campo] = raw
-        for campo in ('opt_in_texto_evolution', 'continuar_texto_evolution'):
+        for campo in ('opt_in_texto_evolution', 'continuar_texto_evolution', 'gab_pessoa_texto', 'gab_pastor_texto'):
             cleaned[campo] = (cleaned.get(campo) or '').strip()
         return cleaned
 
@@ -631,10 +840,14 @@ class ConfiguracaoAtendimentoBotForm(forms.ModelForm):
 class OpcaoAtendimentoBotForm(forms.ModelForm):
     """Uma opcao do menu do atendimento automatico."""
 
+    remover_midia = forms.BooleanField(required=False, label='Remover o arquivo atual')
+
     class Meta:
         model = OpcaoAtendimentoBot
-        fields = ['rotulo', 'palavras_chave', 'resposta', 'acao', 'ativa', 'aparece_no_menu']
+        fields = ['rotulo', 'palavras_chave', 'resposta', 'acao', 'ativa', 'aparece_no_menu', 'midia_arquivo']
         widgets = {
+            # FileInput simples: o ClearableFileInput tentaria montar uma URL publica.
+            'midia_arquivo': forms.FileInput(),
             'rotulo': forms.TextInput(attrs={'placeholder': 'Ex.: Falar com alguem'}),
             'palavras_chave': forms.Textarea(attrs={
                 'rows': 2,
@@ -646,6 +859,47 @@ class OpcaoAtendimentoBotForm(forms.ModelForm):
             }),
         }
 
+
+    def clean_midia_arquivo(self):
+        from apps.acolhimento import bot_midia  # lazy: evita ciclo de import no load
+
+        arquivo = self.cleaned_data.get('midia_arquivo')
+        if not arquivo or arquivo == self.instance.midia_arquivo:
+            return arquivo
+        classificado = bot_midia.classificar(arquivo.name)
+        if classificado is None:
+            raise forms.ValidationError(
+                f'Formato nao aceito pelo WhatsApp. Use: {bot_midia.formatos_aceitos()}.'
+            )
+        tipo, _mime = classificado
+        limite = bot_midia.LIMITE_MB[tipo]
+        if arquivo.size > limite * 1024 * 1024:
+            raise forms.ValidationError(f'Arquivo grande demais: o limite para este tipo e {limite} MB.')
+        return arquivo
+
+    def save(self, commit=True):
+        from apps.acolhimento import bot_midia
+
+        opcao = super().save(commit=False)
+        anterior = OpcaoAtendimentoBot.objects.filter(pk=opcao.pk).values_list('midia_arquivo', flat=True).first() if opcao.pk else ''
+        novo = self.files.get(self.add_prefix('midia_arquivo'))
+        if novo:
+            tipo, mime = bot_midia.classificar(novo.name)
+            opcao.midia_tipo = tipo
+            opcao.midia_mime = mime
+            opcao.midia_nome_original = os.path.basename(novo.name)[:255]
+            opcao.midia_meta_id = ''
+            opcao.midia_meta_enviada_em = None
+        elif self.cleaned_data.get('remover_midia'):
+            opcao.midia_arquivo = None
+            opcao.midia_tipo = opcao.midia_mime = opcao.midia_nome_original = opcao.midia_meta_id = ''
+            opcao.midia_meta_enviada_em = None
+        if commit:
+            opcao.save()
+            # Arquivo trocado ou removido: o antigo sai do disco.
+            if anterior and anterior != (opcao.midia_arquivo.name if opcao.midia_arquivo else ''):
+                OpcaoAtendimentoBot._meta.get_field('midia_arquivo').storage.delete(anterior)
+        return opcao
 
     def clean(self):
         cleaned = super().clean()

@@ -73,6 +73,15 @@ services:
       META_TEMPLATE_CONTINUAR_VARIABLES: ${META_TEMPLATE_CONTINUAR_VARIABLES:-}
       META_BOTAO_SIM: ${META_BOTAO_SIM:-}
       META_BOTAO_NAO: ${META_BOTAO_NAO:-}
+      META_TEMPLATE_GABINETE_PESSOA_NOME: ${META_TEMPLATE_GABINETE_PESSOA_NOME:-}
+      META_TEMPLATE_GABINETE_PESSOA_IDIOMA: ${META_TEMPLATE_GABINETE_PESSOA_IDIOMA:-pt_BR}
+      META_TEMPLATE_GABINETE_PASTOR_NOME: ${META_TEMPLATE_GABINETE_PASTOR_NOME:-}
+      META_TEMPLATE_GABINETE_PASTOR_IDIOMA: ${META_TEMPLATE_GABINETE_PASTOR_IDIOMA:-pt_BR}
+      # Midia recebida pelo WhatsApp: fica no volume `midia_privada` (fora do static),
+      # servida so pela view autenticada da conversa. Se mudar MIDIA_PRIVADA_ROOT,
+      # mude tambem o destino do volume abaixo (senao a midia some a cada deploy).
+      META_WA_MIDIA_MAX_MB: ${META_WA_MIDIA_MAX_MB:-20}
+      MIDIA_PRIVADA_ROOT: ${MIDIA_PRIVADA_ROOT:-/app/data/midia_privada}
       EVOLUTION_BASE_URL: ${EVOLUTION_BASE_URL:-http://host.docker.internal:8085}
       EVOLUTION_PUBLIC_URL: ${EVOLUTION_PUBLIC_URL:-http://127.0.0.1:8085}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-troque-esta-chave-evolution-no-env}
@@ -101,8 +110,11 @@ services:
       TWILIO_TEMPLATE_OPT_IN_VARIABLES: ${TWILIO_TEMPLATE_OPT_IN_VARIABLES:-}
       TWILIO_TEMPLATE_CONTINUAR_SID: ${TWILIO_TEMPLATE_CONTINUAR_SID:-}
       TWILIO_TEMPLATE_CONTINUAR_VARIABLES: ${TWILIO_TEMPLATE_CONTINUAR_VARIABLES:-}
+    volumes:
+      - midia_privada:/app/data/midia_privada
     ports:
       - "${APP_PORT:-8183}:8000"
 
 volumes:
   postgres_data:
+  midia_privada:

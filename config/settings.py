@@ -310,6 +310,17 @@ META_TEMPLATE_CONTINUAR_VARIABLES = os.getenv('META_TEMPLATE_CONTINUAR_VARIABLES
 # que esta aprovado na Meta: o clique chega no webhook com esse texto (e payload).
 META_BOTAO_SIM = (os.getenv('META_BOTAO_SIM') or 'Sim, podemos').strip()
 META_BOTAO_NAO = (os.getenv('META_BOTAO_NAO') or 'Agora não').strip()
+# Avisos automaticos do gabinete agendado (fora da janela de 24h so sai por template
+# aprovado). Tambem editaveis na tela de templates; o banco tem prioridade.
+META_TEMPLATE_GABINETE_PESSOA_NOME = os.getenv('META_TEMPLATE_GABINETE_PESSOA_NOME', '').strip()
+META_TEMPLATE_GABINETE_PESSOA_IDIOMA = os.getenv('META_TEMPLATE_GABINETE_PESSOA_IDIOMA', 'pt_BR').strip() or 'pt_BR'
+META_TEMPLATE_GABINETE_PASTOR_NOME = os.getenv('META_TEMPLATE_GABINETE_PASTOR_NOME', '').strip()
+META_TEMPLATE_GABINETE_PASTOR_IDIOMA = os.getenv('META_TEMPLATE_GABINETE_PASTOR_IDIOMA', 'pt_BR').strip() or 'pt_BR'
+# Midia recebida (audio/imagem/video/documento): baixada da Meta logo apos o webhook
+# e guardada FORA das pastas publicas (static/media). So sai por uma view autenticada
+# com a permissao de conversar com pessoas (LGPD). No Docker, aponta para um volume.
+META_WA_MIDIA_MAX_MB = int(os.getenv('META_WA_MIDIA_MAX_MB') or '20')
+MIDIA_PRIVADA_ROOT = Path(os.getenv('MIDIA_PRIVADA_ROOT') or BASE_DIR / 'data' / 'midia_privada')
 
 # ---------------------------------------------------------------------------
 # Opt-in-first (anti-bloqueio): faz a PESSOA iniciar a conversa.

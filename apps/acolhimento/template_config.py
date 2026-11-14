@@ -31,6 +31,23 @@ _FALLBACK = {
         'meta_idioma': 'META_TEMPLATE_CONTINUAR_IDIOMA',
         'meta_variables': 'META_TEMPLATE_CONTINUAR_VARIABLES',
     },
+    # Avisos do gabinete agendado: so Meta (template) e texto livre; sem Twilio.
+    TemplateWhatsapp.Tipo.GABINETE_PESSOA: {
+        'sid': '',
+        'variables': '',
+        'texto_evolution': '',
+        'meta_nome': 'META_TEMPLATE_GABINETE_PESSOA_NOME',
+        'meta_idioma': 'META_TEMPLATE_GABINETE_PESSOA_IDIOMA',
+        'meta_variables': '',
+    },
+    TemplateWhatsapp.Tipo.GABINETE_PASTOR: {
+        'sid': '',
+        'variables': '',
+        'texto_evolution': '',
+        'meta_nome': 'META_TEMPLATE_GABINETE_PASTOR_NOME',
+        'meta_idioma': 'META_TEMPLATE_GABINETE_PASTOR_IDIOMA',
+        'meta_variables': '',
+    },
 }
 
 PROVIDER_META = 'meta'
@@ -256,7 +273,7 @@ def _template_meta_cacheado(nome: str, idioma: str):
     guardado = cache.get(chave)
     if guardado is not None:
         return guardado or None
-    template = meta_service.get_template(nome, idioma)
+    template = meta_service.obter_template(nome, idioma)
     cache.set(chave, template or {}, _CACHE_TEMPLATE_OK if template else _CACHE_TEMPLATE_FALHA)
     return template
 

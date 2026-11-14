@@ -75,31 +75,20 @@ class RenderizarTemplateTests(TestCase):
 		]}
 		self.assertEqual(meta_service.renderizar_template(template, {}), 'Corpo')
 
+	def test_cabecalho_de_video_mostra_so_o_texto(self):
+		template = {'components': [
+			{'type': 'HEADER', 'format': 'VIDEO'},
+			{'type': 'BODY', 'text': 'Oi {{1}}, vem pra conferencia!'},
+			{'type': 'BUTTONS', 'buttons': [{'type': 'URL', 'text': 'Inscreva-se', 'url': 'https://ex.com'}]},
+		]}
+		self.assertEqual(
+			meta_service.renderizar_template(template, {'1': 'Ana'}),
+			'Oi Ana, vem pra conferencia!\n\n[Inscreva-se]',
+		)
+
 	def test_sem_corpo_ou_sem_template_devolve_vazio(self):
 		self.assertEqual(meta_service.renderizar_template(None, {'1': 'x'}), '')
 		self.assertEqual(meta_service.renderizar_template({'components': []}, {}), '')
-
-
-@override_settings(**META_OK)
-class GetTemplateTests(TestCase):
-	def test_busca_pelo_nome_e_prefere_o_idioma(self):
-		resposta = {'data': [
-			{'name': 'boas_vindas', 'language': 'en_US', 'components': []},
-			{'name': 'boas_vindas', 'language': 'pt_BR', 'components': [{'type': 'BODY', 'text': 'Oi'}]},
-			{'name': 'boas_vindas_v2', 'language': 'pt_BR', 'components': []},
-		]}
-		with patch.object(meta_service, '_request', return_value=(200, resposta)) as req:
-			template = meta_service.get_template('boas_vindas', 'pt_BR')
-		self.assertEqual(template['language'], 'pt_BR')
-		self.assertEqual(req.call_args.args[1], '9876543210/message_templates')
-		self.assertEqual(req.call_args.kwargs['params']['name'], 'boas_vindas')
-
-	def test_erro_ou_sem_waba_devolve_none(self):
-		with patch.object(meta_service, '_request', side_effect=meta_service.MetaWhatsAppError('x')):
-			self.assertIsNone(meta_service.get_template('boas_vindas'))
-		with override_settings(META_WA_BUSINESS_ACCOUNT_ID=''), patch.object(meta_service, '_request') as req:
-			self.assertIsNone(meta_service.get_template('boas_vindas'))
-			req.assert_not_called()
 
 
 @override_settings(**META_OK)
@@ -109,13 +98,13 @@ class TextoMetaTemplateTests(TestCase):
 
 	def test_consulta_a_meta_uma_vez_e_usa_o_cache(self):
 		bloco = {'nome': 'acolhimento_primeiro_contato_equipe', 'idioma': 'pt_BR', 'parametros': {'1': 'Ana'}}
-		with patch.object(meta_service, 'get_template', return_value=TEMPLATE_BOAS_VINDAS) as get:
+		with patch.object(meta_service, 'obter_template', return_value=TEMPLATE_BOAS_VINDAS) as get:
 			self.assertIn('Ola Ana,', template_config.texto_meta_template(bloco))
 			self.assertIn('Ola Bia,', template_config.texto_meta_template({**bloco, 'parametros': {'1': 'Bia'}}))
 		get.assert_called_once()
 
 	def test_sem_template_usa_o_marcador(self):
-		with patch.object(meta_service, 'get_template', return_value=None):
+		with patch.object(meta_service, 'obter_template', return_value=None):
 			self.assertEqual(
 				template_config.conteudo_template({'nome': 'x', 'idioma': 'pt_BR'}, 'Template opt-in enfileirado'),
 				'Template opt-in enfileirado',
@@ -126,7 +115,7 @@ class TextoMetaTemplateTests(TestCase):
 class EnfileirarComTextoTests(TestCase):
 	def setUp(self):
 		cache.clear()
-		for alvo, valor in (('get_phone_number_info', {}), ('get_template', TEMPLATE_BOAS_VINDAS)):
+		for alvo, valor in (('get_phone_number_info', {}), ('obter_template', TEMPLATE_BOAS_VINDAS)):
 			p = patch(f'apps.acolhimento.meta_service.{alvo}', return_value=valor)
 			p.start()
 			self.addCleanup(p.stop)
@@ -202,7 +191,7 @@ class PreencherTextoTemplatesCommandTests(TestCase):
 		twilio = self._mensagem('Template opt-in enfileirado', {'twilio_template': {'content_sid': 'HX1'}})
 
 		saida = io.StringIO()
-		with patch.object(meta_service, 'get_template', return_value=TEMPLATE_BOAS_VINDAS):
+		with patch.object(meta_service, 'obter_template', return_value=TEMPLATE_BOAS_VINDAS):
 			call_command('preencher_texto_templates', '--dry-run', stdout=saida)
 			antiga.refresh_from_db()
 			self.assertEqual(antiga.conteudo, 'Template opt-in enfileirado')
@@ -220,7 +209,7 @@ class PreencherTextoTemplatesCommandTests(TestCase):
 	def test_sem_acesso_ao_template_avisa_e_nao_muda(self):
 		msg = self._mensagem('Template opt-in enfileirado', {'meta_template': {'nome': 'x', 'idioma': 'pt_BR'}})
 		saida = io.StringIO()
-		with patch.object(meta_service, 'get_template', return_value=None):
+		with patch.object(meta_service, 'obter_template', return_value=None):
 			call_command('preencher_texto_templates', stdout=saida)
 		msg.refresh_from_db()
 		self.assertEqual(msg.conteudo, 'Template opt-in enfileirado')

@@ -102,6 +102,41 @@
     </a>
 </section>
 
+{% if gabinetes_do_pastor is not None %}
+<section class="dashboard-panel">
+    <div class="panel-header">
+        <h2>Meus gabinetes</h2>
+        <a class="btn secundario" href="{% url 'pessoas-lista' %}?pastor={{ user.pk }}">Ver todas ({{ gabinetes_do_pastor|length }})</a>
+    </div>
+    {% if gabinetes_do_pastor %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Pessoa</th>
+                    <th>Próximo gabinete</th>
+                    <th>Último registro</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in gabinetes_do_pastor|slice:':15' %}
+                <tr>
+                    <td><a href="{% url 'pessoas-detalhe' item.pessoa.pk %}?aba=gabinete">{{ item.pessoa.nome }}</a></td>
+                    <td>{% if item.proximo %}<strong>{{ item.proximo.data|date:'d/m/Y' }} {{ item.proximo.hora|time:'H:i' }}</strong>{% else %}-{% endif %}</td>
+                    <td>{% if item.ultimo %}{{ item.ultimo.get_tipo_display }} em {{ item.ultimo.data|date:'d/m/Y' }}{% else %}-{% endif %}</td>
+                    <td>{{ item.pessoa.get_status_display }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">Nenhuma pessoa com gabinete atribuído a você ainda.</p>
+    {% endif %}
+</section>
+{% endif %}
+
 <section class="dashboard-panel">
     <div class="panel-header">
         <h2>Últimos passos</h2>
