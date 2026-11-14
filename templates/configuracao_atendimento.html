@@ -134,7 +134,7 @@
                     {% for op in opcoes %}
                     <tr>
                         <td>{% if op.numero_menu %}{{ op.numero_menu }}{% elif op.ativa %}<span class="table-muted-text" title="Responde so pelas palavras-chave">fora do menu</span>{% else %}<span class="table-muted-text">&mdash;</span>{% endif %}</td>
-                        <td>{{ op.rotulo }}</td>
+                        <td>{{ op.rotulo }}{% if op.midia_arquivo %} <small class="table-muted-text" title="{{ op.midia_nome_original }}">+ arquivo</small>{% endif %}</td>
                         <td>{{ op.get_acao_display }}</td>
                         <td class="table-muted-text">{{ op.palavras_chave|default:'-'|truncatechars:44 }}</td>
                         <td>{% if op.ativa %}Sim{% else %}<span class="table-muted-text">Nao</span>{% endif %}</td>

@@ -1771,7 +1771,8 @@ class ConfiguracaoTemplatesTests(TestCase):
 			'continuar_texto_evolution': 'Continuar {nome}',
 		})
 		self.assertEqual(resp.status_code, 302)
-		self.assertEqual(TemplateWhatsapp.objects.count(), 2)
+		# Primeiro contato, continuar e os dois avisos do gabinete.
+		self.assertEqual(TemplateWhatsapp.objects.count(), 4)
 		self.assertEqual(template_config.opt_in_sid(), 'HXoptinNOVO')
 		self.assertEqual(template_config.continuar_sid(), 'HXcontinuarNOVO')
 		self.assertEqual(template_config.opt_in_texto_evolution(), 'Boas-vindas {nome}')
@@ -2225,6 +2226,8 @@ class ResponsavelAtualTests(TestCase):
 		User = get_user_model()
 		self.staff = User.objects.create_user(username='staff_resp', password='x', is_staff=True, first_name='Ana')
 		self.comum = User.objects.create_user(username='comum_resp', password='x', is_staff=False, first_name='Bia')
+		# Responsavel so pode ser quem tem o perfil de mensagens (ou de pastor).
+		self.comum.user_permissions.add(Permission.objects.get(codename='pode_conversar_pessoas'))
 		self.pessoa = PrimeiroContato.objects.create(
 			nome='Contato Um',
 			telefone_whatsapp='31955550001',
@@ -3118,6 +3121,7 @@ class GabinetePastoralTests(TestCase):
 			'gabinete-data': '2026-10-20',
 			'gabinete-hora': '19:30',
 			'gabinete-observacoes': 'Conversa sobre batismo.',
+			'gabinete-pastor': self.pastor.pk,
 		}
 		payload.update(dados)
 		return self.client.post(self.url, payload)

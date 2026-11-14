@@ -332,6 +332,18 @@ class MensagemContato(models.Model):
 	def midia_disponivel(self):
 		return self.midia_status == self.MidiaStatusChoices.BAIXADA and bool(self.midia_arquivo)
 
+	@property
+	def midia_url(self):
+		"""URL autenticada da midia (recebida ou anexo do bot), ou '' se indisponivel."""
+		from django.urls import reverse
+
+		if self.midia_disponivel:
+			return reverse('mensagens-midia', args=[self.pk])
+		opcao_id = (self.metadata_envio or {}).get('bot_midia_opcao_id')
+		if self.direcao == self.DirecaoChoices.SAIDA and opcao_id:
+			return reverse('atendimento-opcao-midia', args=[opcao_id])
+		return ''
+
 	class Meta:
 		ordering = ['status_fila', 'prioridade', 'agendada_para', 'enfileirada_em']
 		verbose_name = 'Mensagem de contato'
@@ -395,6 +407,14 @@ class RegistroGabinete(models.Model):
 	data = models.DateField(default=timezone.localdate)
 	hora = models.TimeField(default=hora_local_atual)
 	observacoes = models.TextField(blank=True, verbose_name='Observacoes')
+	# Pastor que atende o gabinete (usuario com o perfil Pastor).
+	pastor = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='gabinetes_como_pastor',
+	)
 	criado_por = models.ForeignKey(
 		settings.AUTH_USER_MODEL,
 		on_delete=models.SET_NULL,
@@ -403,6 +423,9 @@ class RegistroGabinete(models.Model):
 		related_name='registros_gabinete',
 	)
 	criado_em = models.DateTimeField(auto_now_add=True)
+	# Resultado dos avisos automaticos do agendamento (texto curto para a tela).
+	aviso_pessoa = models.CharField(max_length=255, blank=True)
+	aviso_pastor = models.CharField(max_length=255, blank=True)
 
 	class Meta:
 		ordering = ['-data', '-hora', '-criado_em']
@@ -749,6 +772,8 @@ class TemplateWhatsapp(models.Model):
 	class Tipo(models.TextChoices):
 		PRIMEIRO_CONTATO = 'primeiro_contato_opt_in', 'Primeiro contato (opt-in)'
 		CONTINUAR = 'continuar_conversa', 'Continuar conversa'
+		GABINETE_PESSOA = 'gabinete_agendado_pessoa', 'Gabinete agendado (para a pessoa)'
+		GABINETE_PASTOR = 'gabinete_agendado_pastor', 'Gabinete agendado (aviso ao pastor)'
 
 	tipo = models.CharField(max_length=40, choices=Tipo.choices, unique=True)
 	content_sid = models.CharField('Content Template SID', max_length=64, blank=True)
@@ -835,6 +860,20 @@ class OpcaoAtendimentoBot(models.Model):
 	# Aparece no menu = listada e numerada. Fora do menu (e ativa) = so responde pelas
 	# palavras-chave, sem numero; serve para atalhos que nao precisam ficar visiveis.
 	aparece_no_menu = models.BooleanField('Aparece no menu', default=True)
+	# Arquivo opcional enviado logo depois da resposta (imagem, PDF, audio ou video).
+	midia_arquivo = models.FileField(
+		'Arquivo (opcional)',
+		storage=midia_privada_storage,
+		upload_to='bot/',
+		max_length=255,
+		blank=True,
+	)
+	midia_tipo = models.CharField(max_length=20, blank=True)
+	midia_mime = models.CharField(max_length=120, blank=True)
+	midia_nome_original = models.CharField(max_length=255, blank=True)
+	# Id do arquivo ja enviado para a Meta (vale ~30 dias); vazio = enviar de novo.
+	midia_meta_id = models.CharField(max_length=120, blank=True)
+	midia_meta_enviada_em = models.DateTimeField(null=True, blank=True)
 	atualizado_em = models.DateTimeField(auto_now=True)
 
 	class Meta:

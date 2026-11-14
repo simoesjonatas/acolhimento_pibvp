@@ -26,7 +26,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
-from apps.acolhimento import fila_auto, template_config
+from apps.acolhimento import fila_auto, gabinete_avisos, template_config
 from apps.acolhimento.aguardando_resposta import (
 	DIAS_PESSOA_NOVA,
 	DIAS_RESPONDIDAS,
@@ -40,8 +40,8 @@ from apps.acolhimento.aguardando_resposta import (
 )
 from apps.acolhimento.fila_metrics import metricas_entrega
 from apps.acolhimento.fila_processor import ritmo_anti_bloqueio_ativo
-from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RegistroGabineteForm, RelatorioPessoasForm, ResponderQuestionarioForm, TemplatesWhatsappForm
-from apps.acolhimento.models import ConfiguracaoProcessamentoFila, ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, PrimeiroContato, Questionario, RespostaPergunta, TemplateWhatsapp
+from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RegistroGabineteForm, RelatorioPessoasForm, ResponderQuestionarioForm, TemplatesWhatsappForm, pastores_queryset, responsaveis_queryset, rotulo_usuario
+from apps.acolhimento.models import ConfiguracaoProcessamentoFila, ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, OpcaoComoConheceu, PrimeiroContato, Questionario, RegistroGabinete, RespostaPergunta, TemplateWhatsapp
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
 from apps.acolhimento.reports import filtrar_pessoas, gerar_exportacao_respostas, gerar_relatorio, resumo_filtros, resumo_pessoas
 from apps.acolhimento.whatsapp_rules import (
@@ -182,6 +182,11 @@ class GabinetePermissaoMixin(UserPassesTestMixin):
 		return pode_ver_gabinete(self.request.user)
 
 
+def como_conheceu_filtro_choices():
+	"""Opcoes de "Como conheceu" para filtros (inclui as desativadas: ha cadastros antigos)."""
+	return list(OpcaoComoConheceu.objects.order_by('ordem', 'id').values_list('valor', 'rotulo'))
+
+
 class PrimeiroContatoQuerysetMixin:
 	sort_map = {
 		'nome': 'nome',
@@ -209,10 +214,19 @@ class PrimeiroContatoQuerysetMixin:
 		iniciou_interacao = self.request.GET.get('iniciou_interacao', '').strip()
 		janela = self.request.GET.get('janela', '').strip()
 		meus = self.request.GET.get('meus', '').strip()
+		como_conheceu = self.request.GET.get('como_conheceu', '').strip()
+		pastor = self.request.GET.get('pastor', '').strip()
 		sort_coluna, direcao = self.get_sort_state()
 
 		if meus == '1':
 			queryset = queryset.filter(responsavel_atual=self.request.user)
+
+		if como_conheceu:
+			queryset = queryset.filter(como_conheceu=como_conheceu)
+
+		# Gabinete e restrito: o filtro por pastor so vale para quem pode ver o gabinete.
+		if pastor.isdigit() and pode_ver_gabinete(self.request.user):
+			queryset = queryset.filter(registros_gabinete__pastor_id=int(pastor)).distinct()
 
 		if busca:
 			queryset = queryset.filter(
@@ -292,6 +306,12 @@ class PrimeiroContatoListView(LoginRequiredMixin, PrimeiroContatoQuerysetMixin, 
 		context['iniciou_interacao_atual'] = self.request.GET.get('iniciou_interacao', '').strip()
 		context['janela_atual'] = self.request.GET.get('janela', '').strip()
 		context['meus_atual'] = self.request.GET.get('meus', '').strip()
+		context['como_conheceu_atual'] = self.request.GET.get('como_conheceu', '').strip()
+		context['como_conheceu_choices'] = como_conheceu_filtro_choices()
+		context['pastor_atual'] = self.request.GET.get('pastor', '').strip()
+		context['pode_ver_gabinete'] = pode_ver_gabinete(self.request.user)
+		if context['pode_ver_gabinete']:
+			context['pastores_choices'] = [(p.pk, rotulo_usuario(p)) for p in pastores_queryset()]
 		context['status_choices'] = PrimeiroContato.StatusAcolhimento.choices
 		context['origem_choices'] = PrimeiroContato.OrigemCadastroChoices.choices
 		context['sort_coluna_atual'] = sort_coluna_atual
@@ -608,15 +628,21 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 	success_url = reverse_lazy('mensagens-disparo-massa')
 
 	def get_pessoas_queryset(self):
-		queryset = PrimeiroContato.objects.select_related('responsavel_atual').exclude(
-			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO
-		)
-
 		busca = self.request.GET.get('q', '').strip()
 		status = self.request.GET.get('status', '').strip()
 		origem = self.request.GET.get('origem', '').strip()
 		responsavel = self.request.GET.get('responsavel', '').strip()
 		sem_pendente = self.request.GET.get('sem_pendente', '').strip()
+		como_conheceu = self.request.GET.get('como_conheceu', '').strip()
+
+		queryset = PrimeiroContato.objects.select_related('responsavel_atual')
+		# Primeiro contato so entra quando escolhido de proposito no filtro de status:
+		# o padrao continua sendo a audiencia de quem ja passou do primeiro contato.
+		if status != PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO:
+			queryset = queryset.exclude(status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO)
+
+		if como_conheceu:
+			queryset = queryset.filter(como_conheceu=como_conheceu)
 
 		if busca:
 			queryset = queryset.filter(
@@ -699,11 +725,12 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		context['origem_atual'] = self.request.GET.get('origem', '').strip()
 		context['responsavel_atual_filtro'] = self.request.GET.get('responsavel', '').strip()
 		context['sem_pendente_atual'] = self.request.GET.get('sem_pendente', '').strip()
-		context['status_choices'] = [
-			(valor, rotulo)
-			for valor, rotulo in PrimeiroContato.StatusAcolhimento.choices
-			if valor != PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO
-		]
+		context['como_conheceu_atual'] = self.request.GET.get('como_conheceu', '').strip()
+		context['como_conheceu_choices'] = como_conheceu_filtro_choices()
+		context['status_choices'] = PrimeiroContato.StatusAcolhimento.choices
+		context['filtrando_primeiro_contato'] = (
+			context['status_atual'] == PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO
+		)
 		context['origem_choices'] = PrimeiroContato.OrigemCadastroChoices.choices
 		context['responsaveis_choices'] = responsaveis_choices
 		context['audiencia'] = audiencia
@@ -1073,15 +1100,14 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		ver_gabinete = pode_ver_gabinete(user)
 		context['pode_ver_gabinete'] = ver_gabinete
 		if ver_gabinete:
-			context['registros_gabinete'] = self.object.registros_gabinete.select_related('criado_por')
-			context['gabinete_form'] = RegistroGabineteForm()
+			context['registros_gabinete'] = self.object.registros_gabinete.select_related('criado_por', 'pastor')
+			context['gabinete_form'] = RegistroGabineteForm(usuario=user)
 
 		pode_gerenciar_responsavel = user.is_staff or user.is_superuser
 		context['pode_gerenciar_responsavel'] = pode_gerenciar_responsavel
 		if pode_gerenciar_responsavel:
-			context['usuarios_responsaveis'] = (
-				get_user_model().objects.filter(is_active=True).order_by('first_name', 'username')
-			)
+			# So quem tem o perfil "Mensagens das pessoas" ou Pastor (o atual continua na lista).
+			context['usuarios_responsaveis'] = responsaveis_queryset(incluir=self.object.responsavel_atual_id)
 		else:
 			context['usuarios_responsaveis'] = get_user_model().objects.none()
 
@@ -1144,15 +1170,21 @@ class RegistroGabineteCreateView(LoginRequiredMixin, GabinetePermissaoMixin, Vie
 
 	def post(self, request, pk):
 		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
-		form = RegistroGabineteForm(request.POST)
+		form = RegistroGabineteForm(request.POST, usuario=request.user)
 		if form.is_valid():
 			registro = form.save(commit=False)
 			registro.pessoa = pessoa
 			registro.criado_por = request.user
 			registro.save()
 			messages.success(request, f'{registro.get_tipo_display()} registrado.')
+			if registro.tipo == RegistroGabinete.Tipo.AGENDADO:
+				gabinete_avisos.avisar_agendamento(registro, request.user)
+				for aviso in (registro.aviso_pessoa, registro.aviso_pastor):
+					if aviso:
+						messages.info(request, aviso)
 		else:
-			messages.error(request, 'Nao foi possivel registrar o gabinete. Revise os dados informados.')
+			erros = '; '.join(erro for lista in form.errors.values() for erro in lista)
+			messages.error(request, f'Nao foi possivel registrar o gabinete. {erros}'.strip())
 		return redirect_ficha(pessoa.pk, 'gabinete')
 
 
@@ -1214,9 +1246,9 @@ class PrimeiroContatoResponsavelUpdateView(LoginRequiredMixin, AdminPermissaoMix
 		responsavel_id = (request.POST.get('responsavel_atual') or '').strip()
 
 		if responsavel_id:
-			novo_responsavel = get_user_model().objects.filter(pk=responsavel_id, is_active=True).first()
+			novo_responsavel = responsaveis_queryset().filter(pk=responsavel_id).first() if responsavel_id.isdigit() else None
 			if novo_responsavel is None:
-				messages.error(request, 'Responsavel invalido.')
+				messages.error(request, 'Responsavel invalido: escolha alguem com o perfil de mensagens ou de pastor.')
 				return redirect_ficha(pessoa.pk, 'dados')
 		else:
 			novo_responsavel = None
@@ -1573,6 +1605,19 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 			'continuar_texto_evolution': template_config.continuar_texto_evolution(),
 			'continuar_meta_nome': template_config.continuar_meta_nome(),
 			'continuar_meta_idioma': template_config.continuar_meta_idioma(),
+			**self._initial_gabinete('gab_pessoa', TemplateWhatsapp.Tipo.GABINETE_PESSOA, gabinete_avisos.VARIAVEIS_PESSOA_PADRAO),
+			**self._initial_gabinete('gab_pastor', TemplateWhatsapp.Tipo.GABINETE_PASTOR, gabinete_avisos.VARIAVEIS_PASTOR_PADRAO),
+		}
+
+	@staticmethod
+	def _initial_gabinete(prefixo, tipo, variaveis_padrao):
+		return {
+			f'{prefixo}_texto': gabinete_avisos.texto_para(tipo),
+			f'{prefixo}_meta_nome': template_config.meta_nome_para(tipo),
+			f'{prefixo}_meta_idioma': template_config.meta_idioma_para(tipo),
+			f'{prefixo}_variables': json.dumps(
+				template_config.variaveis_dict_para(tipo) or variaveis_padrao, ensure_ascii=False,
+			),
 		}
 
 	def get_context_data(self, **kwargs):
@@ -1610,6 +1655,18 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 				'texto_evolution': dados['continuar_texto_evolution'],
 				'meta_nome': dados['continuar_meta_nome'],
 				'meta_idioma': dados['continuar_meta_idioma'],
+			},
+			TemplateWhatsapp.Tipo.GABINETE_PESSOA: {
+				'content_variables': dados['gab_pessoa_variables'],
+				'texto_evolution': dados['gab_pessoa_texto'],
+				'meta_nome': dados['gab_pessoa_meta_nome'],
+				'meta_idioma': dados['gab_pessoa_meta_idioma'],
+			},
+			TemplateWhatsapp.Tipo.GABINETE_PASTOR: {
+				'content_variables': dados['gab_pastor_variables'],
+				'texto_evolution': dados['gab_pastor_texto'],
+				'meta_nome': dados['gab_pastor_meta_nome'],
+				'meta_idioma': dados['gab_pastor_meta_idioma'],
 			},
 		}
 		for tipo, defaults in valores.items():

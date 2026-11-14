@@ -199,10 +199,33 @@ def _template_meta_para(mensagem: MensagemContato) -> dict[str, Any]:
     return {}
 
 
+def _enviar_midia_bot_meta(mensagem: MensagemContato, destino: str, opcao_id) -> dict[str, Any]:
+    """Arquivo anexado a uma opcao do bot (enviado para a Meta e reaproveitado pelo id)."""
+    from apps.acolhimento import bot_midia
+    from apps.acolhimento.models import OpcaoAtendimentoBot
+
+    opcao = OpcaoAtendimentoBot.objects.filter(pk=opcao_id).first()
+    if opcao is None or not opcao.midia_arquivo:
+        raise meta_service.MetaWhatsAppError('O arquivo desta opcao do bot foi removido.')
+    try:
+        media_id = bot_midia.media_id_meta(opcao)
+    except OSError as exc:
+        raise meta_service.MetaWhatsAppError('Arquivo da opcao do bot nao encontrado no servidor.') from exc
+    return meta_service.send_media(
+        to_phone=destino,
+        tipo=opcao.midia_tipo,
+        media_id=media_id,
+        nome_arquivo=opcao.midia_nome_original,
+    )
+
+
 def _enviar_meta(mensagem: MensagemContato, destino: str) -> dict[str, Any]:
     template = _template_meta_para(mensagem)
+    opcao_midia = (mensagem.metadata_envio or {}).get('bot_midia_opcao_id')
     try:
-        if template:
+        if opcao_midia and not template:
+            resultado = _enviar_midia_bot_meta(mensagem, destino, opcao_midia)
+        elif template:
             resultado = meta_service.send_template(
                 to_phone=destino,
                 nome=template['nome'],
