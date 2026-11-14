@@ -89,7 +89,7 @@
         </form>
     </section>
 
-    <form method="post" class="broadcast-workspace" id="broadcast-form">
+    <form method="post" class="broadcast-workspace" id="broadcast-form" enctype="multipart/form-data">
         {% csrf_token %}
 
         <section class="broadcast-mode">
@@ -183,6 +183,14 @@
                         <small class="table-muted-text">Ex.: <code>{"1": "{nome}"}</code> — use <code>{nome}</code> para inserir o nome de cada pessoa.</small>
                         {% if form.content_variables.errors %}<p class="form-errors">{{ form.content_variables.errors|join:', ' }}</p>{% endif %}
                     </div>
+                    {% if usa_meta %}
+                    <div>
+                        <label for="id_cabecalho_midia">Mídia do cabeçalho (se o template tiver)</label>
+                        {{ form.cabecalho_midia }}
+                        <small class="table-muted-text">Para templates aprovados com <b>vídeo, imagem ou PDF</b> no cabeçalho: anexe o arquivo (vídeo MP4 até 16 MB, imagem JPG/PNG até 5 MB, PDF até 25 MB). Ele vai para a Meta uma vez e serve para todo o disparo.</small>
+                        {% if form.cabecalho_midia.errors %}<p class="form-errors">{{ form.cabecalho_midia.errors|join:', ' }}</p>{% endif %}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             {% endif %}

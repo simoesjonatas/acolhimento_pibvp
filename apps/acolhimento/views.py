@@ -26,7 +26,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
-from apps.acolhimento import fila_auto, gabinete_avisos, template_config
+from apps.acolhimento import fila_auto, gabinete_avisos, meta_service, template_config
 from apps.acolhimento.aguardando_resposta import (
 	DIAS_PESSOA_NOVA,
 	DIAS_RESPONDIDAS,
@@ -760,6 +760,29 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 		usa_meta = template_config.usando_meta()
 		idioma = (form.cleaned_data.get('template_idioma') or '').strip() or 'pt_BR'
 
+		# Midia do cabecalho (Meta): sobe o arquivo uma vez e todas as mensagens usam o
+		# mesmo id. A Meta guarda o arquivo por 30 dias, folga de sobra para a fila.
+		cabecalho = None
+		info_cabecalho = form.cleaned_data.get('cabecalho_info') if usa_meta else None
+		if info_cabecalho:
+			arquivo = form.cleaned_data['cabecalho_midia']
+			try:
+				arquivo.seek(0)
+				media_id = meta_service.enviar_arquivo_para_meta(
+					arquivo.read(),
+					mime=info_cabecalho['mime'],
+					nome=info_cabecalho['nome'],
+				)
+			except meta_service.MetaWhatsAppError as exc:
+				form.add_error('cabecalho_midia', f'Nao foi possivel enviar o arquivo para a Meta: {exc}')
+				return self.form_invalid(form)
+			cabecalho = {
+				'tipo': info_cabecalho['tipo'],
+				'id': media_id,
+				'nome': info_cabecalho['nome'],
+				'enviado_em': timezone.now().isoformat(),
+			}
+
 		def _variaveis_dict(pessoa):
 			nome = (pessoa.nome or '').strip()
 			return {
@@ -774,13 +797,16 @@ class DisparoMensagemMassaView(LoginRequiredMixin, MensagensPermissaoMixin, Form
 
 		def _metadata_para(pessoa):
 			if usa_meta:
+				meta_template = {
+					'nome': content_sid,
+					'idioma': idioma,
+					'parametros': _variaveis_dict(pessoa),
+				}
+				if cabecalho:
+					meta_template['cabecalho'] = cabecalho
 				return {
 					'tipo_template': 'marketing_massa',
-					'meta_template': {
-						'nome': content_sid,
-						'idioma': idioma,
-						'parametros': _variaveis_dict(pessoa),
-					},
+					'meta_template': meta_template,
 				}
 			return {
 				'tipo_template': 'marketing_massa',

@@ -317,6 +317,12 @@ class DisparoMensagemMassaForm(forms.Form):
         label='Variaveis do template (JSON)',
         widget=forms.Textarea(attrs={'rows': 2, 'placeholder': '{"1": "{nome}"}'}),
     )
+    # Somente na API oficial da Meta: imagem/video/PDF do cabecalho do template.
+    cabecalho_midia = forms.FileField(
+        required=False,
+        label='Midia do cabecalho',
+        widget=forms.FileInput(attrs={'accept': '.mp4,.3gp,.jpg,.jpeg,.png,.pdf'}),
+    )
     questionario = forms.ModelChoiceField(
         queryset=Questionario.objects.none(),
         required=False,
@@ -379,6 +385,9 @@ class DisparoMensagemMassaForm(forms.Form):
                 if not META_IDIOMA_RE.match(idioma):
                     self.add_error('template_idioma', META_IDIOMA_ERRO)
                 cleaned['template_idioma'] = idioma
+                cleaned['cabecalho_info'] = self._validar_arquivo_cabecalho(cleaned.get('cabecalho_midia'))
+                if not self.has_error('content_sid') and not self.has_error('template_idioma'):
+                    self._conferir_template_meta(cleaned, sid, idioma)
             elif not sid:
                 self.add_error('content_sid', 'Informe o Content Template SID para o disparo por template.')
             elif not sid.startswith('HX'):
@@ -395,6 +404,126 @@ class DisparoMensagemMassaForm(forms.Form):
             if not (cleaned.get('conteudo') or '').strip():
                 self.add_error('conteudo', 'Escreva a mensagem que sera enviada.')
         return cleaned
+
+    def _validar_arquivo_cabecalho(self, arquivo):
+        """{tipo, mime, nome} do arquivo do cabecalho, ou None (sem arquivo/invalido)."""
+        if not arquivo:
+            return None
+        from apps.acolhimento import bot_midia  # lazy: evita ciclo de import no load
+
+        classificado = bot_midia.classificar(arquivo.name)
+        # No cabecalho de template a Meta so aceita documento em PDF.
+        if (
+            not classificado
+            or classificado[0] not in ROTULO_MIDIA_CABECALHO
+            or (classificado[0] == 'document' and classificado[1] != 'application/pdf')
+        ):
+            self.add_error(
+                'cabecalho_midia',
+                'Formato nao aceito no cabecalho: use video MP4, imagem JPG/PNG ou PDF.',
+            )
+            return None
+        tipo, mime = classificado
+        limite_mb = bot_midia.LIMITE_MB[tipo]
+        if arquivo.size > limite_mb * 1024 * 1024:
+            self.add_error(
+                'cabecalho_midia',
+                f'O arquivo passa do limite de {limite_mb} MB que a Meta aceita para {ROTULO_MIDIA_CABECALHO[tipo]}.',
+            )
+            return None
+        return {'tipo': tipo, 'mime': mime, 'nome': os.path.basename(arquivo.name)}
+
+    def _conferir_template_meta(self, cleaned, nome, idioma):
+        """Confere na Meta o que o template exige (midia no cabecalho e variaveis).
+
+        Sem isto o erro so aparecia depois, na fila (ex.: Meta #132000 em cada envio).
+        Se a Meta nao puder ser consultada, segue sem conferir.
+        """
+        from apps.acolhimento import meta_service  # lazy: evita ciclo de import no load
+
+        template = meta_service.obter_template(nome, idioma)
+        if template is None:
+            return
+        if not template:
+            self.add_error(
+                'content_sid',
+                f'Template "{nome}" ({idioma}) nao encontrado na Meta. Confira o nome e o idioma no painel.',
+            )
+            return
+
+        requisitos = meta_service.requisitos_template(template)
+        if requisitos['status'] and requisitos['status'] != 'APPROVED':
+            self.add_error(
+                'content_sid',
+                f'Template "{nome}" esta com status {requisitos["status"]} na Meta: so templates aprovados podem ser enviados.',
+            )
+            return
+        if requisitos['variaveis_nao_suportadas']:
+            self.add_error(
+                'content_sid',
+                'Este template tem variavel no cabecalho de texto ou no link de um botao, '
+                'o que o disparo ainda nao preenche.',
+            )
+            return
+        if requisitos['cabecalho'] == 'LOCATION':
+            self.add_error('content_sid', 'Template com localizacao no cabecalho ainda nao e suportado no disparo.')
+            return
+
+        self._conferir_cabecalho(cleaned, requisitos)
+        self._conferir_variaveis(cleaned, requisitos)
+
+    def _conferir_cabecalho(self, cleaned, requisitos):
+        esperado = requisitos['cabecalho_midia']
+        arquivo = cleaned.get('cabecalho_info')
+        if esperado and not arquivo:
+            if not self.has_error('cabecalho_midia'):
+                self.add_error(
+                    'cabecalho_midia',
+                    f'Este template tem {ROTULO_MIDIA_CABECALHO[esperado]} no cabecalho: anexe o arquivo.',
+                )
+        elif arquivo and not esperado:
+            self.add_error('cabecalho_midia', 'Este template nao tem midia no cabecalho: remova o arquivo.')
+            cleaned['cabecalho_info'] = None
+        elif arquivo and arquivo['tipo'] != esperado:
+            self.add_error(
+                'cabecalho_midia',
+                f'O cabecalho deste template e {ROTULO_MIDIA_CABECALHO[esperado]}, '
+                f'mas o arquivo enviado e {ROTULO_MIDIA_CABECALHO[arquivo["tipo"]]}.',
+            )
+            cleaned['cabecalho_info'] = None
+
+    def _conferir_variaveis(self, cleaned, requisitos):
+        if self.has_error('content_variables'):
+            return
+        chaves = {str(chave) for chave in (cleaned.get('content_variables') or {})}
+        posicionais = requisitos['corpo_posicionais']
+        nomeados = set(requisitos['corpo_nomeados'])
+        if posicionais:
+            esperadas = {str(n) for n in range(1, posicionais + 1)}
+            if chaves != esperadas:
+                exemplo = json.dumps(
+                    {str(n): ('{nome}' if n == 1 else '...') for n in range(1, posicionais + 1)},
+                    ensure_ascii=False,
+                )
+                self.add_error(
+                    'content_variables',
+                    f'O texto deste template tem {posicionais} variavel(is) '
+                    f'({", ".join("{{%d}}" % n for n in range(1, posicionais + 1))}). '
+                    f'Preencha todas, ex.: {exemplo}',
+                )
+        elif nomeados:
+            if chaves != nomeados:
+                self.add_error(
+                    'content_variables',
+                    'O texto deste template usa as variaveis '
+                    f'{", ".join(sorted(nomeados))}: preencha exatamente essas.',
+                )
+        elif chaves:
+            self.add_error('content_variables', 'Este template nao tem variaveis no texto: deixe o campo vazio.')
+
+
+# Rotulo de cada tipo de midia aceito no cabecalho de um template da Meta.
+ROTULO_MIDIA_CABECALHO = {'image': 'uma imagem', 'video': 'um video', 'document': 'um PDF'}
 
 
 class RelatorioPessoasForm(forms.Form):
