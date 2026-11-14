@@ -5088,3 +5088,196 @@ a.kpi-card:hover {
     }
 
 }
+
+/* Lista de pessoas: colunas alinhadas e acoes sempre numa linha so. */
+.pessoas-table th,
+.pessoas-table td {
+    vertical-align: middle;
+}
+
+.pessoas-table th {
+    white-space: nowrap;
+}
+
+.pessoas-table .col-nowrap {
+    white-space: nowrap;
+}
+
+.pessoas-table .col-centro {
+    text-align: center;
+}
+
+.pessoas-table .col-nome {
+    min-width: 220px;
+}
+
+.pessoas-table .col-nome .table-primary-text {
+    display: block;
+}
+
+.pessoa-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.pessoa-badges .retorno-badge,
+.pessoa-badges .iniciou-badge {
+    margin: 0;
+}
+
+.sim-nao {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: #f4f4f8;
+    color: #656776;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.sim-nao.sim {
+    background: #ecf8ef;
+    color: #1e6640;
+    border-color: #9bd3b1;
+}
+
+.pessoas-table .col-acoes {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.pessoa-acoes {
+    display: flex;
+    gap: 6px;
+    flex-wrap: nowrap;
+    align-items: center;
+}
+
+.pessoa-acoes .btn {
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 7px 10px;
+    box-shadow: none;
+}
+
+.pessoa-acoes .btn-so-icone {
+    width: 34px;
+    padding: 7px 0;
+    justify-content: center;
+}
+
+/* Telas medias: acoes so com icone para a tabela caber sem rolar. */
+@media (max-width: 1100px) {
+    .pessoa-acoes .btn {
+        width: 34px;
+        padding: 7px 0;
+        justify-content: center;
+    }
+
+    .pessoa-acoes .btn-text {
+        display: none;
+    }
+
+    .pessoas-table th,
+    .pessoas-table td {
+        padding: 12px 10px;
+    }
+
+    .pessoas-table .col-nome {
+        min-width: 170px;
+    }
+}
+
+/* Celular: cada pessoa vira um cartao (nome, telefone, dados e acoes a direita). */
+@media (max-width: 640px) {
+    .pessoas-table {
+        min-width: 0;
+    }
+
+    .pessoas-table thead {
+        display: none;
+    }
+
+    .pessoas-table,
+    .pessoas-table tbody {
+        display: block;
+    }
+
+    .pessoas-table tr {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-areas:
+            "nome nome nome"
+            "tel tel acoes"
+            "primeira primeira acoes"
+            "origem data acoes";
+        column-gap: 10px;
+        row-gap: 4px;
+        align-items: center;
+        padding: 12px 14px;
+        border-bottom: 1px solid #e4e5ee;
+    }
+
+    .pessoas-table tbody tr:last-child {
+        border-bottom: 0;
+    }
+
+    .pessoas-table tbody tr:nth-child(even) {
+        background: #f9f9fc;
+    }
+
+    .pessoas-table td,
+    .pessoas-table tbody tr:nth-child(even) td,
+    .pessoas-table tbody tr:hover td {
+        display: block;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        min-width: 0;
+        width: auto;
+    }
+
+    .pessoas-table .col-nome {
+        grid-area: nome;
+        margin-bottom: 2px;
+    }
+
+    .pessoas-table .col-telefone { grid-area: tel; }
+    .pessoas-table .col-primeira { grid-area: primeira; }
+    .pessoas-table .col-origem { grid-area: origem; }
+    .pessoas-table .col-data { grid-area: data; }
+
+    .pessoas-table .col-telefone,
+    .pessoas-table .col-primeira,
+    .pessoas-table .col-origem,
+    .pessoas-table .col-data {
+        font-size: 0.84rem;
+        color: #656776;
+        text-align: left;
+    }
+
+    .pessoas-table .col-data::before {
+        content: "· ";
+    }
+
+    .pessoas-table .col-primeira::before {
+        content: attr(data-label) ": ";
+        font-weight: 700;
+    }
+
+    .pessoas-table .col-acoes {
+        grid-area: acoes;
+        align-self: center;
+    }
+
+    /* A regra geral do celular estica todo botao a 100%; aqui eles ficam lado a lado. */
+    .pessoas-table .pessoa-acoes a.btn {
+        width: 38px;
+        min-height: 38px;
+    }
+}
