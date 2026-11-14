@@ -1422,6 +1422,77 @@ class PrimeiroContatoMensagensMaisView(LoginRequiredMixin, ConversasPessoasPermi
 		)
 
 
+class PrimeiroContatoMensagensNovasView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, View):
+	"""Consulta periodica da tela de conversa (sem recarregar a pagina).
+
+	- `depois`: maior id que a pagina ja tem -> devolve as mensagens novas.
+	- `v`: "id:versao,..." das bolhas na tela -> devolve as que mudaram (status,
+	  midia baixada, erro) e as que sumiram (pendente removida).
+	- `visivel=1`: a aba esta aberta na frente; marca as entradas como vistas.
+	"""
+
+	limite_novas = 50
+	limite_versoes = 60
+
+	def get(self, request, pk, *args, **kwargs):
+		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		canal_atual = request.GET.get('canal', 'todos').strip()
+		canais_validos = {choice[0] for choice in MensagemContato.CanalChoices.choices}
+		if canal_atual not in canais_validos:
+			canal_atual = 'todos'
+
+		mensagens_queryset = pessoa.mensagens.select_related('campanha', 'criado_por')
+		if canal_atual != 'todos':
+			mensagens_queryset = mensagens_queryset.filter(canal=canal_atual)
+
+		if request.GET.get('visivel') == '1':
+			pessoa.mensagens.filter(
+				direcao=MensagemContato.DirecaoChoices.ENTRADA,
+				visualizada_equipe_em__isnull=True,
+			).update(visualizada_equipe_em=timezone.now())
+
+		def render(mensagem):
+			return render_to_string(
+				'partials/mensagem_conversa_item.html',
+				{'mensagem': mensagem, 'pessoa': pessoa, 'canal_atual': canal_atual},
+				request=request,
+			)
+
+		depois_txt = request.GET.get('depois', '').strip()
+		depois = int(depois_txt) if depois_txt.isdigit() else 0
+		novas = list(mensagens_queryset.filter(id__gt=depois).order_by('enfileirada_em', 'id')[: self.limite_novas])
+
+		versoes_pagina = {}
+		for item in request.GET.get('v', '').split(','):
+			mensagem_id, _sep, versao = item.partition(':')
+			if mensagem_id.isdigit() and versao:
+				versoes_pagina[int(mensagem_id)] = versao
+			if len(versoes_pagina) >= self.limite_versoes:
+				break
+
+		atualizadas = {}
+		removidas = []
+		if versoes_pagina:
+			atuais = {m.id: m for m in mensagens_queryset.filter(id__in=versoes_pagina)}
+			for mensagem_id, versao in versoes_pagina.items():
+				mensagem = atuais.get(mensagem_id)
+				if mensagem is None:
+					removidas.append(mensagem_id)
+				elif mensagem.versao_conversa != versao:
+					atualizadas[str(mensagem_id)] = render(mensagem)
+
+		return JsonResponse(
+			{
+				'novas': ''.join(render(mensagem) for mensagem in novas),
+				'ultimo_id': max([depois] + [mensagem.id for mensagem in novas]),
+				'novas_entrada': sum(1 for m in novas if m.direcao == MensagemContato.DirecaoChoices.ENTRADA),
+				'atualizadas': atualizadas,
+				'removidas': removidas,
+				'janela_aberta': janela_atendimento_aberta(pessoa),
+			}
+		)
+
+
 class AguardandoRespostaView(LoginRequiredMixin, ListView):
 	"""Quem mandou mensagem no WhatsApp e ainda espera resposta da equipe.
 

@@ -56,7 +56,15 @@
                 </button>
             </div>
 
-            <div class="conversation-feed" id="conversation-feed" aria-label="Historico de mensagens">
+            <div
+                class="conversation-feed"
+                id="conversation-feed"
+                aria-label="Historico de mensagens"
+                aria-live="polite"
+                data-novas-url="{% url 'pessoas-mensagens-novas' pessoa.pk %}"
+                data-canal="{{ canal_atual }}"
+                data-janela-aberta="{% if janela_aberta %}1{% else %}0{% endif %}"
+            >
                 {% if mensagens %}
                     {% for mensagem in mensagens %}
                         {% include 'partials/mensagem_conversa_item.html' %}
@@ -68,10 +76,15 @@
 
             <button type="button" class="conversation-scroll-bottom is-hidden" data-scroll-bottom aria-label="Rolar ate o fim do historico">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><polyline points="19 12 12 19 5 12"/></svg>
+                <span class="conversation-novas-badge is-hidden" data-novas-badge>Nova mensagem</span>
             </button>
         </div>
 
         <footer class="conversation-composer-bar">
+            <div class="conversation-aviso-janela is-hidden" data-aviso-janela role="status">
+                <span data-aviso-janela-texto>A janela de 24h mudou.</span>
+                <a class="btn secundario" href="">Atualizar</a>
+            </div>
             {% if janela_aberta and janela_fecha_em %}
             <div class="janela-status janela-status-aberta">
                 <span class="janela-status-dot" aria-hidden="true"></span>
@@ -210,6 +223,165 @@
 
     feed.addEventListener('scroll', updateScrollButton);
     window.addEventListener('resize', updateScrollButton);
+
+    // --- Mensagens novas sem recarregar a pagina -------------------------------
+    var novasUrl = feed.getAttribute('data-novas-url');
+    var novasBadge = document.querySelector('[data-novas-badge]');
+    var avisoJanela = document.querySelector('[data-aviso-janela]');
+    var janelaAberta = feed.getAttribute('data-janela-aberta') === '1';
+    var INTERVALO = 5000;
+    var INTERVALO_OCULTA = 20000;
+    var intervaloAtual = INTERVALO;
+    var timer = null;
+    var consultando = false;
+    var tituloOriginal = document.title;
+    var naoLidas = 0;
+
+    function perto_do_fim() {
+        return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 180;
+    }
+
+    function maiorId() {
+        var maior = 0;
+        feed.querySelectorAll('[data-message-id]').forEach(function (el) {
+            var id = parseInt(el.getAttribute('data-message-id'), 10);
+            if (id > maior) { maior = id; }
+        });
+        return maior;
+    }
+
+    function versoesNaTela() {
+        var itens = feed.querySelectorAll('[data-message-id][data-versao]');
+        var lista = [];
+        // So as ultimas 60: e onde status e midia ainda mudam.
+        for (var i = Math.max(0, itens.length - 60); i < itens.length; i++) {
+            lista.push(itens[i].getAttribute('data-message-id') + ':' + itens[i].getAttribute('data-versao'));
+        }
+        return lista.join(',');
+    }
+
+    function tocandoMidia(el) {
+        var midias = el.querySelectorAll('audio, video');
+        for (var i = 0; i < midias.length; i++) {
+            if (!midias[i].paused) { return true; }
+        }
+        return false;
+    }
+
+    function elementosDe(html) {
+        var template = document.createElement('template');
+        template.innerHTML = (html || '').trim();
+        return template.content;
+    }
+
+    function marcarNovas(qtd) {
+        if (!qtd) { return; }
+        naoLidas += qtd;
+        if (novasBadge) {
+            novasBadge.textContent = naoLidas === 1 ? 'Nova mensagem' : naoLidas + ' novas mensagens';
+            novasBadge.classList.remove('is-hidden');
+        }
+        if (scrollBottomButton) { scrollBottomButton.classList.remove('is-hidden'); }
+        if (document.hidden) { document.title = '(' + naoLidas + ') ' + tituloOriginal; }
+    }
+
+    function limparNovas() {
+        naoLidas = 0;
+        if (novasBadge) { novasBadge.classList.add('is-hidden'); }
+        document.title = tituloOriginal;
+    }
+
+    function aplicar(data) {
+        Object.keys(data.atualizadas || {}).forEach(function (id) {
+            var atual = feed.querySelector('[data-message-id="' + id + '"]');
+            if (atual && !tocandoMidia(atual)) {
+                atual.replaceWith(elementosDe(data.atualizadas[id]));
+            }
+        });
+        (data.removidas || []).forEach(function (id) {
+            var el = feed.querySelector('[data-message-id="' + id + '"]');
+            if (el) { el.remove(); }
+        });
+
+        if (data.novas) {
+            var estavaNoFim = perto_do_fim();
+            var vazio = feed.querySelector('.conversation-empty-state');
+            if (vazio) { vazio.remove(); }
+            feed.append(elementosDe(data.novas));
+            if (estavaNoFim && !document.hidden) {
+                scrollToBottom('smooth');
+            } else {
+                marcarNovas(data.novas_entrada || 0);
+            }
+        }
+
+        if (typeof data.janela_aberta === 'boolean' && data.janela_aberta !== janelaAberta && avisoJanela) {
+            avisoJanela.querySelector('[data-aviso-janela-texto]').textContent = data.janela_aberta
+                ? 'A pessoa respondeu: a janela de 24h abriu.'
+                : 'A janela de 24h fechou.';
+            avisoJanela.classList.remove('is-hidden');
+        }
+        updateScrollButton();
+    }
+
+    function agendar(ms) {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(consultar, ms);
+    }
+
+    function consultar() {
+        if (!novasUrl || consultando) { return; }
+        consultando = true;
+        var visivel = !document.hidden;
+        var url = novasUrl
+            + '?canal=' + encodeURIComponent(feed.getAttribute('data-canal') || 'todos')
+            + '&depois=' + maiorId()
+            + '&visivel=' + (visivel ? '1' : '0')
+            + '&v=' + encodeURIComponent(versoesNaTela());
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+            .then(function (response) {
+                if (response.status === 401 || response.status === 403) {
+                    throw new Error('parar');
+                }
+                if (!response.ok || response.redirected) {
+                    throw new Error('Falha ao consultar mensagens.');
+                }
+                return response.json();
+            })
+            .then(function (data) {
+                aplicar(data);
+                // Aba em segundo plano: consulta mais devagar (e nao marca como vista).
+                intervaloAtual = INTERVALO;
+                agendar(document.hidden ? INTERVALO_OCULTA : intervaloAtual);
+            })
+            .catch(function (erro) {
+                if (erro && erro.message === 'parar') { return; }
+                // Sem rede ou sessao expirada: tenta de novo, cada vez mais devagar.
+                intervaloAtual = Math.min(intervaloAtual * 2, 60000);
+                agendar(intervaloAtual);
+            })
+            .finally(function () {
+                consultando = false;
+            });
+    }
+
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) {
+            if (perto_do_fim()) { limparNovas(); }
+            document.title = tituloOriginal;
+            agendar(0);
+        }
+    });
+
+    feed.addEventListener('scroll', function () {
+        if (naoLidas && perto_do_fim()) { limparNovas(); }
+    });
+
+    if (scrollBottomButton) {
+        scrollBottomButton.addEventListener('click', limparNovas);
+    }
+
+    agendar(INTERVALO);
 
     window.setTimeout(function () {
         scrollToBottom('auto');

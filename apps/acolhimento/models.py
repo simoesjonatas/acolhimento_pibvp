@@ -1,6 +1,7 @@
 import os
 import random
 import uuid
+import zlib
 from datetime import timedelta
 
 from django.core.files.storage import FileSystemStorage
@@ -320,6 +321,26 @@ class MensagemContato(models.Model):
 
 	# Texto que o webhook grava quando a midia vem sem legenda.
 	_MARCADORES_MIDIA = {'(audio)', '(imagem)', '(video)', '(documento)', '(figurinha)'}
+
+	@property
+	def versao_conversa(self) -> str:
+		"""Assinatura do que a bolha mostra; muda quando o status/midia/erro muda.
+
+		A tela de conversa compara com a que tem na pagina para saber o que redesenhar.
+		"""
+		partes = (
+			self.status_fila,
+			self.enviada_em,
+			self.entregue_em,
+			self.lida_em,
+			self.erro_ultimo_envio,
+			self.midia_status,
+			self.midia_arquivo.name if self.midia_arquivo else '',
+			self.conteudo,
+		)
+		# str() e nao repr(): um enum recem-criado e o texto lido do banco dao o mesmo valor.
+		texto = '\x1f'.join('' if parte is None else str(parte) for parte in partes)
+		return format(zlib.crc32(texto.encode('utf-8')), '08x')
 
 	@property
 	def legenda_midia(self):
