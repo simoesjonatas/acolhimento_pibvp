@@ -1,5 +1,5 @@
 {% if mensagem.canal == 'whatsapp' %}
-<article class="chat-message {% if mensagem.direcao == 'entrada' %}chat-inbound{% else %}chat-outbound{% endif %}" data-message-id="{{ mensagem.id }}">
+<article class="chat-message {% if mensagem.direcao == 'entrada' %}chat-inbound{% else %}chat-outbound{% endif %}" data-message-id="{{ mensagem.id }}" data-versao="{{ mensagem.versao_conversa }}">
     <div class="chat-bubble">
         <div class="message-meta">
             <strong>
@@ -74,7 +74,7 @@
     </div>
 </article>
 {% else %}
-<article class="email-message {% if mensagem.direcao == 'entrada' %}email-inbound{% else %}email-outbound{% endif %}" data-message-id="{{ mensagem.id }}">
+<article class="email-message {% if mensagem.direcao == 'entrada' %}email-inbound{% else %}email-outbound{% endif %}" data-message-id="{{ mensagem.id }}" data-versao="{{ mensagem.versao_conversa }}">
     <div class="email-message-header">
         <div>
             <span class="message-channel email">E-mail</span>
