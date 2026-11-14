@@ -189,6 +189,8 @@ class PreencherTextoTemplatesCommandTests(TestCase):
 		massa = self._mensagem('[Template] acolhimento_primeiro_contato_equipe', {'meta_template': bloco})
 		livre = self._mensagem('Oi, tudo bem?', {'meta_template': bloco})
 		twilio = self._mensagem('Template opt-in enfileirado', {'twilio_template': {'content_sid': 'HX1'}})
+		falhou = self._mensagem('[Template] acolhimento_primeiro_contato_equipe', {'meta_template': bloco})
+		MensagemContato.objects.filter(pk=falhou.pk).update(status_fila=MensagemContato.StatusFilaChoices.FALHA)
 
 		saida = io.StringIO()
 		with patch.object(meta_service, 'obter_template', return_value=TEMPLATE_BOAS_VINDAS):
@@ -199,8 +201,9 @@ class PreencherTextoTemplatesCommandTests(TestCase):
 
 			call_command('preencher_texto_templates', stdout=io.StringIO())
 
-		for mensagem in (antiga, massa, livre, twilio):
+		for mensagem in (antiga, massa, livre, twilio, falhou):
 			mensagem.refresh_from_db()
+		self.assertEqual(falhou.conteudo, '[Template] acolhimento_primeiro_contato_equipe')
 		self.assertIn('Ola Tayssa, que alegria', antiga.conteudo)
 		self.assertIn('Ola Tayssa, que alegria', massa.conteudo)
 		self.assertEqual(livre.conteudo, 'Oi, tudo bem?')

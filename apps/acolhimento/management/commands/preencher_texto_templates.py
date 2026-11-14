@@ -25,6 +25,9 @@ class Command(BaseCommand):
             canal=MensagemContato.CanalChoices.WHATSAPP,
             direcao=MensagemContato.DirecaoChoices.SAIDA,
             metadata_envio__has_key='meta_template',
+        ).exclude(
+            # Falha/cancelada: a pessoa nao recebeu nada, o marcador fica como esta.
+            status_fila__in=[MensagemContato.StatusFilaChoices.FALHA, MensagemContato.StatusFilaChoices.CANCELADA],
         ).only('id', 'conteudo', 'metadata_envio')
 
         atualizadas = sem_texto = 0
