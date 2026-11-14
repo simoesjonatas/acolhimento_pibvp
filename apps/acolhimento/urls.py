@@ -19,7 +19,7 @@ from apps.acolhimento.custo_views import RelatorioCustoWhatsappView
 from apps.acolhimento.evolution_webhooks import EvolutionWebhookView
 from apps.acolhimento.meta_views import ConfiguracaoWhatsappView
 from apps.acolhimento.meta_webhooks import MetaWebhookView
-from apps.acolhimento.midia_views import MidiaMensagemView
+from apps.acolhimento.midia_views import MidiaMensagemView, MidiaOpcaoBotView
 from apps.acolhimento.views import (
     AguardandoRespostaView,
     AutoCadastroCreateView,
@@ -77,6 +77,7 @@ urlpatterns = [
     path('configuracoes/atendimento/opcao/<int:pk>/editar/', OpcaoAtendimentoBotUpdateView.as_view(), name='atendimento-opcao-editar'),
     path('configuracoes/atendimento/opcao/<int:pk>/excluir/', OpcaoAtendimentoBotDeleteView.as_view(), name='atendimento-opcao-excluir'),
     path('configuracoes/atendimento/opcao/<int:pk>/mover/', OpcaoAtendimentoBotMoverView.as_view(), name='atendimento-opcao-mover'),
+    path('configuracoes/atendimento/opcao/<int:pk>/midia/', MidiaOpcaoBotView.as_view(), name='atendimento-opcao-midia'),
     path('configuracoes/como-conheceu/', OpcaoComoConheceuListView.as_view(), name='configuracao-como-conheceu'),
     path('configuracoes/como-conheceu/opcao/nova/', OpcaoComoConheceuCreateView.as_view(), name='como-conheceu-opcao-nova'),
     path('configuracoes/como-conheceu/opcao/<int:pk>/editar/', OpcaoComoConheceuUpdateView.as_view(), name='como-conheceu-opcao-editar'),

@@ -2483,6 +2483,21 @@ a.queue-summary-item:hover {
     align-items: center;
 }
 
+.person-composer-grid.gabinete-composer {
+    grid-template-columns: auto minmax(140px, 170px) minmax(150px, 190px) 150px 110px minmax(180px, 1fr) auto;
+}
+
+.gabinete-item .gabinete-pastor {
+    margin: 4px 0;
+}
+
+.gabinete-avisos {
+    margin: 6px 0;
+    padding-left: 18px;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
 .person-tab-panel .composer-title {
     font-size: 0.95rem;
     white-space: nowrap;
@@ -2623,6 +2638,14 @@ a.queue-summary-item:hover {
         grid-column: 1 / 4;
     }
 
+    .person-composer-grid.gabinete-composer {
+        grid-template-columns: auto minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr);
+    }
+
+    .person-composer-grid.gabinete-composer .composer-field-texto {
+        grid-column: 1 / 5;
+    }
+
     /* "Alterar status" vai para cima do seletor e libera largura para a jornada. */
     .journey-form {
         display: grid;
@@ -2689,8 +2712,13 @@ a.queue-summary-item:hover {
         grid-template-columns: 1fr 1fr;
     }
 
+    .person-composer-grid.gabinete-composer {
+        grid-template-columns: 1fr 1fr;
+    }
+
     .person-composer-grid .composer-title,
     .person-composer-grid .composer-field-tipo,
+    .person-composer-grid .composer-field-pastor,
     .person-composer-grid .composer-field-texto,
     .person-composer-grid .composer-submit {
         grid-column: 1 / -1;

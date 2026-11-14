@@ -16,6 +16,7 @@ import re
 
 from django.utils import timezone
 
+from apps.acolhimento.template_config import usando_meta
 from apps.acolhimento.models import (
     ConfiguracaoAtendimentoBot,
     InteracaoAcolhimento,
@@ -145,6 +146,11 @@ def processar_entrada(pessoa, texto: str) -> bool:
         return True
 
     enfileirar_resposta(pessoa, opcao.resposta)
+    # Arquivo da opcao (imagem/PDF/audio/video): so pela API oficial, logo apos o texto.
+    if opcao.midia_arquivo and usando_meta():
+        from apps.acolhimento import bot_midia
+
+        bot_midia.enfileirar_midia(pessoa, opcao)
     if opcao.acao == OpcaoAtendimentoBot.Acao.TRANSFERIR_HUMANO:
         pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
         pessoa.bot_etapa = Etapa.INATIVO

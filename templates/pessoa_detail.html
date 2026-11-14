@@ -362,11 +362,15 @@
         <section class="person-tab-panel" role="tabpanel" id="painel-gabinete" data-painel="gabinete" aria-labelledby="aba-gabinete"{% if aba_ativa != 'gabinete' %} hidden{% endif %}>
             <form method="post" action="{% url 'pessoas-gabinete' pessoa.pk %}" class="person-composer">
                 {% csrf_token %}
-                <div class="person-composer-grid">
+                <div class="person-composer-grid gabinete-composer">
                     <h2 class="composer-title">Novo gabinete</h2>
                     <p class="composer-field-tipo">
                         <label class="visually-hidden" for="{{ gabinete_form.tipo.id_for_label }}">Tipo</label>
                         {{ gabinete_form.tipo }}
+                    </p>
+                    <p class="composer-field-pastor">
+                        <label class="visually-hidden" for="{{ gabinete_form.pastor.id_for_label }}">Pastor responsável</label>
+                        {{ gabinete_form.pastor }}
                     </p>
                     <p class="composer-field-data">
                         <label class="visually-hidden" for="{{ gabinete_form.data.id_for_label }}">Data</label>
@@ -406,7 +410,14 @@
                         <strong>{{ registro.get_tipo_display }}</strong>
                         <span>{{ registro.data|date:'d/m/Y' }} {{ registro.hora|time:'H:i' }}</span>
                     </div>
+                    {% if registro.pastor %}<p class="gabinete-pastor">Pastor: <strong>{{ registro.pastor.get_full_name|default:registro.pastor.username }}</strong></p>{% endif %}
                     {% if registro.observacoes %}<p>{{ registro.observacoes|linebreaksbr }}</p>{% endif %}
+                    {% if registro.aviso_pessoa or registro.aviso_pastor %}
+                    <ul class="gabinete-avisos">
+                        {% if registro.aviso_pessoa %}<li>{{ registro.aviso_pessoa }}</li>{% endif %}
+                        {% if registro.aviso_pastor %}<li>{{ registro.aviso_pastor }}</li>{% endif %}
+                    </ul>
+                    {% endif %}
                     {% if registro.criado_por %}<small>Registrado por {{ registro.criado_por.get_full_name|default:registro.criado_por.username }}</small>{% endif %}
                 </li>
                 {% endfor %}

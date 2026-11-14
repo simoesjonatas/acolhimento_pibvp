@@ -17,6 +17,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from typing import Any
 
 from django.conf import settings
@@ -302,6 +303,87 @@ def baixar_midia(url: str, *, limite_bytes: int | None = None, timeout: int | No
     if len(conteudo) > limite:
         raise MidiaGrandeDemaisError(f'Midia passa do limite de {limite} bytes.')
     return conteudo
+
+
+def enviar_arquivo_para_meta(conteudo: bytes, *, mime: str, nome: str, timeout: int | None = None) -> str:
+    """POST /{phone_number_id}/media (multipart). Devolve o id da midia (vale ~30 dias)."""
+    if not conteudo:
+        raise MetaWhatsAppError('Arquivo vazio: nada para enviar a Meta.')
+    mime = (mime or 'application/octet-stream').split(';')[0].strip()
+    nome = re.sub(r'[\r\n"]', '', nome or 'arquivo') or 'arquivo'
+    fronteira = f'----acolhimento{uuid.uuid4().hex}'
+    partes = []
+    for campo, valor in (('messaging_product', 'whatsapp'), ('type', mime)):
+        partes.append(
+            f'--{fronteira}\r\nContent-Disposition: form-data; name="{campo}"\r\n\r\n{valor}\r\n'.encode('utf-8')
+        )
+    partes.append(
+        (
+            f'--{fronteira}\r\nContent-Disposition: form-data; name="file"; filename="{nome}"\r\n'
+            f'Content-Type: {mime}\r\n\r\n'
+        ).encode('utf-8')
+        + conteudo
+        + b'\r\n'
+    )
+    partes.append(f'--{fronteira}--\r\n'.encode('utf-8'))
+    corpo = b''.join(partes)
+
+    url = f'{_base_url()}/{_phone_number_id()}/media'
+    req = urllib.request.Request(url, data=corpo, method='POST')
+    req.add_header('Authorization', f'Bearer {_token()}')
+    req.add_header('Content-Type', f'multipart/form-data; boundary={fronteira}')
+    if timeout is None:
+        timeout = max(getattr(settings, 'META_WA_REQUEST_TIMEOUT_SECONDS', 20), 60)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode('utf-8', 'replace') or '{}')
+    except urllib.error.HTTPError as exc:
+        try:
+            detalhe = json.loads(exc.read().decode('utf-8', 'replace'))
+        except ValueError:
+            detalhe = {}
+        erro = detalhe.get('error') if isinstance(detalhe, dict) else None
+        erro = erro if isinstance(erro, dict) else {}
+        code = int(erro.get('code') or 0)
+        raise MetaWhatsAppError(
+            _traduzir_erro(code, str(erro.get('message') or f'HTTP {exc.code}')),
+            code=code,
+            http_status=exc.code,
+            detalhe=detalhe,
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise MetaWhatsAppError(f'Falha ao conectar na API da Meta: {exc.reason}.') from exc
+    except ValueError as exc:
+        raise MetaWhatsAppError('Resposta invalida da Meta ao enviar o arquivo.') from exc
+    media_id = str((data or {}).get('id') or '').strip()
+    if not media_id:
+        raise MetaWhatsAppError(f'API da Meta nao retornou id para o arquivo: {data!r}')
+    return media_id
+
+
+TIPOS_MIDIA_ENVIO = ('image', 'video', 'audio', 'document')
+
+
+def send_media(
+    *,
+    to_phone: str,
+    tipo: str,
+    media_id: str,
+    legenda: str = '',
+    nome_arquivo: str = '',
+) -> dict[str, Any]:
+    """Imagem, video, audio ou documento ja enviado para a Meta (somente na janela de 24h)."""
+    if tipo not in TIPOS_MIDIA_ENVIO:
+        raise MetaWhatsAppError(f'Tipo de midia nao suportado: {tipo!r}.')
+    if not (media_id or '').strip():
+        raise MetaWhatsAppError('Id de midia nao informado.')
+    bloco: dict[str, Any] = {'id': media_id.strip()}
+    # Audio nao aceita legenda na Cloud API.
+    if legenda.strip() and tipo != 'audio':
+        bloco['caption'] = legenda.strip()[:1024]
+    if tipo == 'document' and nome_arquivo.strip():
+        bloco['filename'] = nome_arquivo.strip()[:240]
+    return _post_messages({'to': _digits(to_phone), 'type': tipo, tipo: bloco})
 
 
 # ---------------------------------------------------------------------------

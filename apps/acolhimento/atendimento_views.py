@@ -121,7 +121,10 @@ class OpcaoAtendimentoBotUpdateView(_SuperUserOnly, UpdateView):
 class OpcaoAtendimentoBotDeleteView(_SuperUserOnly, View):
     def post(self, request, pk, *args, **kwargs):
         opcao = get_object_or_404(OpcaoAtendimentoBot, pk=pk)
+        arquivo = opcao.midia_arquivo.name if opcao.midia_arquivo else ''
         opcao.delete()
+        if arquivo:
+            OpcaoAtendimentoBot._meta.get_field('midia_arquivo').storage.delete(arquivo)
         messages.success(request, 'Opcao removida.')
         return redirect('configuracao-atendimento')
 

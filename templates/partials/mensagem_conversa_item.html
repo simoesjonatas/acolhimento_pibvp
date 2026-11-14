@@ -15,15 +15,15 @@
         </div>
         {% if mensagem.midia_tipo %}
         <div class="message-midia midia-{{ mensagem.midia_tipo }}">
-            {% if mensagem.midia_disponivel %}
-                {% url 'mensagens-midia' mensagem.id as midia_url %}
+            {% with midia_url=mensagem.midia_url %}
+            {% if midia_url %}
                 {% if mensagem.midia_tipo == 'audio' %}
                 <audio controls preload="metadata" src="{{ midia_url }}">
                     <a href="{{ midia_url }}">Baixar áudio</a>
                 </audio>
                 {% elif mensagem.midia_tipo == 'image' or mensagem.midia_tipo == 'sticker' %}
                 <a href="{{ midia_url }}" target="_blank" rel="noopener" class="midia-miniatura" title="Abrir imagem">
-                    <img src="{{ midia_url }}" alt="{% if mensagem.midia_tipo == 'sticker' %}Figurinha{% else %}Imagem{% endif %} enviada por {{ pessoa.nome }}" loading="lazy">
+                    <img src="{{ midia_url }}" alt="{% if mensagem.midia_tipo == 'sticker' %}Figurinha{% else %}Imagem{% endif %}{% if mensagem.direcao == 'entrada' %} enviada por {{ pessoa.nome }}{% endif %}" loading="lazy">
                 </a>
                 {% elif mensagem.midia_tipo == 'video' %}
                 <video controls preload="metadata" src="{{ midia_url }}">
@@ -39,6 +39,7 @@
             {% else %}
                 <span class="midia-indisponivel">({% if mensagem.midia_tipo == 'audio' %}áudio{% elif mensagem.midia_tipo == 'image' %}imagem{% elif mensagem.midia_tipo == 'video' %}vídeo{% elif mensagem.midia_tipo == 'sticker' %}figurinha{% else %}documento{% endif %} indisponível)</span>
             {% endif %}
+            {% endwith %}
         </div>
         {% if mensagem.legenda_midia %}<p>{{ mensagem.legenda_midia|linebreaksbr }}</p>{% endif %}
         {% else %}

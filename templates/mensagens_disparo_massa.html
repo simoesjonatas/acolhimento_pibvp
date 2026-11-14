@@ -10,9 +10,9 @@
             <h1>Disparo em massa</h1>
             {# Trava de opt-in/janela so na API oficial (Meta/Twilio) — ver apps/acolhimento/whatsapp_rules.py. #}
             {% if travas_janela_ativas %}
-            <p>Três modos: <strong>mensagem livre</strong> para quem está com a janela de 24h aberta, <strong>template</strong> (marketing) para qualquer pessoa fora do primeiro contato, ou <strong>questionário</strong> (convite em texto livre, também só com a janela aberta). Pessoas em Primeiro contato não aparecem aqui.</p>
+            <p>Três modos: <strong>mensagem livre</strong> para quem está com a janela de 24h aberta, <strong>template</strong> (marketing) para qualquer pessoa, mesmo com a janela fechada, ou <strong>questionário</strong> (convite em texto livre, também só com a janela aberta). Pessoas em Primeiro contato só aparecem quando você escolhe esse status no filtro.</p>
             {% else %}
-            <p>Três modos: <strong>mensagem livre</strong> (texto direto, para qualquer selecionado), <strong>template</strong> (marketing) ou <strong>questionário</strong>, em que cada pessoa recebe o próprio link de resposta. Pessoas em Primeiro contato não aparecem aqui.</p>
+            <p>Três modos: <strong>mensagem livre</strong> (texto direto, para qualquer selecionado), <strong>template</strong> (marketing) ou <strong>questionário</strong>, em que cada pessoa recebe o próprio link de resposta. Pessoas em Primeiro contato só aparecem quando você escolhe esse status no filtro.</p>
             {% endif %}
         </div>
         <div class="hero-actions">
@@ -49,6 +49,15 @@
                     <option value="">Todas</option>
                     {% for valor, rotulo in origem_choices %}
                     <option value="{{ valor }}" {% if origem_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="como_conheceu">Como conheceu</label>
+                <select id="como_conheceu" name="como_conheceu">
+                    <option value="">Todos</option>
+                    {% for valor, rotulo in como_conheceu_choices %}
+                    <option value="{{ valor }}" {% if como_conheceu_atual == valor %}selected{% endif %}>{{ rotulo }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -114,7 +123,7 @@
                             <svg viewBox="0 0 24 24"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 0 1-5.8-1.6"/></svg>
                         </span>
                         <strong>Template (marketing)</strong>
-                        <small>Envia um template aprovado ({% if usa_meta %}<b>nome do template na Meta</b>{% else %}<b>Content SID</b>{% endif %}) para qualquer pessoa fora do primeiro contato, mesmo com a janela fechada.</small>
+                        <small>Envia um template aprovado ({% if usa_meta %}<b>nome do template na Meta</b>{% else %}<b>Content SID</b>{% endif %}) para qualquer pessoa selecionada, mesmo com a janela fechada.</small>
                     </span>
                 </label>
                 {% endif %}
@@ -211,7 +220,7 @@
             <div class="panel-header">
                 <div>
                     <h2>Publico filtrado</h2>
-                    <p>{{ total_pessoas_filtradas }} pessoa(s) fora de Primeiro contato. <span data-audience-mode-hint></span></p>
+                    <p>{{ total_pessoas_filtradas }} pessoa(s){% if filtrando_primeiro_contato %} em Primeiro contato{% else %} fora de Primeiro contato{% endif %}. <span data-audience-mode-hint></span></p>
                 </div>
                 <div class="broadcast-bulk-actions">
                     <button type="button" id="selecionar-todos" class="btn secundario">Selecionar elegiveis</button>
