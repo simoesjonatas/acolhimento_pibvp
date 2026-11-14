@@ -126,7 +126,7 @@ def origem_da_mensagem(metadata: dict | None) -> str:
     if tipo_template == 'marketing_massa':
         return 'marketing'
     origem = metadata.get('origem')
-    if origem == 'bot_atendimento':
+    if origem in ('bot_atendimento', 'bot_ia'):
         return 'bot'
     if origem == 'disparo_massa':
         return 'disparo_livre'

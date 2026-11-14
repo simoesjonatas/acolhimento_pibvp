@@ -837,6 +837,64 @@ class ConfiguracaoAtendimentoBotForm(forms.ModelForm):
         }
 
 
+class ConfiguracaoIAForm(forms.ModelForm):
+    """IA do robo (Ollama Cloud) e transcricao de audios (Groq + reserva local)."""
+
+    class Meta:
+        model = ConfiguracaoAtendimentoBot
+        fields = [
+            'ia_ativa',
+            'transcrever_audios',
+            'ia_modelo',
+            'ia_max_respostas_por_dia',
+            'ia_base_conhecimento',
+            'ia_instrucoes',
+        ]
+        widgets = {
+            'ia_modelo': forms.TextInput(attrs={'placeholder': 'gemma4:31b'}),
+            'ia_max_respostas_por_dia': forms.NumberInput(attrs={'min': 1, 'max': 50}),
+            'ia_base_conhecimento': forms.Textarea(attrs={
+                'rows': 10,
+                'placeholder': (
+                    'Cultos: domingo 9h e 18h; quarta 19h30 (oracao).\n'
+                    'Endereco: Rua ..., Vila da Penha. Estacionamento na rua lateral.\n'
+                    'Celulas: em varios bairros, durante a semana. Para entrar, falar com a equipe.\n'
+                    'Criancas: ministerio infantil durante o culto de domingo de manha.'
+                ),
+            }),
+            'ia_instrucoes': forms.Textarea(attrs={
+                'rows': 3,
+                'placeholder': 'Ex.: trate a pessoa pelo primeiro nome; nunca fale de valores de dizimo.',
+            }),
+        }
+
+    def clean_ia_max_respostas_por_dia(self):
+        valor = self.cleaned_data.get('ia_max_respostas_por_dia') or 0
+        if not 1 <= valor <= 50:
+            raise forms.ValidationError('Use um numero entre 1 e 50.')
+        return valor
+
+    def clean_ia_modelo(self):
+        valor = (self.cleaned_data.get('ia_modelo') or '').strip()
+        if valor and not re.match(r'^[A-Za-z0-9._:/-]{1,80}$', valor):
+            raise forms.ValidationError('Nome de modelo invalido (ex.: gemma4:31b).')
+        return valor
+
+    def clean(self):
+        dados = super().clean()
+        if dados.get('ia_ativa') and not (dados.get('ia_base_conhecimento') or '').strip():
+            self.add_error('ia_base_conhecimento', 'Preencha a base de conhecimento antes de ligar a IA.')
+        return dados
+
+
+class TestarIAForm(forms.Form):
+    pergunta = forms.CharField(
+        label='Pergunta de teste',
+        max_length=500,
+        widget=forms.TextInput(attrs={'placeholder': 'Ex.: que horas e o culto de domingo?'}),
+    )
+
+
 class OpcaoAtendimentoBotForm(forms.ModelForm):
     """Uma opcao do menu do atendimento automatico."""
 

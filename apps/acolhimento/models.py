@@ -235,6 +235,11 @@ class MensagemContato(models.Model):
 		FALHA = 'falha', 'Falha'
 		CANCELADA = 'cancelada', 'Cancelada'
 
+	class TranscricaoStatusChoices(models.TextChoices):
+		PENDENTE = 'pendente', 'Transcrevendo'
+		OK = 'ok', 'Transcrito'
+		FALHA = 'falha', 'Nao transcrito'
+
 	class MidiaTipoChoices(models.TextChoices):
 		AUDIO = 'audio', 'Audio'
 		IMAGEM = 'image', 'Imagem'
@@ -310,6 +315,11 @@ class MensagemContato(models.Model):
 	midia_nome_original = models.CharField(max_length=255, blank=True)
 	midia_tentativas = models.PositiveSmallIntegerField(default=0)
 	midia_erro = models.CharField(max_length=255, blank=True)
+	# Transcricao do audio recebido (Groq Whisper ou, na falta, faster-whisper local).
+	transcricao = models.TextField(blank=True)
+	transcricao_status = models.CharField(
+		max_length=20, choices=TranscricaoStatusChoices.choices, blank=True, db_index=True,
+	)
 	atualizado_em = models.DateTimeField(auto_now=True)
 
 	@property
@@ -337,6 +347,7 @@ class MensagemContato(models.Model):
 			self.midia_status,
 			self.midia_arquivo.name if self.midia_arquivo else '',
 			self.conteudo,
+			self.transcricao_status,
 		)
 		# str() e nao repr(): um enum recem-criado e o texto lido do banco dao o mesmo valor.
 		texto = '\x1f'.join('' if parte is None else str(parte) for parte in partes)
@@ -831,6 +842,26 @@ class ConfiguracaoAtendimentoBot(models.Model):
 		'Mensagem quando nao entende',
 		default='Nao entendi. Responda com o numero de uma das opcoes abaixo:',
 	)
+	# Inteligencia artificial (Ollama Cloud): entende texto livre e audios transcritos
+	# e responde so com a base de conhecimento e as opcoes; senao, passa para a equipe.
+	ia_ativa = models.BooleanField('IA ligada', default=False)
+	ia_modelo = models.CharField(
+		'Modelo da IA', max_length=80, blank=True,
+		help_text='Vazio usa o OLLAMA_MODELO do servidor.',
+	)
+	ia_base_conhecimento = models.TextField(
+		'Base de conhecimento', blank=True,
+		help_text='Tudo o que a IA pode responder: horarios, endereco, ministerios, como chegar, contatos.',
+	)
+	ia_instrucoes = models.TextField(
+		'Instrucoes extras', blank=True,
+		help_text='Tom de voz e assuntos que a IA nunca deve responder (opcional).',
+	)
+	ia_max_respostas_por_dia = models.PositiveSmallIntegerField(
+		'Respostas da IA por pessoa por dia', default=8,
+		help_text='Passando disso, a conversa vai para a equipe.',
+	)
+	transcrever_audios = models.BooleanField('Transcrever audios recebidos', default=False)
 	atualizado_em = models.DateTimeField(auto_now=True)
 	atualizado_por = models.ForeignKey(
 		settings.AUTH_USER_MODEL,

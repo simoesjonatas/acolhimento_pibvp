@@ -82,6 +82,18 @@ services:
       # mude tambem o destino do volume abaixo (senao a midia some a cada deploy).
       META_WA_MIDIA_MAX_MB: ${META_WA_MIDIA_MAX_MB:-20}
       MIDIA_PRIVADA_ROOT: ${MIDIA_PRIVADA_ROOT:-/app/data/midia_privada}
+      # Robo com IA: Ollama Cloud (texto) e Groq Whisper (audio), com faster-whisper
+      # local como reserva. Os pesos do Whisper local ficam no volume `whisper_modelos`.
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-https://ollama.com}
+      OLLAMA_MODELO: ${OLLAMA_MODELO:-gemma4:31b}
+      IA_TIMEOUT_SECONDS: ${IA_TIMEOUT_SECONDS:-40}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_WHISPER_MODELO: ${GROQ_WHISPER_MODELO:-whisper-large-v3-turbo}
+      TRANSCRICAO_LOCAL_ATIVA: ${TRANSCRICAO_LOCAL_ATIVA:-True}
+      TRANSCRICAO_LOCAL_MODELO: ${TRANSCRICAO_LOCAL_MODELO:-small}
+      TRANSCRICAO_LOCAL_MAX_SEGUNDOS: ${TRANSCRICAO_LOCAL_MAX_SEGUNDOS:-180}
+      WHISPER_MODELOS_DIR: ${WHISPER_MODELOS_DIR:-/app/data/whisper}
       EVOLUTION_BASE_URL: ${EVOLUTION_BASE_URL:-http://host.docker.internal:8085}
       EVOLUTION_PUBLIC_URL: ${EVOLUTION_PUBLIC_URL:-http://127.0.0.1:8085}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-troque-esta-chave-evolution-no-env}
@@ -112,9 +124,11 @@ services:
       TWILIO_TEMPLATE_CONTINUAR_VARIABLES: ${TWILIO_TEMPLATE_CONTINUAR_VARIABLES:-}
     volumes:
       - midia_privada:/app/data/midia_privada
+      - whisper_modelos:/app/data/whisper
     ports:
       - "${APP_PORT:-8183}:8000"
 
 volumes:
   postgres_data:
   midia_privada:
+  whisper_modelos:

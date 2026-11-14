@@ -29,7 +29,14 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
-from apps.acolhimento import atendimento_bot, custo_whatsapp, meta_service, midia_whatsapp, whatsapp_saude
+from apps.acolhimento import (
+    atendimento_bot,
+    custo_whatsapp,
+    meta_service,
+    midia_whatsapp,
+    transcricao,
+    whatsapp_saude,
+)
 from apps.acolhimento.models import (
     ConfiguracaoProcessamentoFila,
     InteracaoAcolhimento,
@@ -316,6 +323,8 @@ class MetaWebhookView(View):
             metadata_entrada['meta_botao_texto'] = botao[1]
         # Midia: so o id agora; o download roda depois da resposta (a Meta exige rapidez).
         campos_midia = midia_whatsapp.campos_midia_entrada(message)
+        if campos_midia:
+            campos_midia.update(transcricao.campos_iniciais(campos_midia))
         entrada = MensagemContato.objects.create(
             pessoa=pessoa,
             canal=MensagemContato.CanalChoices.WHATSAPP,
@@ -371,7 +380,7 @@ class MetaWebhookView(View):
 
         # Atendimento automatico (bot de menu). Se ele assumir, controla o status;
         # senao, aplica o flip legado da 1a resposta (pessoa -> Em acompanhamento).
-        handled = atendimento_bot.processar_entrada(pessoa, texto)
+        handled = atendimento_bot.processar_entrada(pessoa, texto, entrada)
         if not handled and flip_legado_pendente and pessoa.status in _STATUS_ANTES_DO_ACOMPANHAMENTO:
             pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
             pessoa.save(update_fields=['status', 'atualizado_em'])

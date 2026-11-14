@@ -13,8 +13,13 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, UpdateView
 
-from apps.acolhimento import atendimento_bot
-from apps.acolhimento.forms import ConfiguracaoAtendimentoBotForm, OpcaoAtendimentoBotForm
+from apps.acolhimento import atendimento_bot, atendimento_ia, ia_service, transcricao_local
+from apps.acolhimento.forms import (
+    ConfiguracaoAtendimentoBotForm,
+    ConfiguracaoIAForm,
+    OpcaoAtendimentoBotForm,
+    TestarIAForm,
+)
 from apps.acolhimento.models import (
     ConfiguracaoAtendimentoBot,
     ConfiguracaoProcessamentoFila,
@@ -60,10 +65,33 @@ class ConfiguracaoAtendimentoBotView(_SuperUserOnly, View):
             messages.error(request, 'Nao foi possivel salvar os textos. Verifique os campos.')
             return render(request, self.template_name, self._contexto(form=form))
 
+        if acao == 'ia':
+            form_ia = ConfiguracaoIAForm(request.POST, instance=cfg)
+            if form_ia.is_valid():
+                obj = form_ia.save(commit=False)
+                obj.atualizado_por = request.user
+                obj.save()
+                messages.success(request, 'Configuracao da IA atualizada.')
+                return redirect('configuracao-atendimento')
+            messages.error(request, 'Nao foi possivel salvar a IA. Verifique os campos.')
+            return render(request, self.template_name, self._contexto(form_ia=form_ia))
+
+        if acao == 'testar_ia':
+            form_teste = TestarIAForm(request.POST)
+            resultado = None
+            if form_teste.is_valid():
+                if not ia_service.ollama_configurada():
+                    resultado = {'erro': 'OLLAMA_API_KEY nao configurada no servidor.'}
+                else:
+                    resultado = atendimento_ia.testar(form_teste.cleaned_data['pergunta'])
+            return render(
+                request, self.template_name, self._contexto(form_teste=form_teste, resultado_teste=resultado),
+            )
+
         messages.error(request, 'Acao invalida.')
         return redirect('configuracao-atendimento')
 
-    def _contexto(self, form=None):
+    def _contexto(self, form=None, form_ia=None, form_teste=None, resultado_teste=None):
         cfg = ConfiguracaoAtendimentoBot.carregar()
         opcoes = list(OpcaoAtendimentoBot.objects.all().order_by('ordem', 'id'))
         ativas = [op for op in opcoes if op.ativa]
@@ -80,6 +108,13 @@ class ConfiguracaoAtendimentoBotView(_SuperUserOnly, View):
             'total_opcoes_no_menu': len(no_menu),
             'menu_preview': atendimento_bot.montar_menu(ativas),
             'processamento_auto_ligado': ConfiguracaoProcessamentoFila.auto_ligado(),
+            'form_ia': form_ia or ConfiguracaoIAForm(instance=cfg),
+            'form_teste': form_teste or TestarIAForm(),
+            'resultado_teste': resultado_teste,
+            'ollama_configurada': ia_service.ollama_configurada(),
+            'groq_configurada': ia_service.groq_configurada(),
+            'transcricao_local_disponivel': transcricao_local.disponivel(),
+            'modelo_padrao_ia': ia_service.modelo_padrao(),
         }
 
 

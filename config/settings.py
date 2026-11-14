@@ -323,6 +323,23 @@ META_WA_MIDIA_MAX_MB = int(os.getenv('META_WA_MIDIA_MAX_MB') or '20')
 MIDIA_PRIVADA_ROOT = Path(os.getenv('MIDIA_PRIVADA_ROOT') or BASE_DIR / 'data' / 'midia_privada')
 
 # ---------------------------------------------------------------------------
+# Robo com IA. O texto vai para a Ollama Cloud (pago por uso, retencao zero
+# segundo a Ollama). Audios sao transcritos pela Groq (Whisper, plano gratis) e,
+# quando a Groq devolve 429 ou esta fora do ar, pelo faster-whisper no proprio
+# servidor. Tudo so funciona com a IA/transcricao ligadas na tela do robo.
+OLLAMA_API_KEY = os.getenv('OLLAMA_API_KEY', '').strip()
+OLLAMA_BASE_URL = (os.getenv('OLLAMA_BASE_URL') or 'https://ollama.com').strip().rstrip('/')
+OLLAMA_MODELO = (os.getenv('OLLAMA_MODELO') or 'gemma4:31b').strip()
+IA_TIMEOUT_SECONDS = int(os.getenv('IA_TIMEOUT_SECONDS') or '40')
+GROQ_API_KEY = os.getenv('GROQ_API_KEY', '').strip()
+GROQ_BASE_URL = (os.getenv('GROQ_BASE_URL') or 'https://api.groq.com/openai/v1').strip().rstrip('/')
+GROQ_WHISPER_MODELO = (os.getenv('GROQ_WHISPER_MODELO') or 'whisper-large-v3-turbo').strip()
+TRANSCRICAO_LOCAL_ATIVA = _env_bool('TRANSCRICAO_LOCAL_ATIVA', True)
+TRANSCRICAO_LOCAL_MODELO = (os.getenv('TRANSCRICAO_LOCAL_MODELO') or 'small').strip()
+TRANSCRICAO_LOCAL_MAX_SEGUNDOS = int(os.getenv('TRANSCRICAO_LOCAL_MAX_SEGUNDOS') or '180')
+WHISPER_MODELOS_DIR = Path(os.getenv('WHISPER_MODELOS_DIR') or BASE_DIR / 'data' / 'whisper')
+
+# ---------------------------------------------------------------------------
 # Opt-in-first (anti-bloqueio): faz a PESSOA iniciar a conversa.
 # O maior fator de bloqueio e nos mandarmos a 1a mensagem para quem nunca
 # escreveu. PIB_WHATSAPP_NUMERO_OPTIN e o numero da igreja (com DDI) usado no

@@ -17,7 +17,7 @@ manualmente pela tela de processamento. Exemplos (a cada minuto):
 """
 from django.core.management.base import BaseCommand
 
-from apps.acolhimento import fila_auto, midia_whatsapp
+from apps.acolhimento import fila_auto, midia_whatsapp, transcricao
 from apps.acolhimento.models import ExecucaoProcessamentoFila
 
 
@@ -44,6 +44,9 @@ class Command(BaseCommand):
             baixadas = midia_whatsapp.baixar_midias_pendentes()
             if baixadas:
                 self.stdout.write(f'{baixadas} midia(s) recebida(s) baixada(s).')
+            transcritas = transcricao.transcrever_pendentes()
+            if transcritas:
+                self.stdout.write(f'{transcritas} audio(s) com transcricao reprocessada.')
 
         recuperadas = fila_auto.recuperar_execucoes_presas()
         if recuperadas:

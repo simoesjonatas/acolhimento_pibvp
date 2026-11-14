@@ -84,10 +84,13 @@ def encontrar_opcao(texto: str, opcoes=None):
     return None
 
 
-def enfileirar_resposta(pessoa, texto: str):
+def enfileirar_resposta(pessoa, texto: str, *, origem: str = 'bot_atendimento', extra: dict | None = None):
     """Enfileira uma mensagem de saida (o envio real fica a cargo do fila_auto)."""
     if not (texto or '').strip():
         return None
+    metadata = {'origem': origem}
+    if extra:
+        metadata.update(extra)
     return MensagemContato.objects.create(
         pessoa=pessoa,
         canal=MensagemContato.CanalChoices.WHATSAPP,
@@ -95,7 +98,7 @@ def enfileirar_resposta(pessoa, texto: str):
         status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
         prioridade=5,
         conteudo=texto,
-        metadata_envio={'origem': 'bot_atendimento'},
+        metadata_envio=metadata,
     )
 
 
@@ -109,11 +112,57 @@ def _log(pessoa, descricao: str, agora=None):
     )
 
 
-def processar_entrada(pessoa, texto: str) -> bool:
+def bot_pode_atender(pessoa, cfg=None) -> bool:
+    """Bot ligado, com opcoes, e a pessoa ainda nao esta com a equipe."""
+    cfg = cfg or ConfiguracaoAtendimentoBot.carregar()
+    return bool(cfg.ativo and opcoes_ativas() and pessoa.status not in _STATUS_NAO_INTERVIR)
+
+
+def _eh_audio_para_transcrever(mensagem, cfg) -> bool:
+    return bool(
+        mensagem is not None
+        and cfg.transcrever_audios
+        and mensagem.direcao == MensagemContato.DirecaoChoices.ENTRADA
+        and mensagem.midia_tipo == MensagemContato.MidiaTipoChoices.AUDIO
+    )
+
+
+def reenviar_menu(pessoa, cfg, opcoes, texto: str, agora=None) -> None:
+    """Comportamento de sempre quando nada casa: "nao entendi" + menu."""
+    enfileirar_resposta(pessoa, _com_menu(cfg.mensagem_fallback, opcoes))
+    _log(pessoa, f'Atendimento automatico: nao entendeu "{(texto or "").strip()[:60]}", reenviou o menu.', agora)
+
+
+def transferir_para_equipe(pessoa, motivo: str, agora=None) -> None:
+    """Tira a pessoa do bot: daqui em diante a conversa e com a equipe."""
+    pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
+    pessoa.bot_etapa = PrimeiroContato.BotEtapaChoices.INATIVO
+    pessoa.save(update_fields=['status', 'bot_etapa', 'atualizado_em'])
+    _log(pessoa, f'Atendimento automatico: {motivo} -> transferido para atendente.', agora)
+
+
+def aplicar_opcao(pessoa, opcao, agora=None, *, origem: str = 'bot_atendimento') -> None:
+    """Responde a opcao (texto + arquivo) e, se for o caso, transfere para a equipe."""
+    enfileirar_resposta(pessoa, opcao.resposta, origem=origem)
+    # Arquivo da opcao (imagem/PDF/audio/video): so pela API oficial, logo apos o texto.
+    if opcao.midia_arquivo and usando_meta():
+        from apps.acolhimento import bot_midia
+
+        bot_midia.enfileirar_midia(pessoa, opcao)
+    if opcao.acao == OpcaoAtendimentoBot.Acao.TRANSFERIR_HUMANO:
+        transferir_para_equipe(pessoa, f'opcao "{opcao.rotulo}"', agora)
+    else:
+        _log(pessoa, f'Atendimento automatico: respondeu a opcao "{opcao.rotulo}".', agora)
+
+
+def processar_entrada(pessoa, texto: str, mensagem=None, *, em_segundo_plano: bool = False) -> bool:
     """Processa uma mensagem recebida. Retorna True se o bot assumiu o atendimento.
 
     Quando retorna False, o webhook mantem o comportamento legado (flip para
     Em acompanhamento na primeira resposta).
+
+    `mensagem` e a entrada gravada pelo webhook (para audio e IA). Com
+    `em_segundo_plano=True` (thread da transcricao), a IA roda aqui mesmo.
     """
     cfg = ConfiguracaoAtendimentoBot.carregar()
     if not cfg.ativo:
@@ -138,24 +187,40 @@ def processar_entrada(pessoa, texto: str) -> bool:
         _log(pessoa, 'Atendimento automatico: enviou saudacao + menu.', agora)
         return True
 
-    # Aguardando escolha no menu.
-    opcao = encontrar_opcao(texto, opcoes)
-    if opcao is None:
-        enfileirar_resposta(pessoa, _com_menu(cfg.mensagem_fallback, opcoes))
-        _log(pessoa, f'Atendimento automatico: nao entendeu "{(texto or "").strip()[:60]}", reenviou o menu.', agora)
+    # Audio: so da para entender depois da transcricao (feita apos o download).
+    if not em_segundo_plano and _eh_audio_para_transcrever(mensagem, cfg):
+        metadata = dict(mensagem.metadata_resposta or {})
+        metadata['bot_aguardando_transcricao'] = True
+        mensagem.metadata_resposta = metadata
+        mensagem.save(update_fields=['metadata_resposta', 'atualizado_em'])
         return True
 
-    enfileirar_resposta(pessoa, opcao.resposta)
-    # Arquivo da opcao (imagem/PDF/audio/video): so pela API oficial, logo apos o texto.
-    if opcao.midia_arquivo and usando_meta():
-        from apps.acolhimento import bot_midia
+    from apps.acolhimento import atendimento_ia
 
-        bot_midia.enfileirar_midia(pessoa, opcao)
-    if opcao.acao == OpcaoAtendimentoBot.Acao.TRANSFERIR_HUMANO:
-        pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
-        pessoa.bot_etapa = Etapa.INATIVO
-        pessoa.save(update_fields=['status', 'bot_etapa', 'atualizado_em'])
-        _log(pessoa, f'Atendimento automatico: opcao "{opcao.rotulo}" -> transferido para atendente.', agora)
-    else:
-        _log(pessoa, f'Atendimento automatico: respondeu a opcao "{opcao.rotulo}".', agora)
+    usa_ia = cfg.ia_ativa and mensagem is not None and atendimento_ia.ia_configurada()
+
+    # Aguardando escolha no menu. Numero e mensagem curta casam direto com a opcao;
+    # frase mais longa vai para a IA (com IA ligada), que conhece as opcoes e pode
+    # escolher uma delas ou responder o resto ("que horas e o culto e tem estacionamento?").
+    opcao = encontrar_opcao(texto, opcoes)
+    if opcao is not None and not (usa_ia and _frase_longa(texto)):
+        aplicar_opcao(pessoa, opcao, agora)
+        return True
+
+    if usa_ia:
+        if em_segundo_plano:
+            atendimento_ia.responder(pessoa.pk, mensagem.pk)
+        else:
+            atendimento_ia.agendar(pessoa.pk, mensagem.pk)
+        return True
+
+    reenviar_menu(pessoa, cfg, opcoes, texto, agora)
     return True
+
+
+PALAVRAS_FRASE_LONGA = 4
+
+
+def _frase_longa(texto: str) -> bool:
+    texto = (texto or '').strip()
+    return not texto.isdigit() and len(re.findall(r'\w+', texto)) > PALAVRAS_FRASE_LONGA

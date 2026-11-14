@@ -24,6 +24,23 @@
         background:#fff; cursor:pointer; font-size:.85rem; line-height:1; text-decoration:none; color:inherit; }
     .bot-btn-mini.bot-btn-del { color:#b91c1c; border-color:rgba(185,28,28,.35); }
     .bot-btn-mini.bot-btn-del:hover { background:#fef2f2; }
+    .ia-status { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+    .ia-chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px;
+        font-size:.8rem; font-weight:700; border:1px solid #d8d9e5; background:#f3f3f8; color:#525465; }
+    .ia-chip.ok { background:#ecfdf5; border-color:#a7f3d0; color:#047857; }
+    .ia-chip.falta { background:#fef2f2; border-color:#fecaca; color:#b91c1c; }
+    .ia-checks { display:flex; flex-wrap:wrap; gap:18px; margin-bottom:10px; }
+    .ia-checks label { display:inline-flex; align-items:center; gap:8px; font-weight:700; white-space:nowrap; width:auto; margin:0; }
+    .ia-checks input[type=checkbox] { width:18px; height:18px; flex:0 0 auto; margin:0; }
+    .ia-grid { display:grid; grid-template-columns:minmax(0, 2fr) minmax(0, 1fr); gap:12px; }
+    @media (max-width: 720px){ .ia-grid { grid-template-columns:minmax(0, 1fr); } }
+    .ia-grid input { width:100%; }
+    .ia-teste { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; }
+    .ia-teste .builder-field { flex:1 1 280px; margin:0; }
+    .ia-teste input { width:100%; }
+    .ia-resultado { margin-top:12px; border-radius:10px; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; }
+    .ia-resultado.erro { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+    .ia-resultado small { color:#64748b; display:block; margin-top:8px; }
 </style>
 <div class="config-atendimento-page">
     <section class="page-hero">
@@ -74,6 +91,94 @@
                 </button>
             </form>
         </div>
+    </section>
+
+    <section class="profile-form-card" id="ia">
+        <div class="panel-header"><div>
+            <h2>Inteligencia artificial</h2>
+            <p>Quando a mensagem nao casa com numero nem palavra-chave, a IA tenta entender e responde so com a base de conhecimento e as opcoes abaixo. Se nao souber, ou se o assunto for pastoral ou sensivel, passa a conversa para a equipe. Se a IA falhar, o bot volta ao "nao entendi" + menu.</p>
+        </div></div>
+        <div class="ia-status">
+            <span class="ia-chip {% if ollama_configurada %}ok{% else %}falta{% endif %}">Ollama (texto): {% if ollama_configurada %}chave configurada{% else %}falta OLLAMA_API_KEY{% endif %}</span>
+            <span class="ia-chip {% if groq_configurada %}ok{% else %}falta{% endif %}">Groq (audio): {% if groq_configurada %}chave configurada{% else %}falta GROQ_API_KEY{% endif %}</span>
+            <span class="ia-chip {% if transcricao_local_disponivel %}ok{% endif %}">Reserva no servidor: {% if transcricao_local_disponivel %}disponivel{% else %}indisponivel{% endif %}</span>
+        </div>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="ia">
+            <div class="ia-checks">
+                <label>{{ form_ia.ia_ativa }} {{ form_ia.ia_ativa.label }}</label>
+                <label>{{ form_ia.transcrever_audios }} {{ form_ia.transcrever_audios.label }}</label>
+            </div>
+            <div class="ia-grid">
+                <p class="builder-field">
+                    <label for="{{ form_ia.ia_modelo.id_for_label }}">{{ form_ia.ia_modelo.label }}</label>
+                    {{ form_ia.ia_modelo }}
+                    <small class="table-muted-text">Vazio usa <code>{{ modelo_padrao_ia }}</code>.</small>
+                    {% if form_ia.ia_modelo.errors %}<span class="form-errors">{{ form_ia.ia_modelo.errors.0 }}</span>{% endif %}
+                </p>
+                <p class="builder-field">
+                    <label for="{{ form_ia.ia_max_respostas_por_dia.id_for_label }}">{{ form_ia.ia_max_respostas_por_dia.label }}</label>
+                    {{ form_ia.ia_max_respostas_por_dia }}
+                    <small class="table-muted-text">{{ form_ia.ia_max_respostas_por_dia.help_text }}</small>
+                    {% if form_ia.ia_max_respostas_por_dia.errors %}<span class="form-errors">{{ form_ia.ia_max_respostas_por_dia.errors.0 }}</span>{% endif %}
+                </p>
+            </div>
+            <p class="builder-field">
+                <label for="{{ form_ia.ia_base_conhecimento.id_for_label }}">{{ form_ia.ia_base_conhecimento.label }}</label>
+                {{ form_ia.ia_base_conhecimento }}
+                <small class="table-muted-text">{{ form_ia.ia_base_conhecimento.help_text }} As respostas das opcoes do menu ja entram automaticamente.</small>
+                {% if form_ia.ia_base_conhecimento.errors %}<span class="form-errors">{{ form_ia.ia_base_conhecimento.errors.0 }}</span>{% endif %}
+            </p>
+            <p class="builder-field">
+                <label for="{{ form_ia.ia_instrucoes.id_for_label }}">{{ form_ia.ia_instrucoes.label }}</label>
+                {{ form_ia.ia_instrucoes }}
+                {% if form_ia.ia_instrucoes.errors %}<span class="form-errors">{{ form_ia.ia_instrucoes.errors.0 }}</span>{% endif %}
+            </p>
+            <div class="action-row">
+                <button type="submit">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                    <span class="btn-text">Salvar IA</span>
+                </button>
+            </div>
+        </form>
+
+        <form method="post" action="{% url 'configuracao-atendimento' %}#ia" style="margin-top:18px">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="testar_ia">
+            <div class="ia-teste">
+                <p class="builder-field">
+                    <label for="{{ form_teste.pergunta.id_for_label }}">Testar a IA (nada e enviado no WhatsApp)</label>
+                    {{ form_teste.pergunta }}
+                </p>
+                <button type="submit" class="secundario">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span class="btn-text">Testar</span>
+                </button>
+            </div>
+        </form>
+        {% if resultado_teste %}
+            {% if resultado_teste.erro %}
+            <div class="ia-resultado erro">Nao foi possivel falar com a IA: {{ resultado_teste.erro }}</div>
+            {% elif resultado_teste.decisao %}
+            <div class="ia-resultado">
+                {% if resultado_teste.decisao.acao == 'opcao' %}
+                    <strong>Escolheu a opcao "{{ resultado_teste.decisao.rotulo }}"</strong> e enviaria a resposta dela:
+                {% elif resultado_teste.decisao.acao == 'transferir' %}
+                    <strong>Passaria para a equipe</strong>, enviando:
+                {% else %}
+                    <strong>Responderia:</strong>
+                {% endif %}
+                <p style="margin:6px 0 0">{{ resultado_teste.decisao.resposta|default:'(mensagem padrao de transferencia)'|linebreaksbr }}</p>
+                <small>Modelo {{ resultado_teste.modelo }} &middot; {{ resultado_teste.tokens_entrada }} tokens de entrada, {{ resultado_teste.tokens_saida }} de saida.</small>
+            </div>
+            {% else %}
+            <div class="ia-resultado erro">
+                A IA respondeu num formato que o robo nao entende; na conversa real ele mandaria o "nao entendi" + menu.
+                <small>Resposta bruta: {{ resultado_teste.bruto|truncatechars:300 }}</small>
+            </div>
+            {% endif %}
+        {% endif %}
     </section>
 
     <section class="profile-form-card">
