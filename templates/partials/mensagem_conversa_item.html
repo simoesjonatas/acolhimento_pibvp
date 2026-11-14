@@ -45,6 +45,9 @@
         {% else %}
         <p>{{ mensagem.conteudo|linebreaksbr }}</p>
         {% endif %}
+        {% if mensagem.direcao == 'saida' and mensagem.metadata_envio.meta_template.nome %}
+        <p class="message-template" title="Modelo aprovado pela Meta. A pessoa recebe o texto acima, com o nome dela.">Enviada pelo modelo aprovado <strong>{{ mensagem.metadata_envio.meta_template.nome }}</strong></p>
+        {% endif %}
         {% if mensagem.direcao == 'entrada' and mensagem.metadata_resposta.meta_botao %}
         <p class="message-botao">respondeu pelo botão: <strong>{{ mensagem.metadata_resposta.meta_botao_texto|default:mensagem.conteudo }}</strong>{% if mensagem.metadata_resposta.meta_botao == 'agora_nao' %} · pediu para falar depois{% endif %}</p>
         {% endif %}

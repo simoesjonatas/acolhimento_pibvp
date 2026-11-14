@@ -252,3 +252,55 @@ def continuar_meta_idioma() -> str:
 
 def continuar_configurado() -> bool:
     return configurado_para(TemplateWhatsapp.Tipo.CONTINUAR)
+
+
+# Textos de marcador gravados antes de o sistema mostrar o texto real do template.
+MARCADORES_TEMPLATE = (
+    'Template opt-in enfileirado',
+    'Template de continuacao enfileirado',
+)
+_CACHE_TEMPLATE_OK = 60 * 60  # 1 hora
+_CACHE_TEMPLATE_FALHA = 60 * 5  # tenta de novo em 5 minutos
+
+
+def _template_meta_cacheado(nome: str, idioma: str):
+    """Template da Meta (com components) guardado em cache: um disparo em massa faz 1 consulta."""
+    from django.core.cache import cache
+
+    from apps.acolhimento import meta_service
+
+    chave = f'meta_template_texto:{nome}:{idioma}'
+    guardado = cache.get(chave)
+    if guardado is not None:
+        return guardado or None
+    template = meta_service.obter_template(nome, idioma)
+    cache.set(chave, template or {}, _CACHE_TEMPLATE_OK if template else _CACHE_TEMPLATE_FALHA)
+    return template
+
+
+def texto_meta_template(meta_template) -> str:
+    """Texto que a pessoa recebe ao enviar o `meta_template` (nome, idioma, parametros).
+
+    Devolve '' quando nao da para consultar o template na Meta; quem chama mantem
+    um texto de marcador nesse caso.
+    """
+    from apps.acolhimento import meta_service
+
+    if not isinstance(meta_template, dict):
+        return ''
+    nome = str(meta_template.get('nome') or '').strip()
+    if not nome:
+        return ''
+    idioma = str(meta_template.get('idioma') or '').strip() or 'pt_BR'
+    template = _template_meta_cacheado(nome, idioma)
+    return meta_service.renderizar_template(template, meta_template.get('parametros'))
+
+
+def conteudo_template(meta_template, marcador: str) -> str:
+    """Conteudo gravado na mensagem: o texto real do template ou, sem ele, o marcador."""
+    return texto_meta_template(meta_template) or marcador
+
+
+def eh_marcador_template(conteudo: str) -> bool:
+    conteudo = (conteudo or '').strip()
+    return conteudo in MARCADORES_TEMPLATE or conteudo.startswith('[Template] ')

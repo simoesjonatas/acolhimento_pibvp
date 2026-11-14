@@ -141,6 +141,11 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 				texto_evolution = texto_evolution_base.replace('{nome}', nome)
 				metadata_envio['evolution_texto'] = texto_evolution
 				conteudo = texto_evolution
+			elif usa_meta:
+				# Grava o texto que a pessoa vai ler (com o nome dela), nao so o nome do template.
+				conteudo = template_config.conteudo_template(
+					metadata_envio['meta_template'], 'Template opt-in enfileirado',
+				)
 			else:
 				conteudo = 'Template opt-in enfileirado'
 

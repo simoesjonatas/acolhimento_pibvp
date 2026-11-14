@@ -527,6 +527,48 @@ def requisitos_template(template: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_PLACEHOLDER_RE = re.compile(r'\{\{\s*([A-Za-z0-9_]+)\s*\}\}')
+
+
+def renderizar_template(template: dict[str, Any] | None, parametros: dict[str, Any] | None = None) -> str:
+    """Texto que a pessoa ve no WhatsApp: cabecalho, corpo, rodape e botoes.
+
+    As variaveis ({{1}} ou {{nome}}) sao trocadas pelos `parametros` enviados;
+    uma variavel sem valor fica como esta. Devolve '' se o template nao tem texto.
+    """
+    if not isinstance(template, dict):
+        return ''
+    valores = {str(chave): str(valor) for chave, valor in (parametros or {}).items()}
+
+    def _trocar(texto: str) -> str:
+        return _PLACEHOLDER_RE.sub(lambda m: valores.get(m.group(1), m.group(0)), texto or '').strip()
+
+    cabecalho = corpo = rodape = ''
+    botoes: list[str] = []
+    for componente in template.get('components') or []:
+        if not isinstance(componente, dict):
+            continue
+        tipo = str(componente.get('type') or '').upper()
+        if tipo == 'HEADER' and str(componente.get('format') or 'TEXT').upper() == 'TEXT':
+            cabecalho = _trocar(componente.get('text'))
+        elif tipo == 'BODY':
+            corpo = _trocar(componente.get('text'))
+        elif tipo == 'FOOTER':
+            rodape = _trocar(componente.get('text'))
+        elif tipo == 'BUTTONS':
+            botoes = [
+                str(botao.get('text') or '').strip()
+                for botao in componente.get('buttons') or []
+                if isinstance(botao, dict) and str(botao.get('text') or '').strip()
+            ]
+    if not corpo:
+        return ''
+    partes = [f'*{cabecalho}*' if cabecalho else '', corpo, f'_{rodape}_' if rodape else '']
+    if botoes:
+        partes.append(' | '.join(f'[{texto}]' for texto in botoes))
+    return '\n\n'.join(parte for parte in partes if parte)
+
+
 def get_pricing_analytics(inicio_ts: int, fim_ts: int, timeout: int = 10) -> list[dict[str, Any]] | None:
     """Custo e volume informados pela Meta no periodo (UNIX), por categoria e tipo.
 
