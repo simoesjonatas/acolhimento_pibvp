@@ -226,12 +226,16 @@ def _enviar_meta(mensagem: MensagemContato, destino: str) -> dict[str, Any]:
         if opcao_midia and not template:
             resultado = _enviar_midia_bot_meta(mensagem, destino, opcao_midia)
         elif template:
-            resultado = meta_service.send_template(
-                to_phone=destino,
-                nome=template['nome'],
-                idioma=template.get('idioma') or 'pt_BR',
-                parametros=template.get('parametros') or {},
-            )
+            envio = {
+                'to_phone': destino,
+                'nome': template['nome'],
+                'idioma': template.get('idioma') or 'pt_BR',
+                'parametros': template.get('parametros') or {},
+            }
+            # Imagem/video/PDF do cabecalho, enviado a Meta uma vez no disparo.
+            if template.get('cabecalho'):
+                envio['cabecalho'] = template['cabecalho']
+            resultado = meta_service.send_template(**envio)
         else:
             resultado = meta_service.send_text(to_phone=destino, text=mensagem.conteudo)
     except meta_service.MetaWhatsAppError as exc:

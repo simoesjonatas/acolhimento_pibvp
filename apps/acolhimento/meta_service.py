@@ -183,16 +183,44 @@ def send_text(*, to_phone: str, text: str) -> dict[str, Any]:
     })
 
 
-def montar_componentes(parametros: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Converte as variaveis ({"1": "Maria"}) nos `components` do template.
+# Midia que um template pode ter no cabecalho (formato na Meta -> tipo no envio).
+FORMATOS_CABECALHO_MIDIA = {'IMAGE': 'image', 'VIDEO': 'video', 'DOCUMENT': 'document'}
+
+
+def _componente_cabecalho(cabecalho: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Componente `header` com a midia ({tipo, id, nome}) ja enviada para a Meta."""
+    if not cabecalho:
+        return None
+    tipo = str(cabecalho.get('tipo') or '').strip()
+    media_id = str(cabecalho.get('id') or '').strip()
+    if tipo not in FORMATOS_CABECALHO_MIDIA.values() or not media_id:
+        raise MetaWhatsAppError('Midia do cabecalho do template invalida (tipo ou id ausente).')
+    bloco: dict[str, Any] = {'id': media_id}
+    nome_arquivo = str(cabecalho.get('nome') or '').strip()
+    if tipo == 'document' and nome_arquivo:
+        bloco['filename'] = nome_arquivo[:240]
+    return {'type': 'header', 'parameters': [{'type': tipo, tipo: bloco}]}
+
+
+def montar_componentes(
+    parametros: dict[str, Any] | None,
+    cabecalho: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Converte as variaveis ({"1": "Maria"}) e a midia do cabecalho nos `components`.
 
     Chaves numericas => parametros posicionais ({{1}}, {{2}}...), na ordem numerica.
     Chaves com nome => parametros nomeados ({{nome}}), com `parameter_name`.
-    Sem variaveis => sem components (template sem placeholders).
+    `cabecalho` ({tipo, id, nome}) => componente `header` com a imagem/video/PDF.
+    Sem variaveis nem cabecalho => sem components (template sem placeholders).
     """
+    componentes: list[dict[str, Any]] = []
+    header = _componente_cabecalho(cabecalho)
+    if header:
+        componentes.append(header)
+
     parametros = {str(k): v for k, v in (parametros or {}).items() if str(k).strip()}
     if not parametros:
-        return []
+        return componentes
 
     if all(chave.isdigit() for chave in parametros):
         ordenados = sorted(parametros.items(), key=lambda item: int(item[0]))
@@ -202,7 +230,8 @@ def montar_componentes(parametros: dict[str, Any] | None) -> list[dict[str, Any]
             {'type': 'text', 'parameter_name': chave, 'text': str(valor)}
             for chave, valor in parametros.items()
         ]
-    return [{'type': 'body', 'parameters': lista}]
+    componentes.append({'type': 'body', 'parameters': lista})
+    return componentes
 
 
 def send_template(
@@ -211,8 +240,13 @@ def send_template(
     nome: str,
     idioma: str = 'pt_BR',
     parametros: dict[str, Any] | None = None,
+    cabecalho: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Template aprovado pela Meta (abre/reabre a conversa fora da janela de 24h)."""
+    """Template aprovado pela Meta (abre/reabre a conversa fora da janela de 24h).
+
+    `cabecalho` ({tipo, id, nome}) e obrigatorio quando o template foi aprovado com
+    imagem, video ou documento no cabecalho: a Meta exige a midia em cada envio.
+    """
     nome = (nome or '').strip()
     if not nome:
         raise MetaWhatsAppError('Nome do template nao informado.')
@@ -220,7 +254,7 @@ def send_template(
         'name': nome,
         'language': {'code': (idioma or 'pt_BR').strip() or 'pt_BR'},
     }
-    componentes = montar_componentes(parametros)
+    componentes = montar_componentes(parametros, cabecalho)
     if componentes:
         template['components'] = componentes
     return _post_messages({
@@ -419,6 +453,78 @@ def list_templates(timeout: int = 8) -> list[dict[str, Any]]:
         return []
     itens = data.get('data') or []
     return [item for item in itens if isinstance(item, dict)]
+
+
+def obter_template(nome: str, idioma: str, timeout: int = 6) -> dict[str, Any] | None:
+    """Definicao de um template (com `components`) para conferir antes de enfileirar.
+
+    None = nao deu para consultar (sem WABA, rede, token sem permissao): quem chama
+    segue sem a conferencia. {} = consultou e o template nao existe para o idioma.
+    """
+    waba = (getattr(settings, 'META_WA_BUSINESS_ACCOUNT_ID', '') or '').strip()
+    nome = (nome or '').strip()
+    if not waba or not nome or not configurado():
+        return None
+    try:
+        status, data = _request(
+            'GET',
+            f'{waba}/message_templates',
+            params={'name': nome, 'fields': 'name,language,status,category,components', 'limit': 50},
+            timeout=timeout,
+        )
+    except MetaWhatsAppError:
+        return None
+    if status != 200 or not isinstance(data, dict):
+        return None
+    idioma = (idioma or 'pt_BR').strip() or 'pt_BR'
+    for item in data.get('data') or []:
+        # O filtro `name` da Graph API e por prefixo: confere o nome exato.
+        if isinstance(item, dict) and item.get('name') == nome and item.get('language') == idioma:
+            return item
+    return {}
+
+
+_VARIAVEL_POSICIONAL_RE = re.compile(r'\{\{\s*(\d+)\s*\}\}')
+_VARIAVEL_NOMEADA_RE = re.compile(r'\{\{\s*([a-z_][a-z0-9_]*)\s*\}\}')
+
+
+def requisitos_template(template: dict[str, Any]) -> dict[str, Any]:
+    """O que o envio precisa mandar para este template.
+
+    cabecalho: '' (sem cabecalho), 'TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT' ou 'LOCATION'.
+    corpo_posicionais: maior {{n}} do corpo. corpo_nomeados: nomes de {{nome}} no corpo.
+    variaveis_nao_suportadas: variavel no cabecalho de texto ou em botao de URL, que o
+    disparo ainda nao preenche.
+    """
+    cabecalho = ''
+    corpo_posicionais = 0
+    corpo_nomeados: list[str] = []
+    nao_suportadas: list[str] = []
+    for componente in template.get('components') or []:
+        if not isinstance(componente, dict):
+            continue
+        tipo = str(componente.get('type') or '').upper()
+        texto = str(componente.get('text') or '')
+        if tipo == 'HEADER':
+            cabecalho = str(componente.get('format') or 'TEXT').upper()
+            if cabecalho == 'TEXT' and '{{' in texto:
+                nao_suportadas.append('cabecalho')
+        elif tipo == 'BODY':
+            corpo_posicionais = max((int(n) for n in _VARIAVEL_POSICIONAL_RE.findall(texto)), default=0)
+            corpo_nomeados = sorted(set(_VARIAVEL_NOMEADA_RE.findall(texto)))
+        elif tipo == 'BUTTONS':
+            for botao in componente.get('buttons') or []:
+                if isinstance(botao, dict) and '{{' in str(botao.get('url') or ''):
+                    nao_suportadas.append('botao')
+                    break
+    return {
+        'status': str(template.get('status') or '').upper(),
+        'cabecalho': cabecalho,
+        'cabecalho_midia': FORMATOS_CABECALHO_MIDIA.get(cabecalho, ''),
+        'corpo_posicionais': corpo_posicionais,
+        'corpo_nomeados': corpo_nomeados,
+        'variaveis_nao_suportadas': nao_suportadas,
+    }
 
 
 def get_pricing_analytics(inicio_ts: int, fim_ts: int, timeout: int = 10) -> list[dict[str, Any]] | None:
