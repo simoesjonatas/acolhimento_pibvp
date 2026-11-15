@@ -3271,6 +3271,12 @@ a.queue-summary-item:hover {
     color: #573c86;
 }
 
+.person-status-em_gabinete {
+    background: #fdf6e3;
+    border-color: #e8cf8a;
+    color: #7a5a12;
+}
+
 .person-status-aprovado {
     background: #e9f6f5;
     border-color: #9fd1cd;

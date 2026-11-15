@@ -232,6 +232,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 		total_participante = PrimeiroContato.objects.filter(
 			status=PrimeiroContato.StatusAcolhimento.PARTICIPANTE
 		).count()
+		total_em_gabinete = PrimeiroContato.objects.filter(
+			status=PrimeiroContato.StatusAcolhimento.EM_GABINETE
+		).count()
 		total_aprovado = PrimeiroContato.objects.filter(
 			status=PrimeiroContato.StatusAcolhimento.APROVADO
 		).count()
@@ -252,6 +255,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 				'total_robo': total_robo,
 				'total_acompanhamento': total_acompanhamento,
 				'total_participante': total_participante,
+				'total_em_gabinete': total_em_gabinete,
 				'total_aprovado': total_aprovado,
 				'total_membros': total_membros,
 				'total_janela_aberta': total_janela_aberta,

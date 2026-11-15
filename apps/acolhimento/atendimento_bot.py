@@ -29,6 +29,7 @@ from apps.acolhimento.models import (
 _STATUS_NAO_INTERVIR = {
     PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO,
     PrimeiroContato.StatusAcolhimento.PARTICIPANTE,
+    PrimeiroContato.StatusAcolhimento.EM_GABINETE,
     PrimeiroContato.StatusAcolhimento.APROVADO,
     PrimeiroContato.StatusAcolhimento.MEMBRO,
 }

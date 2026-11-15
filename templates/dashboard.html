@@ -85,6 +85,11 @@
         <strong class="kpi-value">{{ total_participante }}</strong>
         <span class="kpi-hint">Ver pessoas</span>
     </a>
+    <a class="kpi-card" href="{% url 'pessoas-lista' %}?status=em_gabinete">
+        <span class="kpi-label">Em gabinete</span>
+        <strong class="kpi-value">{{ total_em_gabinete }}</strong>
+        <span class="kpi-hint">Ver pessoas</span>
+    </a>
     <a class="kpi-card" href="{% url 'pessoas-lista' %}?status=aprovado">
         <span class="kpi-label">Aprovados</span>
         <strong class="kpi-value">{{ total_aprovado }}</strong>
