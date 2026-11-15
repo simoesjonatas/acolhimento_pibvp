@@ -271,9 +271,11 @@ class StatusEvolutivoTests(TestCase):
 		self.assertIn('participante', valores)
 		self.assertLess(valores.index('participante'), valores.index('membro'))
 
-	def test_aprovado_fica_entre_ingressante_e_membro(self):
+	def test_aprovado_fica_entre_em_gabinete_e_membro(self):
+		# Ingressante -> Em gabinete -> Aprovado -> Membro.
 		valores = list(PrimeiroContato.StatusAcolhimento.values)
-		self.assertEqual(valores.index('aprovado'), valores.index('participante') + 1)
+		self.assertEqual(valores.index('em_gabinete'), valores.index('participante') + 1)
+		self.assertEqual(valores.index('aprovado'), valores.index('em_gabinete') + 1)
 		self.assertEqual(valores.index('membro'), valores.index('aprovado') + 1)
 
 	def test_robo_e_participante_so_mudaram_o_nome_na_tela(self):
