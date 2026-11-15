@@ -119,8 +119,15 @@ def _entregar_ao_robo(mensagem: MensagemContato, transcrito: bool) -> None:
     if transcrito:
         atendimento_bot.processar_entrada(pessoa, mensagem.transcricao, mensagem, em_segundo_plano=True)
     elif aguardando:
-        # Sem texto: mesmo comportamento de antes da IA ("nao entendi" + menu).
-        atendimento_bot.processar_entrada(pessoa, mensagem.conteudo, mensagem, em_segundo_plano=True)
+        # Sem texto nao ha o que a IA entender: o mesmo de antes da IA (saudacao + menu
+        # se era a primeira mensagem; senao "nao entendi" + menu).
+        cfg = ConfiguracaoAtendimentoBot.carregar()
+        opcoes = atendimento_bot.opcoes_ativas()
+        if (mensagem.metadata_resposta or {}).get('bot_primeira'):
+            atendimento_bot.enfileirar_resposta(pessoa, atendimento_bot._com_menu(cfg.mensagem_saudacao, opcoes))
+            atendimento_bot._log(pessoa, 'Atendimento automatico: audio sem transcricao, enviou saudacao + menu.')
+        else:
+            atendimento_bot.reenviar_menu(pessoa, cfg, opcoes, mensagem.conteudo)
 
 
 def depois_do_download(mensagem: MensagemContato) -> None:

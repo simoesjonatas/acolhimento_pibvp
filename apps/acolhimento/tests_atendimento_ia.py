@@ -120,7 +120,7 @@ class ProcessarEntradaComIATests(_BaseIA):
 		entrada = self._entrada()
 		with patch.object(atendimento_ia, 'agendar') as agendar:
 			self.assertTrue(atendimento_bot.processar_entrada(self.pessoa, entrada.conteudo, entrada))
-		agendar.assert_called_once_with(self.pessoa.pk, entrada.pk)
+		agendar.assert_called_once_with(self.pessoa.pk, entrada.pk, primeira=False)
 		self.assertEqual(self._saidas(), [])
 
 	def test_numero_e_palavra_chave_continuam_sem_ia(self):
@@ -159,6 +159,40 @@ class ProcessarEntradaComIATests(_BaseIA):
 		self.assertEqual(len(self._saidas()), 2)
 		self.assertIn('1. Horario dos cultos', self._saidas()[0].conteudo)
 
+	def _primeiro_contato(self):
+		PrimeiroContato.objects.filter(pk=self.pessoa.pk).update(
+			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO, bot_etapa=PrimeiroContato.BotEtapaChoices.INATIVO,
+		)
+		self.pessoa.refresh_from_db()
+
+	def test_primeira_mensagem_de_verdade_vai_para_a_ia(self):
+		# Resposta ao template ("como foi sua experiencia?"): nada de saudacao generica.
+		self._primeiro_contato()
+		entrada = self._entrada('Bom dia, o ministerio e uma bencao!')
+		with patch.object(atendimento_ia, 'agendar') as agendar:
+			self.assertTrue(atendimento_bot.processar_entrada(self.pessoa, entrada.conteudo, entrada))
+		agendar.assert_called_once_with(self.pessoa.pk, entrada.pk, primeira=True)
+		self.assertEqual(self._saidas(), [])
+		self.pessoa.refresh_from_db()
+		self.assertEqual(self.pessoa.status, PrimeiroContato.StatusAcolhimento.ROBO)
+		self.assertEqual(self.pessoa.bot_etapa, PrimeiroContato.BotEtapaChoices.MENU)
+
+	def test_primeira_mensagem_so_cumprimento_recebe_a_saudacao_fixa(self):
+		for texto in ('oi', 'Bom dia!', 'Olá, tudo bem?', 'boa noite irmão', '(figurinha)'):
+			with self.subTest(texto=texto):
+				MensagemContato.objects.all().delete()
+				self._primeiro_contato()
+				entrada = self._entrada(texto)
+				with patch.object(atendimento_ia, 'agendar') as agendar:
+					atendimento_bot.processar_entrada(self.pessoa, texto, entrada)
+				agendar.assert_not_called()
+				self.assertIn('1. Horario dos cultos', self._saidas()[0].conteudo)
+
+	def test_eh_saudacao_simples(self):
+		self.assertTrue(atendimento_bot.eh_saudacao_simples('Oii, boa tarde!!'))
+		self.assertFalse(atendimento_bot.eh_saudacao_simples('bom dia, queria saber das aulas de musica'))
+		self.assertFalse(atendimento_bot.eh_saudacao_simples('Foi uma bencao'))
+
 	def test_agendar_roda_em_thread_depois_do_commit(self):
 		with patch('apps.acolhimento.atendimento_ia.threading.Thread') as thread:
 			with self.captureOnCommitCallbacks(execute=False) as callbacks:
@@ -167,7 +201,7 @@ class ProcessarEntradaComIATests(_BaseIA):
 			for callback in callbacks:
 				callback()
 		thread.assert_called_once()
-		self.assertEqual(thread.call_args.kwargs['args'], (self.pessoa.pk, 99))
+		self.assertEqual(thread.call_args.kwargs['args'], (self.pessoa.pk, 99, False))
 
 
 @override_settings(**IA_OK)
@@ -226,6 +260,25 @@ class ResponderTests(_BaseIA):
 				saida = self._saidas()[0]
 				self.assertIn('1. Horario dos cultos', saida.conteudo)
 				self.assertEqual(saida.metadata_envio['origem'], 'bot_atendimento')
+
+	def test_primeira_resposta_vai_com_o_menu_e_avisa_a_ia(self):
+		with patch.object(ia_service, 'chat', return_value=_chat('responder', 'Que bom que voce gostou, Ana!')) as chat:
+			acao = atendimento_ia.responder(self.pessoa.pk, self._entrada('Foi uma bencao!').pk, esperar=False, primeira=True)
+		self.assertEqual(acao, 'responder')
+		self.assertIn('PRIMEIRA RESPOSTA', chat.call_args.args[0][0]['content'])
+		conteudo = self._saidas()[0].conteudo
+		self.assertTrue(conteudo.startswith('Que bom que voce gostou, Ana!'))
+		self.assertIn('1. Horario dos cultos', conteudo)
+
+	def test_primeira_resposta_com_erro_manda_saudacao_e_menu(self):
+		acao, _ = self._responder(self._entrada('Foi uma bencao!'), erro=ia_service.IAError('HTTP 503', http_status=503))
+		self.assertEqual(acao, 'fallback')  # sem primeira: nao entendi + menu
+		MensagemContato.objects.filter(direcao=MensagemContato.DirecaoChoices.SAIDA).delete()
+		with patch.object(ia_service, 'chat', side_effect=ia_service.IAError('HTTP 503', http_status=503)):
+			atendimento_ia.responder(self.pessoa.pk, self._entrada('Foi uma bencao!').pk, esperar=False, primeira=True)
+		conteudo = self._saidas()[0].conteudo
+		self.assertTrue(conteudo.startswith(ConfiguracaoAtendimentoBot.carregar().mensagem_saudacao))
+		self.assertIn('1. Horario dos cultos', conteudo)
 
 	def test_erro_da_ia_ainda_tenta_a_palavra_chave(self):
 		acao, _ = self._responder(

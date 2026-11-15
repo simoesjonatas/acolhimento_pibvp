@@ -64,7 +64,17 @@ def _texto_da_mensagem(mensagem: MensagemContato) -> str:
     return (mensagem.conteudo or '').strip()
 
 
-def montar_prompt(cfg, opcoes, historico: list[tuple[str, str]], nome: str = '') -> list[dict[str, str]]:
+PRIMEIRA_RESPOSTA = (
+    'ESTA E A PRIMEIRA RESPOSTA do atendimento a esta pessoa. Se a mensagem dela responde a '
+    'uma mensagem anterior da igreja (por exemplo, "como foi sua experiencia?"), agradeca e reaja '
+    'com carinho ao que ela disse; se ela fez uma pergunta, responda. Nao liste as opcoes: o menu '
+    'sera enviado logo depois da sua resposta.'
+)
+
+
+def montar_prompt(
+    cfg, opcoes, historico: list[tuple[str, str]], nome: str = '', *, primeira: bool = False,
+) -> list[dict[str, str]]:
     """Mensagens para o chat: regras + base + opcoes no system; conversa como user/assistant."""
     linhas_opcoes = []
     for numero, opcao in enumerate(opcoes, start=1):
@@ -78,6 +88,8 @@ def montar_prompt(cfg, opcoes, historico: list[tuple[str, str]], nome: str = '')
     system += '\n\nOPCOES:\n' + ('\n'.join(linhas_opcoes) or '(nenhuma)')
     if nome:
         system += f'\n\nPrimeiro nome da pessoa: {nome}'
+    if primeira:
+        system += f'\n\n{PRIMEIRA_RESPOSTA}'
 
     mensagens = [{'role': 'system', 'content': system}]
     for papel, texto in historico:
@@ -138,9 +150,11 @@ def interpretar_resposta(texto: str, total_opcoes: int) -> dict | None:
     return {'acao': acao, 'opcao': None, 'resposta': resposta[:1000]}
 
 
-def consultar(cfg, opcoes, historico, nome: str = '') -> dict:
+def consultar(cfg, opcoes, historico, nome: str = '', *, primeira: bool = False) -> dict:
     """Chama a IA e interpreta. Levanta ia_service.IAError; resposta ilegivel vira acao None."""
-    resultado = ia_service.chat(montar_prompt(cfg, opcoes, historico, nome), modelo=_modelo(cfg))
+    resultado = ia_service.chat(
+        montar_prompt(cfg, opcoes, historico, nome, primeira=primeira), modelo=_modelo(cfg),
+    )
     decisao = interpretar_resposta(resultado['texto'], len(opcoes))
     return {**resultado, 'decisao': decisao}
 
@@ -183,8 +197,13 @@ def _tem_entrada_mais_nova(pessoa, mensagem_id: int) -> bool:
     ).exists()
 
 
-def _sem_ia(pessoa, cfg, opcoes, texto: str, agora) -> str:
+def _sem_ia(pessoa, cfg, opcoes, texto: str, agora, *, primeira: bool = False) -> str:
     """IA falhou: tenta a palavra-chave (frase longa pulou essa etapa) e, sem ela, o menu."""
+    if primeira:
+        # Primeira mensagem: o mesmo de antes da IA (saudacao + menu), nao "nao entendi".
+        atendimento_bot.enfileirar_resposta(pessoa, atendimento_bot._com_menu(cfg.mensagem_saudacao, opcoes))
+        atendimento_bot._log(pessoa, 'Atendimento automatico: IA indisponivel, enviou saudacao + menu.', agora)
+        return 'fallback'
     opcao = atendimento_bot.encontrar_opcao(texto, opcoes)
     if opcao is not None:
         atendimento_bot.aplicar_opcao(pessoa, opcao, agora)
@@ -193,7 +212,7 @@ def _sem_ia(pessoa, cfg, opcoes, texto: str, agora) -> str:
     return 'fallback'
 
 
-def responder(pessoa_id: int, mensagem_id: int, *, esperar: bool = True) -> str:
+def responder(pessoa_id: int, mensagem_id: int, *, esperar: bool = True, primeira: bool = False) -> str:
     """Responde a entrada com a IA. Devolve a acao tomada (para log/teste)."""
     if esperar:
         time.sleep(ESPERA_DEBOUNCE_SEGUNDOS)
@@ -217,10 +236,10 @@ def responder(pessoa_id: int, mensagem_id: int, *, esperar: bool = True) -> str:
 
     texto = (mensagem.transcricao or mensagem.conteudo or '').strip()
     try:
-        resultado = consultar(cfg, opcoes, _historico(pessoa), _primeiro_nome(pessoa))
+        resultado = consultar(cfg, opcoes, _historico(pessoa), _primeiro_nome(pessoa), primeira=primeira)
     except ia_service.IAError as exc:
         logger.warning('IA do robo indisponivel (pessoa=%s, http=%s): %s', pessoa.pk, exc.http_status, exc)
-        return _sem_ia(pessoa, cfg, opcoes, texto, agora)
+        return _sem_ia(pessoa, cfg, opcoes, texto, agora, primeira=primeira)
 
     decisao = resultado['decisao']
     meta_ia = {
@@ -229,10 +248,11 @@ def responder(pessoa_id: int, mensagem_id: int, *, esperar: bool = True) -> str:
         'tokens_saida': resultado['tokens_saida'],
         'acao': decisao['acao'] if decisao else 'ilegivel',
         'entrada_id': mensagem.pk,
+        'primeira': primeira,
     }
     if decisao is None:
         logger.warning('IA do robo devolveu resposta ilegivel (pessoa=%s).', pessoa.pk)
-        return _sem_ia(pessoa, cfg, opcoes, texto, agora)
+        return _sem_ia(pessoa, cfg, opcoes, texto, agora, primeira=primeira)
 
     if decisao['acao'] == 'opcao':
         opcao = opcoes[decisao['opcao'] - 1]
@@ -246,22 +266,28 @@ def responder(pessoa_id: int, mensagem_id: int, *, esperar: bool = True) -> str:
         atendimento_bot.transferir_para_equipe(pessoa, 'a IA pediu ajuda da equipe', agora)
         return 'transferir'
 
-    atendimento_bot.enfileirar_resposta(pessoa, decisao['resposta'], origem=ORIGEM_IA, extra={'ia': meta_ia})
+    resposta = decisao['resposta']
+    if primeira:
+        # Na primeira resposta o menu vai junto, como na saudacao fixa.
+        resposta = atendimento_bot._com_menu(resposta, opcoes)
+    atendimento_bot.enfileirar_resposta(pessoa, resposta, origem=ORIGEM_IA, extra={'ia': meta_ia})
     atendimento_bot._log(pessoa, f'Atendimento automatico: IA respondeu "{texto[:60]}".', agora)
     return 'responder'
 
 
-def _responder_em_thread(pessoa_id: int, mensagem_id: int) -> None:
+def _responder_em_thread(pessoa_id: int, mensagem_id: int, primeira: bool = False) -> None:
     try:
-        responder(pessoa_id, mensagem_id)
+        responder(pessoa_id, mensagem_id, primeira=primeira)
     except Exception:  # noqa: BLE001 - thread de fundo nao pode morrer com traceback solto.
         logger.exception('Erro inesperado na IA do robo (mensagem %s).', mensagem_id)
     finally:
         close_old_connections()
 
 
-def agendar(pessoa_id: int, mensagem_id: int) -> None:
+def agendar(pessoa_id: int, mensagem_id: int, *, primeira: bool = False) -> None:
     """Responde em segundo plano DEPOIS do commit (o webhook responde a Meta antes)."""
     transaction.on_commit(
-        lambda: threading.Thread(target=_responder_em_thread, args=(pessoa_id, mensagem_id), daemon=True).start()
+        lambda: threading.Thread(
+            target=_responder_em_thread, args=(pessoa_id, mensagem_id, primeira), daemon=True,
+        ).start()
     )

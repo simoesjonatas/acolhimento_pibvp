@@ -178,26 +178,39 @@ def processar_entrada(pessoa, texto: str, mensagem=None, *, em_segundo_plano: bo
     agora = timezone.now()
     Etapa = PrimeiroContato.BotEtapaChoices
 
-    # Primeira interacao: cumprimenta e mostra o menu (nao interpreta o texto inicial).
-    if pessoa.bot_etapa == Etapa.INATIVO:
-        enfileirar_resposta(pessoa, _com_menu(cfg.mensagem_saudacao, opcoes))
-        pessoa.bot_etapa = Etapa.MENU
-        pessoa.status = PrimeiroContato.StatusAcolhimento.ROBO
-        pessoa.save(update_fields=['bot_etapa', 'status', 'atualizado_em'])
-        _log(pessoa, 'Atendimento automatico: enviou saudacao + menu.', agora)
-        return True
-
-    # Audio: so da para entender depois da transcricao (feita apos o download).
-    if not em_segundo_plano and _eh_audio_para_transcrever(mensagem, cfg):
-        metadata = dict(mensagem.metadata_resposta or {})
-        metadata['bot_aguardando_transcricao'] = True
-        mensagem.metadata_resposta = metadata
-        mensagem.save(update_fields=['metadata_resposta', 'atualizado_em'])
-        return True
-
     from apps.acolhimento import atendimento_ia
 
     usa_ia = cfg.ia_ativa and mensagem is not None and atendimento_ia.ia_configurada()
+    audio_pendente = not em_segundo_plano and _eh_audio_para_transcrever(mensagem, cfg)
+    metadata_entrada = dict(mensagem.metadata_resposta or {}) if mensagem is not None else {}
+    primeira = bool(metadata_entrada.get('bot_primeira'))
+
+    # Primeira interacao. Sem IA, ou quando e so um cumprimento ("oi", "bom dia"):
+    # saudacao fixa + menu (rapido e sem custo). Com IA e uma mensagem de verdade
+    # (ex.: resposta ao template "como foi sua experiencia?"), a IA responde ao que a
+    # pessoa disse e o menu vai junto.
+    if pessoa.bot_etapa == Etapa.INATIVO:
+        pessoa.bot_etapa = Etapa.MENU
+        pessoa.status = PrimeiroContato.StatusAcolhimento.ROBO
+        pessoa.save(update_fields=['bot_etapa', 'status', 'atualizado_em'])
+        if not usa_ia or (not audio_pendente and eh_saudacao_simples(texto)):
+            enfileirar_resposta(pessoa, _com_menu(cfg.mensagem_saudacao, opcoes))
+            _log(pessoa, 'Atendimento automatico: enviou saudacao + menu.', agora)
+            return True
+        primeira = True
+        if not audio_pendente:
+            _log(pessoa, 'Atendimento automatico: primeira mensagem encaminhada para a IA.', agora)
+            _chamar_ia(pessoa, mensagem, em_segundo_plano, primeira=True)
+            return True
+
+    # Audio: so da para entender depois da transcricao (feita apos o download).
+    if audio_pendente:
+        metadata_entrada['bot_aguardando_transcricao'] = True
+        if primeira:
+            metadata_entrada['bot_primeira'] = True
+        mensagem.metadata_resposta = metadata_entrada
+        mensagem.save(update_fields=['metadata_resposta', 'atualizado_em'])
+        return True
 
     # Aguardando escolha no menu. Numero e mensagem curta casam direto com a opcao;
     # frase mais longa vai para a IA (com IA ligada), que conhece as opcoes e pode
@@ -208,14 +221,43 @@ def processar_entrada(pessoa, texto: str, mensagem=None, *, em_segundo_plano: bo
         return True
 
     if usa_ia:
-        if em_segundo_plano:
-            atendimento_ia.responder(pessoa.pk, mensagem.pk)
-        else:
-            atendimento_ia.agendar(pessoa.pk, mensagem.pk)
+        _chamar_ia(pessoa, mensagem, em_segundo_plano, primeira=primeira)
+        return True
+
+    if primeira:
+        # Primeiro audio que nao deu para transcrever: saudacao + menu, nao "nao entendi".
+        enfileirar_resposta(pessoa, _com_menu(cfg.mensagem_saudacao, opcoes))
+        _log(pessoa, 'Atendimento automatico: enviou saudacao + menu.', agora)
         return True
 
     reenviar_menu(pessoa, cfg, opcoes, texto, agora)
     return True
+
+
+def _chamar_ia(pessoa, mensagem, em_segundo_plano: bool, *, primeira: bool) -> None:
+    from apps.acolhimento import atendimento_ia
+
+    if em_segundo_plano:
+        atendimento_ia.responder(pessoa.pk, mensagem.pk, primeira=primeira)
+    else:
+        atendimento_ia.agendar(pessoa.pk, mensagem.pk, primeira=primeira)
+
+
+# Palavras de um cumprimento sem pedido: com elas a 1a mensagem recebe a saudacao fixa.
+_PALAVRAS_SAUDACAO = {
+    'oi', 'oie', 'oii', 'ola', 'olá', 'opa', 'eai', 'eae', 'e', 'ai', 'aí', 'bom', 'boa', 'dia', 'tarde',
+    'noite', 'tudo', 'bem', 'td', 'blz', 'beleza', 'paz', 'graça', 'graca', 'a', 'hello', 'hi', 'salve',
+    'amém', 'amem', 'irmão', 'irmao', 'irmã', 'irma', 'gente', 'pessoal', 'como', 'vai', 'vão', 'vao',
+}
+
+
+def eh_saudacao_simples(texto: str) -> bool:
+    """"oi", "bom dia!", "olá, tudo bem?", figurinha/midia sem texto: nada para a IA entender."""
+    t = (texto or '').strip().lower()
+    if not t or (t.startswith('(') and t.endswith(')')):
+        return True
+    palavras = re.findall(r'\w+', t)
+    return len(palavras) <= 5 and all(p in _PALAVRAS_SAUDACAO for p in palavras)
 
 
 PALAVRAS_FRASE_LONGA = 4

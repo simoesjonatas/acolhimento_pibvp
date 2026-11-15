@@ -66,8 +66,11 @@ class _Base(TestCase):
 			direcao=MensagemContato.DirecaoChoices.ENTRADA, status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
 			conteudo='(audio)', midia_tipo='audio', midia_id='M1', midia_mime='audio/ogg; codecs=opus',
 			midia_status=MensagemContato.MidiaStatusChoices.BAIXADA,
-			metadata_resposta={'bot_aguardando_transcricao': True} if aguardando else {},
-			**{'transcricao_status': Status.PENDENTE, **extra},
+			**{
+				'transcricao_status': Status.PENDENTE,
+				'metadata_resposta': {'bot_aguardando_transcricao': True} if aguardando else {},
+				**extra,
+			},
 		)
 		mensagem.midia_arquivo.save('midia.ogg', ContentFile(b'OggS-fake'), save=False)
 		mensagem.save()
@@ -154,8 +157,54 @@ class RoboDepoisDaTranscricaoTests(_Base):
 				patch.object(atendimento_ia, 'responder') as responder, \
 				patch.object(atendimento_ia, 'agendar') as agendar:
 			transcricao.depois_do_download(mensagem)
-		responder.assert_called_once_with(self.pessoa.pk, mensagem.pk)
+		responder.assert_called_once_with(self.pessoa.pk, mensagem.pk, primeira=False)
 		agendar.assert_not_called()
+
+	@override_settings(OLLAMA_API_KEY='chave-teste')
+	def test_primeiro_audio_espera_a_transcricao_e_vai_para_a_ia_como_primeira(self):
+		cfg = ConfiguracaoAtendimentoBot.carregar()
+		cfg.ia_ativa = True
+		cfg.ia_base_conhecimento = 'Endereco: Rua X.'
+		cfg.save()
+		from apps.acolhimento import atendimento_bot
+
+		PrimeiroContato.objects.filter(pk=self.pessoa.pk).update(
+			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO, bot_etapa=PrimeiroContato.BotEtapaChoices.INATIVO,
+		)
+		self.pessoa.refresh_from_db()
+		mensagem = self._audio(aguardando=False)
+		self.assertTrue(atendimento_bot.processar_entrada(self.pessoa, '(audio)', mensagem))
+		self.assertEqual(self._saidas(), [])  # nada de saudacao antes de entender o audio
+		mensagem.refresh_from_db()
+		self.assertTrue(mensagem.metadata_resposta['bot_primeira'])
+		with patch.object(ia_service, 'transcrever_groq', return_value='onde fica a igreja'), \
+				patch.object(atendimento_ia, 'responder') as responder:
+			transcricao.depois_do_download(mensagem)
+		responder.assert_called_once_with(self.pessoa.pk, mensagem.pk, primeira=True)
+
+	@override_settings(OLLAMA_API_KEY='chave-teste')
+	def test_primeiro_audio_sem_transcricao_recebe_saudacao(self):
+		cfg = ConfiguracaoAtendimentoBot.carregar()
+		cfg.ia_ativa = True
+		cfg.save()
+		mensagem = self._audio(metadata_resposta={'bot_aguardando_transcricao': True, 'bot_primeira': True})
+		with patch.object(ia_service, 'transcrever_groq', side_effect=ia_service.IAError('HTTP 400', http_status=400)), \
+				patch.object(atendimento_ia, 'responder') as responder:
+			transcricao.depois_do_download(mensagem)
+		responder.assert_not_called()
+		self.assertTrue(self._saidas()[0].conteudo.startswith(cfg.mensagem_saudacao))
+
+	@override_settings(OLLAMA_API_KEY='chave-teste')
+	def test_falha_na_transcricao_nao_manda_audio_para_a_ia(self):
+		cfg = ConfiguracaoAtendimentoBot.carregar()
+		cfg.ia_ativa = True
+		cfg.save()
+		mensagem = self._audio()
+		with patch.object(ia_service, 'transcrever_groq', side_effect=ia_service.IAError('HTTP 400', http_status=400)), \
+				patch.object(atendimento_ia, 'responder') as responder:
+			transcricao.depois_do_download(mensagem)
+		responder.assert_not_called()
+		self.assertIn('1. Horario dos cultos', self._saidas()[0].conteudo)
 
 	def test_falha_na_transcricao_mantem_o_menu(self):
 		mensagem = self._audio()
@@ -229,6 +278,23 @@ class WebhookAudioTests(_Base):
 		self.assertTrue(entrada.metadata_resposta['bot_aguardando_transcricao'])
 		# Nada de "nao entendi" + menu antes da transcricao.
 		self.assertEqual(self._saidas(), [])
+
+	def test_reacao_fica_registrada_mas_nao_aciona_o_robo(self):
+		PrimeiroContato.objects.filter(pk=self.pessoa.pk).update(
+			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO, bot_etapa=PrimeiroContato.BotEtapaChoices.INATIVO,
+		)
+		payload = {'object': 'whatsapp_business_account', 'entry': [{'changes': [{'field': 'messages', 'value': {
+			'messages': [{'from': '5521970002222', 'id': 'wamid.REAC', 'timestamp': '1700000000', 'type': 'reaction',
+						  'reaction': {'message_id': 'wamid.OUT', 'emoji': '\u2764\ufe0f'}}],
+		}}]}]}
+		resp = self.client.post(reverse('mensagens-webhook-meta'), data=json.dumps(payload), content_type='application/json')
+		self.assertEqual(resp.status_code, 200)
+		entrada = MensagemContato.objects.get(referencia_externa='wamid.REAC')
+		self.assertIn('reacao', entrada.conteudo)
+		self.assertEqual(self._saidas(), [])
+		self.pessoa.refresh_from_db()
+		self.assertEqual(self.pessoa.bot_etapa, PrimeiroContato.BotEtapaChoices.INATIVO)
+		self.assertEqual(self.pessoa.status, PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO)
 
 	def test_transcricao_desligada_mantem_o_comportamento_antigo(self):
 		cfg = ConfiguracaoAtendimentoBot.carregar()

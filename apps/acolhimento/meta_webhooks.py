@@ -378,6 +378,13 @@ class MetaWebhookView(View):
             logger.info('Webhook Meta: entrada de botao registrada (pessoa=%s, botao=%s).', pessoa.id, marcador_botao)
             return True
 
+        # Reacao (curtir com emoji) nao e mensagem: fica registrada na conversa, mas nem
+        # o robo nem o flip de status reagem a ela (antes ela disparava saudacao + menu).
+        if message.get('type') == 'reaction':
+            _marcar_como_lida(msg_id)
+            logger.info('Webhook Meta: reacao registrada (pessoa=%s).', pessoa.id)
+            return True
+
         # Atendimento automatico (bot de menu). Se ele assumir, controla o status;
         # senao, aplica o flip legado da 1a resposta (pessoa -> Em acompanhamento).
         handled = atendimento_bot.processar_entrada(pessoa, texto, entrada)
