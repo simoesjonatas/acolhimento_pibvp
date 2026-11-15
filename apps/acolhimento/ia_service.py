@@ -19,6 +19,10 @@ from typing import Any
 
 from django.conf import settings
 
+# A Groq fica atras do Cloudflare, que bloqueia o User-Agent padrao do urllib
+# ("Python-urllib/3.x") com 403 "error code: 1010".
+USER_AGENT = 'acolhimento-pibvp/1.0'
+
 
 class IAError(RuntimeError):
     """Falha ao falar com a IA. `http_status` 0 = sem resposta (rede, timeout)."""
@@ -98,6 +102,7 @@ def chat(messages: list[dict[str, str]], *, modelo: str = '', timeout: int | Non
     req = urllib.request.Request(f'{base}/api/chat', data=json.dumps(payload).encode('utf-8'), method='POST')
     req.add_header('Authorization', f'Bearer {chave}')
     req.add_header('Content-Type', 'application/json')
+    req.add_header('User-Agent', USER_AGENT)
     if timeout is None:
         timeout = int(getattr(settings, 'IA_TIMEOUT_SECONDS', 40) or 40)
     data = _abrir(req, timeout)
@@ -147,5 +152,6 @@ def transcrever_groq(conteudo: bytes, *, nome: str, mime: str, timeout: int = 60
     req = urllib.request.Request(f'{base}/audio/transcriptions', data=b''.join(partes), method='POST')
     req.add_header('Authorization', f'Bearer {chave}')
     req.add_header('Content-Type', f'multipart/form-data; boundary={fronteira}')
+    req.add_header('User-Agent', USER_AGENT)
     data = _abrir(req, timeout)
     return str((data or {}).get('text') or '').strip() if isinstance(data, dict) else ''

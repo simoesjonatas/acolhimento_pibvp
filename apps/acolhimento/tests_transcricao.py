@@ -320,6 +320,8 @@ class GroqClienteTests(TestCase):
 		req = urlopen.call_args.args[0]
 		self.assertEqual(req.full_url, 'https://groq.teste/v1/audio/transcriptions')
 		self.assertEqual(req.get_header('Authorization'), 'Bearer groq-teste')
+		# Sem User-Agent proprio o Cloudflare da Groq responde 403 (error code 1010).
+		self.assertEqual(req.get_header('User-agent'), 'acolhimento-pibvp/1.0')
 		corpo = req.data
 		self.assertIn(b'name="model"\r\n\r\nwhisper-large-v3-turbo', corpo)
 		self.assertIn(b'name="language"\r\n\r\npt', corpo)

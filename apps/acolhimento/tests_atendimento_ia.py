@@ -331,6 +331,7 @@ class OllamaClienteTests(TestCase):
 		req = urlopen.call_args.args[0]
 		self.assertEqual(req.full_url, 'https://ollama.teste/api/chat')
 		self.assertEqual(req.get_header('Authorization'), 'Bearer chave-teste')
+		self.assertEqual(req.get_header('User-agent'), 'acolhimento-pibvp/1.0')
 		payload = json.loads(req.data)
 		self.assertEqual(payload['stream'], False)
 		self.assertEqual(payload['think'], False)
