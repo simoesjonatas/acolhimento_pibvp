@@ -42,8 +42,18 @@
             {% endwith %}
         </div>
         {% if mensagem.legenda_midia %}<p>{{ mensagem.legenda_midia|linebreaksbr }}</p>{% endif %}
+        {% if mensagem.midia_tipo == 'audio' and mensagem.transcricao_status %}
+        <p class="message-transcricao{% if mensagem.transcricao_status != 'ok' %} is-muted{% endif %}">
+            {% if mensagem.transcricao_status == 'ok' %}<span>Transcrição:</span> “{{ mensagem.transcricao }}”
+            {% elif mensagem.transcricao_status == 'pendente' %}Transcrevendo o áudio…
+            {% else %}Não foi possível transcrever este áudio.{% endif %}
+        </p>
+        {% endif %}
         {% else %}
         <p>{{ mensagem.conteudo|linebreaksbr }}</p>
+        {% endif %}
+        {% if mensagem.direcao == 'saida' and mensagem.metadata_envio.origem == 'bot_ia' %}
+        <p class="message-ia" title="Resposta escrita pela IA do robô, com base na base de conhecimento">Respondida pela IA</p>
         {% endif %}
         {% if mensagem.direcao == 'saida' and mensagem.metadata_envio.meta_template.nome %}
         <p class="message-template" title="Modelo aprovado pela Meta. A pessoa recebe o texto acima, com o nome dela.">Enviada pelo modelo aprovado <strong>{{ mensagem.metadata_envio.meta_template.nome }}</strong></p>

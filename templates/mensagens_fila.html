@@ -223,6 +223,8 @@
                                 {% endif %}
                             </div>
                             <p class="queue-content-preview">{{ mensagem.conteudo|truncatechars:180 }}</p>
+                            {% if mensagem.transcricao %}<p class="queue-content-preview"><em>Transcrição: “{{ mensagem.transcricao|truncatechars:160 }}”</em></p>{% endif %}
+                            {% if mensagem.metadata_envio.origem == 'bot_ia' %}<span class="queue-reference queue-template">Respondida pela IA</span>{% endif %}
                             {% if mensagem.metadata_envio.meta_template.nome %}
                             <span class="queue-reference queue-template" title="Modelo aprovado pela Meta. A pessoa recebe o texto acima, com o nome dela.">Modelo {{ mensagem.metadata_envio.meta_template.nome }}</span>
                             {% endif %}

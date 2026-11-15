@@ -146,6 +146,10 @@ def baixar_midia_da_mensagem(mensagem_id: int) -> bool:
         'midia_tentativas', 'midia_erro', 'atualizado_em',
     ])
     logger.info('Midia da mensagem %s baixada (%s bytes).', mensagem.pk, len(conteudo))
+    # Audio com transcricao ligada: transcreve e entrega ao robo (ja estamos fora do webhook).
+    from apps.acolhimento import transcricao
+
+    transcricao.depois_do_download(mensagem)
     return True
 
 
