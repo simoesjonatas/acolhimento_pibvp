@@ -61,6 +61,8 @@ class PrimeiroContato(models.Model):
 		ROBO = 'robo', 'Visitante'
 		EM_ACOMPANHAMENTO = 'em_acompanhamento', 'Em acompanhamento'
 		PARTICIPANTE = 'participante', 'Ingressante'
+		# Entre ingressante e aprovado: a pessoa esta passando pelo gabinete pastoral.
+		EM_GABINETE = 'em_gabinete', 'Em gabinete'
 		APROVADO = 'aprovado', 'Aprovado'
 		MEMBRO = 'membro', 'Membro'
 
