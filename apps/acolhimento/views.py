@@ -27,7 +27,7 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento.visibilidade import filtrar_por_pessoa, pessoas_visiveis, ve_toda_base
-from apps.acolhimento import atencao, boas_vindas, fila_auto, gabinete_avisos, meta_service, rodizio, template_config
+from apps.acolhimento import atencao, boas_vindas, fila_auto, gabinete_avisos, meta_service, rodizio, template_config, templates_tela
 from apps.acolhimento.aguardando_resposta import (
 	DIAS_PESSOA_NOVA,
 	DIAS_RESPONDIDAS,
@@ -1778,7 +1778,37 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 			cfg.tipo: cfg
 			for cfg in TemplateWhatsapp.objects.select_related('atualizado_por')
 		}
+		abas = templates_tela.montar_abas(
+			context['form'],
+			usa_meta=context['usa_meta'],
+			usa_twilio=context['usa_twilio'],
+			usa_evolution=context['usa_evolution'],
+			configs=context['configs'],
+			env={
+				'opt_in': {
+					'nome': context['env_opt_in_meta_nome'], 'sid': context['env_opt_in_sid'],
+					'texto': context['env_opt_in_texto_evolution'],
+				},
+				'continuar': {
+					'nome': context['env_continuar_meta_nome'], 'sid': context['env_continuar_sid'],
+					'texto': context['env_continuar_texto_evolution'],
+				},
+			},
+		)
+		context['abas'] = abas
+		# Com erro, abre a primeira aba que tem campo para corrigir; senao, a pedida.
+		com_erro = [aba['slug'] for aba in abas if aba['erros']]
+		pedida = (self.request.GET.get('aba') or self.request.POST.get('aba') or '').strip()
+		if com_erro:
+			context['aba_ativa'] = com_erro[0]
+		else:
+			context['aba_ativa'] = pedida if pedida in templates_tela.ABAS_VALIDAS else templates_tela.ABAS_VALIDAS[0]
 		return context
+
+	def get_success_url(self):
+		aba = (self.request.POST.get('aba') or '').strip()
+		url = super().get_success_url()
+		return f'{url}?aba={aba}' if aba in templates_tela.ABAS_VALIDAS else url
 
 	def form_valid(self, form):
 		dados = form.cleaned_data
@@ -1830,6 +1860,13 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 	def form_invalid(self, form):
 		messages.error(self.request, 'Nao foi possivel salvar. Verifique os campos destacados.')
 		return super().form_invalid(form)
+
+
+class ConfiguracaoTemplatesStatusView(LoginRequiredMixin, SuperAdminPermissaoMixin, View):
+	"""Status de cada template na Meta + previa do texto, pedido pela tela depois de abrir."""
+
+	def get(self, request, *args, **kwargs):
+		return JsonResponse(templates_tela.status_cartoes())
 
 
 class MensagemContatoExcluirView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, View):

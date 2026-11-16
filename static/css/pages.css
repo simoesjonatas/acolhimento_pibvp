@@ -5602,3 +5602,137 @@ a.kpi-card:hover {
     background: #fef2f2;
     color: #b91c1c;
 }
+
+/* Mensagens do WhatsApp: abas, status na Meta e previa do texto. */
+.config-templates-page .config-tab-panel {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+}
+
+.config-templates-page .config-tab-panel[hidden] {
+    display: none;
+}
+
+.config-templates-page .aba-rotulo-curto {
+    display: none;
+}
+
+.tpl-aba-erro {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.tpl-cabecalho {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 10px;
+}
+
+.tpl-cabecalho h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.tpl-descricao {
+    margin: 4px 0 12px;
+    color: var(--muted);
+    font-size: 0.86rem;
+}
+
+.tpl-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border: 1px solid #d8d9e5;
+    border-radius: 999px;
+    background: #f3f3f8;
+    color: #525465;
+    font-size: 0.74rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.tpl-status.is-ok { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.tpl-status.is-espera { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.tpl-status.is-erro { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+
+.tpl-linha {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 110px;
+    gap: 10px;
+    /* Sem isto o campo Idioma estica ate a altura da dica embaixo do nome. */
+    align-items: start;
+}
+
+.tpl-linha input,
+.config-template-card textarea {
+    width: 100%;
+}
+
+.tpl-previa {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border-radius: 10px 10px 10px 2px;
+    background: #e7fbe9;
+    border: 1px solid #c4ecc9;
+}
+
+.tpl-previa-rotulo {
+    display: block;
+    margin-bottom: 4px;
+    color: #3f6b46;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.tpl-previa p {
+    margin: 0;
+    white-space: pre-wrap;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.tpl-aviso {
+    margin: -6px 0 14px;
+    color: #b91c1c;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.tpl-avancado {
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+}
+
+.tpl-avancado summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.84rem;
+    font-weight: 800;
+}
+
+.tpl-avancado[open] summary {
+    margin-bottom: 8px;
+}
+
+.tpl-salvar {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    padding: 10px 0;
+    background: linear-gradient(180deg, rgba(247, 247, 250, 0) 0%, var(--bg, #f7f7fa) 35%);
+}
+
+@media (max-width: 600px) {
+    .config-templates-page .aba-rotulo-longo { display: none; }
+    .config-templates-page .aba-rotulo-curto { display: inline; }
+    .tpl-linha { grid-template-columns: minmax(0, 1fr); }
+}
