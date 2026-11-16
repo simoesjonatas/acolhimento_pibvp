@@ -3335,6 +3335,89 @@ a.queue-summary-item:hover {
     gap: 8px;
 }
 
+/* Boas-vindas: botao do disparo manual + switch do envio automatico. */
+.boas-vindas-box {
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+}
+
+.dashboard-actions .boas-vindas-auto {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 4px;
+}
+
+.boas-vindas-auto-texto {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+    font-size: 0.85rem;
+}
+
+.boas-vindas-auto-texto small {
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+.dashboard-actions button.mini-switch {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 7px;
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    color: #b91c1c;
+    cursor: pointer;
+}
+
+.mini-switch-track {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    border-radius: 999px;
+    background: #cbd5e1;
+    transition: background 0.2s;
+}
+
+.mini-switch-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    transition: left 0.2s;
+}
+
+.mini-switch.is-on .mini-switch-track {
+    background: #22c55e;
+}
+
+.mini-switch.is-on .mini-switch-thumb {
+    left: 21px;
+}
+
+.mini-switch-label {
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+}
+
+.dashboard-actions button.mini-switch.is-on {
+    color: #15803d;
+}
+
 .quick-action-count {
     display: inline-flex;
     align-items: center;

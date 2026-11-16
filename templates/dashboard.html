@@ -42,19 +42,36 @@
         {% endif %}
         <a class="btn secundario" href="{% url 'mensagens-fila' %}">Abrir fila global</a>
         <a class="btn secundario" href="{% url 'mensagens-disparo-massa' %}">Disparo em massa</a>
-        <form method="post">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="disparar_template_opt_in">
-            <button
-                type="submit"
-                class="secundario quick-action-count-button"
-                aria-label="Disparar boas-vindas para {{ total_boas_vindas }} pessoa{{ total_boas_vindas|pluralize:'s' }} em primeiro contato"
-            >
-                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                <span class="btn-text">Disparar boas-vindas</span>
-                <span class="quick-action-count" aria-hidden="true">{{ total_boas_vindas }}</span>
-            </button>
-        </form>
+        <div class="boas-vindas-box">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="disparar_template_opt_in">
+                <button
+                    type="submit"
+                    class="secundario quick-action-count-button"
+                    aria-label="Disparar boas-vindas para {{ total_boas_vindas }} pessoa{{ total_boas_vindas|pluralize:'s' }} em primeiro contato"
+                >
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    <span class="btn-text">Disparar boas-vindas</span>
+                    <span class="quick-action-count" aria-hidden="true">{{ total_boas_vindas }}</span>
+                </button>
+            </form>
+            <form method="post" class="boas-vindas-auto">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="boas_vindas_auto">
+                <span class="boas-vindas-auto-texto">
+                    <strong>Envio automatico</strong>
+                    <small>{% if boas_vindas_auto %}Quem e cadastrado ja recebe.{% else %}Desligado: envio pelo botao acima.{% endif %}</small>
+                </span>
+                <button type="submit" class="mini-switch {% if boas_vindas_auto %}is-on{% endif %}"
+                        role="switch" aria-checked="{% if boas_vindas_auto %}true{% else %}false{% endif %}"
+                        aria-label="Envio automatico das boas-vindas"
+                        title="{% if boas_vindas_auto %}Desligar{% else %}Ligar{% endif %} o envio automatico das boas-vindas">
+                    <span class="mini-switch-track"><span class="mini-switch-thumb"></span></span>
+                    <span class="mini-switch-label">{% if boas_vindas_auto %}LIGADO{% else %}DESLIGADO{% endif %}</span>
+                </button>
+            </form>
+        </div>
         {% endif %}
     </aside>
 </div>

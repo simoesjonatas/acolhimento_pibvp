@@ -26,7 +26,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
-from apps.acolhimento import fila_auto, gabinete_avisos, meta_service, template_config
+from apps.acolhimento import boas_vindas, fila_auto, gabinete_avisos, meta_service, template_config
 from apps.acolhimento.aguardando_resposta import (
 	DIAS_PESSOA_NOVA,
 	DIAS_RESPONDIDAS,
@@ -1011,7 +1011,10 @@ class PrimeiroContatoCreateView(LoginRequiredMixin, CreateView):
 		if not form.instance.responsavel_atual_id:
 			form.instance.responsavel_atual = self.request.user
 		response = super().form_valid(form)
-		messages.success(self.request, 'Pessoa cadastrada com sucesso.')
+		if boas_vindas.ao_cadastrar(self.object, self.request.user):
+			messages.success(self.request, 'Pessoa cadastrada com sucesso. Boas-vindas enviadas para a fila do WhatsApp.')
+		else:
+			messages.success(self.request, 'Pessoa cadastrada com sucesso.')
 		return response
 
 	def form_invalid(self, form):
@@ -1027,7 +1030,9 @@ class AutoCadastroCreateView(CreateView):
 	def form_valid(self, form):
 		form.instance.origem_cadastro = PrimeiroContato.OrigemCadastroChoices.AUTO_CADASTRO
 		form.instance.criado_por = None
-		return super().form_valid(form)
+		response = super().form_valid(form)
+		boas_vindas.ao_cadastrar(self.object)
+		return response
 
 
 class AutoCadastroSuccessView(TemplateView):
