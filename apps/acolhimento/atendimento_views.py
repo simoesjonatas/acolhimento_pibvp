@@ -9,7 +9,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Max
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, UpdateView
 
@@ -34,11 +34,20 @@ class _SuperUserOnly(LoginRequiredMixin, UserPassesTestMixin):
         return self.request.user.is_superuser
 
 
+ABAS_CONFIGURACAO = ('menu', 'textos', 'ia')
+
+
+def _voltar_para(aba):
+    """Volta para a tela de configuracao ja na aba onde a acao aconteceu."""
+    return redirect(f"{reverse('configuracao-atendimento')}?aba={aba}")
+
+
 class ConfiguracaoAtendimentoBotView(_SuperUserOnly, View):
     template_name = 'configuracao_atendimento.html'
 
     def get(self, request, *args, **kwargs):
-        return render(request, self.template_name, self._contexto())
+        aba = (request.GET.get('aba') or '').strip()
+        return render(request, self.template_name, self._contexto(aba=aba))
 
     def post(self, request, *args, **kwargs):
         acao = request.POST.get('acao', '')
@@ -61,9 +70,9 @@ class ConfiguracaoAtendimentoBotView(_SuperUserOnly, View):
                 obj.atualizado_por = request.user
                 obj.save()
                 messages.success(request, 'Textos do atendimento atualizados.')
-                return redirect('configuracao-atendimento')
+                return _voltar_para('textos')
             messages.error(request, 'Nao foi possivel salvar os textos. Verifique os campos.')
-            return render(request, self.template_name, self._contexto(form=form))
+            return render(request, self.template_name, self._contexto(form=form, aba='textos'))
 
         if acao == 'ia':
             form_ia = ConfiguracaoIAForm(request.POST, instance=cfg)
@@ -72,9 +81,9 @@ class ConfiguracaoAtendimentoBotView(_SuperUserOnly, View):
                 obj.atualizado_por = request.user
                 obj.save()
                 messages.success(request, 'Configuracao da IA atualizada.')
-                return redirect('configuracao-atendimento')
+                return _voltar_para('ia')
             messages.error(request, 'Nao foi possivel salvar a IA. Verifique os campos.')
-            return render(request, self.template_name, self._contexto(form_ia=form_ia))
+            return render(request, self.template_name, self._contexto(form_ia=form_ia, aba='ia'))
 
         if acao == 'testar_ia':
             form_teste = TestarIAForm(request.POST)
@@ -85,13 +94,14 @@ class ConfiguracaoAtendimentoBotView(_SuperUserOnly, View):
                 else:
                     resultado = atendimento_ia.testar(form_teste.cleaned_data['pergunta'])
             return render(
-                request, self.template_name, self._contexto(form_teste=form_teste, resultado_teste=resultado),
+                request, self.template_name,
+                self._contexto(form_teste=form_teste, resultado_teste=resultado, aba='ia'),
             )
 
         messages.error(request, 'Acao invalida.')
         return redirect('configuracao-atendimento')
 
-    def _contexto(self, form=None, form_ia=None, form_teste=None, resultado_teste=None):
+    def _contexto(self, form=None, form_ia=None, form_teste=None, resultado_teste=None, aba=''):
         cfg = ConfiguracaoAtendimentoBot.carregar()
         opcoes = list(OpcaoAtendimentoBot.objects.all().order_by('ordem', 'id'))
         ativas = [op for op in opcoes if op.ativa]
@@ -102,6 +112,7 @@ class ConfiguracaoAtendimentoBotView(_SuperUserOnly, View):
             op.numero_menu = numeros.get(op.pk)
         return {
             'cfg': cfg,
+            'aba_ativa': aba if aba in ABAS_CONFIGURACAO else ABAS_CONFIGURACAO[0],
             'form': form or ConfiguracaoAtendimentoBotForm(instance=cfg),
             'opcoes': opcoes,
             'total_opcoes_ativas': len(ativas),
