@@ -18,8 +18,8 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
 
-from apps.acolhimento import template_config
-from apps.acolhimento.models import InteracaoAcolhimento, MensagemContato, PrimeiroContato, RegistroGabinete, TemplateWhatsapp
+from apps.acolhimento import boas_vindas, template_config
+from apps.acolhimento.models import ConfiguracaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato, RegistroGabinete, TemplateWhatsapp
 from apps.acolhimento.whatsapp_rules import contar_pessoas_janela_aberta
 from apps.core.forms import PerfilForm, QrCodeDinamicoForm, UsuarioCreateForm, UsuarioUpdateForm, eh_pastor
 from apps.core.models import QrCodeDinamico, telefone_do_usuario
@@ -67,19 +67,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 	template_name = 'dashboard.html'
 
 	def get_pessoas_boas_vindas_queryset(self):
-		# Nao manda boas-vindas para quem JA iniciou a conversa (o webhook marca
-		# iniciou_interacao=True quando a pessoa escreve primeiro pelo botao wa.me):
-		# nesse caso o atendimento reativo (bot) ja assume, sem cold outreach.
-		queryset = PrimeiroContato.objects.filter(
-			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO,
-		).exclude(iniciou_interacao=True)
-		# Carencia opt-in-first: da tempo da pessoa iniciar sozinha antes de mandarmos
-		# a 1a mensagem. HORAS_ESPERA_OPTIN=0 (padrao) desliga a carencia.
-		horas_espera = int(getattr(settings, 'HORAS_ESPERA_OPTIN', 0) or 0)
-		if horas_espera > 0:
-			limite = timezone.now() - timedelta(hours=horas_espera)
-			queryset = queryset.filter(criado_em__lte=limite)
-		return queryset
+		# Nao manda boas-vindas para quem JA iniciou a conversa (o atendimento reativo
+		# do bot ja assume) nem antes da carencia HORAS_ESPERA_OPTIN. Ver boas_vindas.
+		return boas_vindas.elegiveis()
 
 	def post(self, request, *args, **kwargs):
 		if not (request.user.is_staff or request.user.is_superuser):
@@ -87,6 +77,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 			return redirect('dashboard')
 
 		action = request.POST.get('action', '').strip()
+		if action == 'boas_vindas_auto':
+			return self._alternar_boas_vindas_auto(request)
 		if action not in {'disparar_boas_vindas', 'disparar_template_opt_in'}:
 			messages.error(request, 'Acao invalida para o dashboard.')
 			return redirect('dashboard')
@@ -104,82 +96,36 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 			messages.info(request, 'Nao ha pessoas em Primeiro contato para disparo.')
 			return redirect('dashboard')
 
-		tipo_template = TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO
-		usa_evolution = template_config.usando_evolution()
-		usa_meta = template_config.usando_meta()
-		template_sid = '' if usa_meta else template_config.opt_in_sid()
-		if action == 'disparar_template_opt_in' and not template_config.opt_in_configurado():
-			messages.error(request, template_config.mensagem_nao_configurado(tipo_template))
+		if not boas_vindas.configurado():
+			messages.error(request, template_config.mensagem_nao_configurado(TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO))
 			return redirect('dashboard')
 
-		try:
-			template_vars_base = json.loads(template_config.opt_in_variables() or '{}')
-			if not isinstance(template_vars_base, dict):
-				template_vars_base = {}
-		except Exception:
-			template_vars_base = {}
-		texto_evolution_base = template_config.opt_in_texto_evolution() if usa_evolution else ''
-		mensagens = []
-		for pessoa in pessoas_primeiro_contato:
-			nome = (pessoa.nome or '').strip() or 'amigo(a)'
-			content_variables = json.dumps(
-				{
-					**template_vars_base,
-					'1': nome,
-				},
-				ensure_ascii=False,
-			)
-			metadata_envio = {'tipo_template': tipo_template}
-			if template_sid:
-				metadata_envio['twilio_template'] = {
-					'content_sid': template_sid,
-					'content_variables': content_variables,
-				}
-			if usa_meta:
-				metadata_envio['meta_template'] = template_config.montar_meta_template(tipo_template, pessoa)
-			if usa_evolution:
-				texto_evolution = texto_evolution_base.replace('{nome}', nome)
-				metadata_envio['evolution_texto'] = texto_evolution
-				conteudo = texto_evolution
-			elif usa_meta:
-				# Grava o texto que a pessoa vai ler (com o nome dela), nao so o nome do template.
-				conteudo = template_config.conteudo_template(
-					metadata_envio['meta_template'], 'Template opt-in enfileirado',
-				)
-			else:
-				conteudo = 'Template opt-in enfileirado'
-
-			mensagens.append(
-				MensagemContato(
-					pessoa=pessoa,
-					criado_por=request.user,
-					canal=MensagemContato.CanalChoices.WHATSAPP,
-					direcao=MensagemContato.DirecaoChoices.SAIDA,
-					status_fila=MensagemContato.StatusFilaChoices.PENDENTE,
-					prioridade=5,
-					conteudo=conteudo,
-					metadata_envio=metadata_envio,
-				)
-			)
-
-		# Espaca os envios no tempo (staggering) para evitar bloqueio por disparo em
-		# massa: a 1a sai agora e as demais em intervalos aleatorios (config de ritmo).
-		from apps.acolhimento import fila_auto
-		fila_auto.escalonar_agendamento(mensagens)
-
-		MensagemContato.objects.bulk_create(mensagens)
-		PrimeiroContato.objects.filter(
-			id__in=[pessoa.id for pessoa in pessoas_primeiro_contato]
-		).update(status=PrimeiroContato.StatusAcolhimento.ROBO)
-
-		# Processamento automatico: bulk_create nao emite signal, entao dispara aqui.
-		# (O cron deve rodar a cada minuto para drenar os disparos espacados no tempo.)
-		fila_auto.agendar_disparo_auto()
-
+		mensagens = boas_vindas.enfileirar(pessoas_primeiro_contato, request.user)
 		messages.success(
 			request,
 			f'Disparo de boas-vindas criado para {len(mensagens)} pessoa(s) e status atualizado para Visitante.',
 		)
+		return redirect('dashboard')
+
+	@staticmethod
+	def _alternar_boas_vindas_auto(request):
+		cfg = ConfiguracaoProcessamentoFila.carregar()
+		cfg.boas_vindas_auto = not cfg.boas_vindas_auto
+		cfg.atualizado_por = request.user
+		cfg.save(update_fields=['boas_vindas_auto', 'atualizado_por', 'atualizado_em'])
+		if not cfg.boas_vindas_auto:
+			messages.info(request, 'Boas-vindas automaticas DESLIGADAS: o envio volta a ser pelo botao "Disparar boas-vindas".')
+			return redirect('dashboard')
+		aviso = 'Boas-vindas automaticas LIGADAS: cada pessoa cadastrada ja recebe a mensagem de boas-vindas.'
+		pendentes = boas_vindas.elegiveis().count()
+		if pendentes:
+			aviso += (
+				f' Quem ja estava esperando ({pendentes} pessoa{"s" if pendentes != 1 else ""}) nao recebe sozinho:'
+				' use o botao "Disparar boas-vindas" para essas.'
+			)
+		messages.success(request, aviso)
+		if not boas_vindas.configurado():
+			messages.warning(request, template_config.mensagem_nao_configurado(TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO))
 		return redirect('dashboard')
 
 	@staticmethod
@@ -252,6 +198,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 				'total_pessoas': total_pessoas,
 				'total_primeiro_contato': total_primeiro_contato,
 				'total_boas_vindas': total_boas_vindas,
+				'boas_vindas_auto': boas_vindas.automatico_ligado(),
 				'total_robo': total_robo,
 				'total_acompanhamento': total_acompanhamento,
 				'total_participante': total_participante,

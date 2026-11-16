@@ -532,6 +532,9 @@ class ConfiguracaoProcessamentoFila(models.Model):
 	"""
 
 	auto_ativo = models.BooleanField(default=False)
+	# Boas-vindas automaticas: quem e cadastrado (equipe ou auto-cadastro) ja recebe o
+	# template de primeiro contato, sem esperar o botao "Disparar boas-vindas" do painel.
+	boas_vindas_auto = models.BooleanField(default=False)
 	# Intervalo entre uma mensagem e a proxima, sorteado nesta faixa (segundos).
 	intervalo_min_seg = models.PositiveIntegerField(default=60)
 	intervalo_max_seg = models.PositiveIntegerField(default=120)
