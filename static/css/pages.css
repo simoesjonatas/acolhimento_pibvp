@@ -5547,3 +5547,58 @@ a.kpi-card:hover {
         font-size: 0.8rem;
     }
 }
+
+/* Gestao de usuarios: rodizio de novos contatos. */
+.rodizio-card {
+    margin-bottom: 14px;
+}
+
+.rodizio-card .panel-header form {
+    margin: 0;
+}
+
+.rodizio-fila {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 4px 0 8px;
+    padding: 0;
+    list-style: none;
+    counter-reset: rodizio;
+}
+
+.rodizio-fila li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #ffffff;
+    font-size: 0.85rem;
+    counter-increment: rodizio;
+}
+
+.rodizio-fila li::before {
+    content: counter(rodizio) ".";
+    color: var(--muted);
+    font-weight: 800;
+}
+
+.rodizio-proximo,
+.rodizio-sem-telefone {
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.rodizio-proximo {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.rodizio-sem-telefone {
+    background: #fef2f2;
+    color: #b91c1c;
+}

@@ -48,6 +48,15 @@ _FALLBACK = {
         'meta_idioma': 'META_TEMPLATE_GABINETE_PASTOR_IDIOMA',
         'meta_variables': '',
     },
+    # Aviso ao voluntario que recebeu uma pessoa pelo rodizio: so Meta e texto livre.
+    TemplateWhatsapp.Tipo.RESPONSAVEL_ATRIBUIDO: {
+        'sid': '',
+        'variables': '',
+        'texto_evolution': '',
+        'meta_nome': 'META_TEMPLATE_RESPONSAVEL_NOME',
+        'meta_idioma': 'META_TEMPLATE_RESPONSAVEL_IDIOMA',
+        'meta_variables': '',
+    },
 }
 
 PROVIDER_META = 'meta'

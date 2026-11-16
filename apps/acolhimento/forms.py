@@ -787,6 +787,18 @@ class TemplatesWhatsappForm(forms.Form):
     )
     gab_pastor_meta_idioma = forms.CharField(required=False, widget=forms.TextInput(attrs={'placeholder': 'pt_BR'}))
     gab_pastor_variables = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}))
+    resp_texto = forms.CharField(
+        required=False,
+        label='Rodizio — Aviso para o responsavel',
+        widget=forms.Textarea(attrs={'rows': 2}),
+    )
+    resp_meta_nome = forms.CharField(
+        required=False,
+        label='Rodizio — Nome do template (Meta)',
+        widget=forms.TextInput(attrs={'placeholder': 'nova_pessoa_atribuida'}),
+    )
+    resp_meta_idioma = forms.CharField(required=False, widget=forms.TextInput(attrs={'placeholder': 'pt_BR'}))
+    resp_variables = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}))
 
     def clean(self):
         cleaned = super().clean()
@@ -795,17 +807,17 @@ class TemplatesWhatsappForm(forms.Form):
             if sid and not sid.startswith('HX'):
                 self.add_error(campo, 'O Content SID da Twilio comeca com "HX".')
             cleaned[campo] = sid
-        for campo in ('opt_in_meta_nome', 'continuar_meta_nome', 'gab_pessoa_meta_nome', 'gab_pastor_meta_nome'):
+        for campo in ('opt_in_meta_nome', 'continuar_meta_nome', 'gab_pessoa_meta_nome', 'gab_pastor_meta_nome', 'resp_meta_nome'):
             nome = (cleaned.get(campo) or '').strip()
             if nome and not META_TEMPLATE_NOME_RE.match(nome):
                 self.add_error(campo, META_TEMPLATE_NOME_ERRO)
             cleaned[campo] = nome
-        for campo in ('opt_in_meta_idioma', 'continuar_meta_idioma', 'gab_pessoa_meta_idioma', 'gab_pastor_meta_idioma'):
+        for campo in ('opt_in_meta_idioma', 'continuar_meta_idioma', 'gab_pessoa_meta_idioma', 'gab_pastor_meta_idioma', 'resp_meta_idioma'):
             idioma = (cleaned.get(campo) or '').strip() or 'pt_BR'
             if not META_IDIOMA_RE.match(idioma):
                 self.add_error(campo, META_IDIOMA_ERRO)
             cleaned[campo] = idioma
-        for campo in ('opt_in_variables', 'continuar_variables', 'gab_pessoa_variables', 'gab_pastor_variables'):
+        for campo in ('opt_in_variables', 'continuar_variables', 'gab_pessoa_variables', 'gab_pastor_variables', 'resp_variables'):
             raw = (cleaned.get(campo) or '').strip() or '{}'
             try:
                 parsed = json.loads(raw)
@@ -814,7 +826,7 @@ class TemplatesWhatsappForm(forms.Form):
             except ValueError:
                 self.add_error(campo, 'JSON invalido. Use um objeto, ex.: {"1": "{nome}"}.')
             cleaned[campo] = raw
-        for campo in ('opt_in_texto_evolution', 'continuar_texto_evolution', 'gab_pessoa_texto', 'gab_pastor_texto'):
+        for campo in ('opt_in_texto_evolution', 'continuar_texto_evolution', 'gab_pessoa_texto', 'gab_pastor_texto', 'resp_texto'):
             cleaned[campo] = (cleaned.get(campo) or '').strip()
         return cleaned
 

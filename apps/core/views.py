@@ -16,9 +16,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
 
-from apps.acolhimento import atencao, boas_vindas, template_config
+from apps.acolhimento import atencao, boas_vindas, rodizio, template_config
 from apps.acolhimento.models import ConfiguracaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato, RegistroGabinete, TemplateWhatsapp
 from apps.acolhimento.visibilidade import filtrar_por_pessoa, pessoas_visiveis, ve_toda_base
 from apps.acolhimento.whatsapp_rules import filtrar_janela_aberta
@@ -330,6 +331,7 @@ class UsuarioListView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, ListView)
 		return queryset.annotate(
 			eh_pastor=Exists(pastor),
 			telefone=F('perfil__telefone'),
+			no_rodizio=F('perfil__recebe_novos_contatos'),
 		).order_by('username')
 
 	def get_context_data(self, **kwargs):
@@ -339,7 +341,33 @@ class UsuarioListView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, ListView)
 		context['filtro_query'] = query_params.urlencode()
 		context['busca'] = self.request.GET.get('q', '').strip()
 		context['total_filtrado'] = context['paginator'].count
+		equipe = rodizio.equipe()
+		for usuario in equipe:
+			usuario.telefone_perfil = telefone_do_usuario(usuario)
+		context['rodizio_equipe'] = equipe
+		context['rodizio_atrasados'] = rodizio.sem_responsavel_que_escreveram().count()
+		context['rodizio_dias'] = rodizio.DIAS_ATRASADOS
 		return context
+
+
+class RodizioDistribuirView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, View):
+	"""Passa de uma vez quem escreveu nos ultimos dias e esta sem responsavel."""
+
+	def post(self, request, *args, **kwargs):
+		if not rodizio.equipe():
+			messages.error(request, 'Ninguém está no rodízio. Marque "Recebe novos contatos" em quem vai atender.')
+			return redirect('usuarios-lista')
+		resultado = rodizio.distribuir_atrasados()
+		if not resultado:
+			messages.info(request, 'Não há pessoas sem responsável que escreveram nos últimos dias.')
+		else:
+			partes = ', '.join(f'{nome}: {quantas}' for nome, quantas in sorted(resultado.items()))
+			messages.success(
+				request,
+				f'{sum(resultado.values())} pessoa(s) distribuída(s) ({partes}). '
+				'Nessa distribuição não vai aviso no WhatsApp: avise a equipe para olhar "Meus acolhidos".',
+			)
+		return redirect('usuarios-lista')
 
 
 class UsuarioCreateView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, CreateView):

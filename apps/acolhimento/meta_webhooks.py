@@ -34,6 +34,7 @@ from apps.acolhimento import (
     custo_whatsapp,
     meta_service,
     midia_whatsapp,
+    rodizio,
     transcricao,
     whatsapp_saude,
 )
@@ -369,6 +370,11 @@ class MetaWebhookView(View):
                     'atualizado_em',
                 ]
             )
+
+        # Sem responsavel: o rodizio ja passa a pessoa para alguem da equipe e avisa no
+        # WhatsApp dele (reacao e "Agora nao" nao pedem resposta, entao nao contam).
+        if message.get('type') != 'reaction' and marcador_botao != BOTAO_AGORA_NAO:
+            rodizio.ao_receber_mensagem(pessoa)
 
         # Botoes do template ("Sim, podemos" / "Agora nao") ja dizem o que a pessoa quer:
         # o bot de menu nao entra, senao ele responderia o clique com o menu numerado.

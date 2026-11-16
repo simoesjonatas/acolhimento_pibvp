@@ -3,7 +3,14 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import Permission
 
-from apps.core.models import QrCodeDinamico, salvar_telefone_do_usuario, telefone_do_usuario, telefone_validator
+from apps.core.models import (
+    PerfilUsuario,
+    QrCodeDinamico,
+    recebe_novos_contatos,
+    salvar_telefone_do_usuario,
+    telefone_do_usuario,
+    telefone_validator,
+)
 
 
 User = get_user_model()
@@ -95,18 +102,40 @@ class UsuarioPermissoesFormMixin:
             required=False,
         )
         pastor_field = forms.BooleanField(label='Pastor', required=False)
+        rodizio_field = forms.BooleanField(label='Recebe novos contatos (rodizio)', required=False)
         fields = self.fields.__class__()
         for field_name, field in self.fields.items():
             fields[field_name] = field
             if field_name == 'is_active':
                 fields['pode_conversar_pessoas'] = permission_field
                 fields['perfil_pastor'] = pastor_field
+                fields['recebe_novos_contatos'] = rodizio_field
         self.fields = fields
 
         instance = getattr(self, 'instance', None)
         if instance and instance.pk:
             self.fields['pode_conversar_pessoas'].initial = instance.has_perm(PERMISSAO_CONVERSAR_PESSOAS)
             self.fields['perfil_pastor'].initial = eh_pastor(instance)
+            self.fields['recebe_novos_contatos'].initial = recebe_novos_contatos(instance)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get('recebe_novos_contatos') and not (
+            cleaned_data.get('pode_conversar_pessoas')
+            or cleaned_data.get('perfil_pastor')
+            or cleaned_data.get('is_staff')
+            or getattr(self.instance, 'is_superuser', False)
+        ):
+            self.add_error(
+                'recebe_novos_contatos',
+                'Para entrar no rodizio, marque tambem "Mensagens das pessoas": quem recebe precisa conversar com a pessoa.',
+            )
+        return cleaned_data
+
+    def salvar_rodizio(self, user):
+        PerfilUsuario.objects.update_or_create(
+            usuario=user, defaults={'recebe_novos_contatos': bool(self.cleaned_data.get('recebe_novos_contatos'))},
+        )
 
     def salvar_permissao_conversas(self, user):
         permission = get_conversar_pessoas_permission()
@@ -155,6 +184,7 @@ class UsuarioCreateForm(TelefoneUsuarioFormMixin, UsuarioPermissoesFormMixin, Us
             self.salvar_permissao_conversas(user)
             self.salvar_perfil_pastor(user)
             self.salvar_telefone(user)
+            self.salvar_rodizio(user)
         return user
 
 
@@ -169,6 +199,7 @@ class UsuarioUpdateForm(TelefoneUsuarioFormMixin, UsuarioPermissoesFormMixin, Us
             self.salvar_permissao_conversas(user)
             self.salvar_perfil_pastor(user)
             self.salvar_telefone(user)
+            self.salvar_rodizio(user)
         return user
 
 

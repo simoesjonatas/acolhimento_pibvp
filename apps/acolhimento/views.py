@@ -27,7 +27,7 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento.visibilidade import filtrar_por_pessoa, pessoas_visiveis, ve_toda_base
-from apps.acolhimento import atencao, boas_vindas, fila_auto, gabinete_avisos, meta_service, template_config
+from apps.acolhimento import atencao, boas_vindas, fila_auto, gabinete_avisos, meta_service, rodizio, template_config
 from apps.acolhimento.aguardando_resposta import (
 	DIAS_PESSOA_NOVA,
 	DIAS_RESPONDIDAS,
@@ -1043,6 +1043,7 @@ class AutoCadastroCreateView(CreateView):
 		form.instance.origem_cadastro = PrimeiroContato.OrigemCadastroChoices.AUTO_CADASTRO
 		form.instance.criado_por = None
 		response = super().form_valid(form)
+		rodizio.ao_auto_cadastro(self.object)
 		boas_vindas.ao_cadastrar(self.object)
 		return response
 
@@ -1739,6 +1740,14 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 			'continuar_meta_idioma': template_config.continuar_meta_idioma(),
 			**self._initial_gabinete('gab_pessoa', TemplateWhatsapp.Tipo.GABINETE_PESSOA, gabinete_avisos.VARIAVEIS_PESSOA_PADRAO),
 			**self._initial_gabinete('gab_pastor', TemplateWhatsapp.Tipo.GABINETE_PASTOR, gabinete_avisos.VARIAVEIS_PASTOR_PADRAO),
+			'resp_texto': rodizio.texto_aviso(),
+			'resp_meta_nome': template_config.meta_nome_para(TemplateWhatsapp.Tipo.RESPONSAVEL_ATRIBUIDO),
+			'resp_meta_idioma': template_config.meta_idioma_para(TemplateWhatsapp.Tipo.RESPONSAVEL_ATRIBUIDO),
+			'resp_variables': json.dumps(
+				template_config.variaveis_dict_para(TemplateWhatsapp.Tipo.RESPONSAVEL_ATRIBUIDO)
+				or rodizio.VARIAVEIS_AVISO_PADRAO,
+				ensure_ascii=False,
+			),
 		}
 
 	@staticmethod
@@ -1799,6 +1808,12 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 				'texto_evolution': dados['gab_pastor_texto'],
 				'meta_nome': dados['gab_pastor_meta_nome'],
 				'meta_idioma': dados['gab_pastor_meta_idioma'],
+			},
+			TemplateWhatsapp.Tipo.RESPONSAVEL_ATRIBUIDO: {
+				'content_variables': dados['resp_variables'],
+				'texto_evolution': dados['resp_texto'],
+				'meta_nome': dados['resp_meta_nome'],
+				'meta_idioma': dados['resp_meta_idioma'],
 			},
 		}
 		for tipo, defaults in valores.items():

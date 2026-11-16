@@ -1776,8 +1776,8 @@ class ConfiguracaoTemplatesTests(TestCase):
 			'continuar_texto_evolution': 'Continuar {nome}',
 		})
 		self.assertEqual(resp.status_code, 302)
-		# Primeiro contato, continuar e os dois avisos do gabinete.
-		self.assertEqual(TemplateWhatsapp.objects.count(), 4)
+		# Primeiro contato, continuar, os dois avisos do gabinete e o aviso do rodizio.
+		self.assertEqual(TemplateWhatsapp.objects.count(), 5)
 		self.assertEqual(template_config.opt_in_sid(), 'HXoptinNOVO')
 		self.assertEqual(template_config.continuar_sid(), 'HXcontinuarNOVO')
 		self.assertEqual(template_config.opt_in_texto_evolution(), 'Boas-vindas {nome}')

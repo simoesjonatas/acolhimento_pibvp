@@ -241,6 +241,37 @@
                 </p>
                 {% else %}{{ form.gab_pastor_meta_nome.as_hidden }}{{ form.gab_pastor_meta_idioma.as_hidden }}{{ form.gab_pastor_variables.as_hidden }}{% endif %}
             </section>
+
+            <section class="profile-form-card config-template-card" id="template-rodizio">
+                <div class="panel-header">
+                    <div>
+                        <h2>Rodízio — aviso ao responsável</h2>
+                        <p>Vai para o telefone do perfil de quem recebeu a pessoa pelo rodízio. Na Meta, sem template o texto só chega se o voluntário escreveu para o número nas últimas 24h.</p>
+                    </div>
+                </div>
+                <p class="builder-field">
+                    <label for="{{ form.resp_texto.id_for_label }}">Mensagem (texto livre)</label>
+                    {{ form.resp_texto }}
+                    <small class="table-muted-text">Marcadores: <code>{voluntario}</code>, <code>{pessoa}</code>, <code>{link}</code> (link da conversa).</small>
+                </p>
+                {% if usa_meta or form.resp_meta_nome.errors or form.resp_variables.errors %}
+                <p class="builder-field">
+                    <label for="{{ form.resp_meta_nome.id_for_label }}">Nome do template (Meta)</label>
+                    {{ form.resp_meta_nome }}
+                    {% if form.resp_meta_nome.errors %}<span class="form-errors">{{ form.resp_meta_nome.errors.0 }}</span>{% endif %}
+                </p>
+                <p class="builder-field">
+                    <label for="{{ form.resp_meta_idioma.id_for_label }}">Idioma do template (Meta)</label>
+                    {{ form.resp_meta_idioma }}
+                    {% if form.resp_meta_idioma.errors %}<span class="form-errors">{{ form.resp_meta_idioma.errors.0 }}</span>{% endif %}
+                </p>
+                <p class="builder-field">
+                    <label for="{{ form.resp_variables.id_for_label }}">Variáveis do template (JSON)</label>
+                    {{ form.resp_variables }}
+                    {% if form.resp_variables.errors %}<span class="form-errors">{{ form.resp_variables.errors.0 }}</span>{% endif %}
+                </p>
+                {% else %}{{ form.resp_meta_nome.as_hidden }}{{ form.resp_meta_idioma.as_hidden }}{{ form.resp_variables.as_hidden }}{% endif %}
+            </section>
         </div>
 
         <div class="action-row">
