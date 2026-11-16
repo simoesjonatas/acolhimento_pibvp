@@ -102,7 +102,9 @@ class PainelTests(TestCase):
 		self.outro = usuarios.create_user('outro_at', password='x', first_name='Beto')
 		self.client.force_login(self.voluntario)
 
-	def test_precisam_de_atencao_mostra_a_equipe_toda(self):
+	def test_precisam_de_atencao_mostra_a_equipe_toda_para_admin(self):
+		self.voluntario.is_staff = True
+		self.voluntario.save()
 		_pessoa('Parada minha', dias=9, responsavel=self.voluntario)
 		_pessoa('Parada do Beto', dias=20, responsavel=self.outro)
 		_pessoa('Parada sem dono', dias=12)
@@ -131,16 +133,26 @@ class PainelTests(TestCase):
 		self.assertContains(resp, 'mensagem nova')
 		self.assertContains(resp, '1 sem contato além do prazo')
 
-	def test_sem_acolhidos_nao_mostra_o_bloco(self):
+	def test_admin_sem_acolhidos_nao_ve_o_bloco(self):
+		self.voluntario.is_staff = True
+		self.voluntario.save()
 		resp = self.client.get(reverse('dashboard'))
 		self.assertNotContains(resp, 'id="meus-acolhidos"')
 		self.assertContains(resp, 'Ninguém parado além do prazo')
+
+	def test_voluntario_ve_so_os_seus_e_nao_a_lista_da_equipe(self):
+		_pessoa('Parada do Beto', dias=20, responsavel=self.outro)
+		resp = self.client.get(reverse('dashboard'))
+		self.assertContains(resp, 'Ninguém com você como responsável ainda')
+		self.assertNotContains(resp, 'id="precisam-de-atencao"')
+		self.assertNotContains(resp, 'Parada do Beto')
+		self.assertEqual(resp.context['total_pessoas'], 0)
 
 
 @override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
 class FiltroListaTests(TestCase):
 	def setUp(self):
-		self.user = get_user_model().objects.create_user('lista_at', password='x')
+		self.user = get_user_model().objects.create_user('lista_at', password='x', is_staff=True)
 		self.client.force_login(self.user)
 		_pessoa('Parada 10', dias=10)
 		_pessoa('Parada 30', dias=30)

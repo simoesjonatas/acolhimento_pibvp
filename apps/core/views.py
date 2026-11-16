@@ -20,7 +20,8 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, T
 
 from apps.acolhimento import atencao, boas_vindas, template_config
 from apps.acolhimento.models import ConfiguracaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato, RegistroGabinete, TemplateWhatsapp
-from apps.acolhimento.whatsapp_rules import contar_pessoas_janela_aberta
+from apps.acolhimento.visibilidade import filtrar_por_pessoa, pessoas_visiveis, ve_toda_base
+from apps.acolhimento.whatsapp_rules import filtrar_janela_aberta
 from apps.core.forms import PerfilForm, QrCodeDinamicoForm, UsuarioCreateForm, UsuarioUpdateForm, eh_pastor
 from apps.core.models import QrCodeDinamico, telefone_do_usuario
 from apps.core.qrcode_utils import gerar_qrcode_png, gerar_qrcode_svg
@@ -134,7 +135,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 	def contexto_atencao(cls, usuario):
 		"""Blocos "Precisam de atencao" (a equipe toda) e "Meus acolhidos" (do usuario)."""
 		agora = timezone.now()
-		atrasados = atencao.precisam_de_atencao().select_related('responsavel_atual')
+		atrasados = atencao.precisam_de_atencao(pessoas_visiveis(usuario)).select_related('responsavel_atual')
 		atencao_total = atrasados.count()
 		atencao_lista = atencao.marcar(list(atrasados[:cls.LIMITE_PAINEL]), agora)
 
@@ -159,6 +160,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 			'meus_acolhidos': meus[:cls.LIMITE_PAINEL * 2],
 			'meus_acolhidos_total': len(meus),
 			'meus_acolhidos_atrasados': sum(1 for p in meus if p.atrasada),
+			've_toda_base': ve_toda_base(usuario),
 		}
 
 	@staticmethod
@@ -195,34 +197,36 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
 
-		total_pessoas = PrimeiroContato.objects.count()
+		# Usuario comum ve so os proprios acolhidos: os numeros do painel seguem a mesma regra.
+		visiveis = pessoas_visiveis(self.request.user)
+		total_pessoas = visiveis.count()
 		# KPI do card = todo mundo no status (bate com o filtro ?status=primeiro_contato).
 		# O badge do botao usa total_boas_vindas, que e o subconjunto elegivel ao disparo.
-		total_primeiro_contato = PrimeiroContato.objects.filter(
+		total_primeiro_contato = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO
 		).count()
 		total_boas_vindas = self.get_pessoas_boas_vindas_queryset().count()
-		total_robo = PrimeiroContato.objects.filter(
+		total_robo = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.ROBO
 		).count()
-		total_acompanhamento = PrimeiroContato.objects.filter(
+		total_acompanhamento = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
 		).count()
-		total_participante = PrimeiroContato.objects.filter(
+		total_participante = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.PARTICIPANTE
 		).count()
-		total_em_gabinete = PrimeiroContato.objects.filter(
+		total_em_gabinete = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.EM_GABINETE
 		).count()
-		total_aprovado = PrimeiroContato.objects.filter(
+		total_aprovado = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.APROVADO
 		).count()
-		total_membros = PrimeiroContato.objects.filter(
+		total_membros = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.MEMBRO
 		).count()
-		total_janela_aberta = contar_pessoas_janela_aberta()
+		total_janela_aberta = filtrar_janela_aberta(visiveis).count()
 
-		ultimos_passos = InteracaoAcolhimento.objects.select_related('pessoa')[:8]
+		ultimos_passos = filtrar_por_pessoa(InteracaoAcolhimento.objects.select_related('pessoa'), self.request.user)[:8]
 		if eh_pastor(self.request.user):
 			context['gabinetes_do_pastor'] = self.gabinetes_do_pastor(self.request.user)
 		context.update(self.contexto_atencao(self.request.user))

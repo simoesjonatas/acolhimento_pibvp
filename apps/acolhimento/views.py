@@ -26,6 +26,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
+from apps.acolhimento.visibilidade import filtrar_por_pessoa, pessoas_visiveis, ve_toda_base
 from apps.acolhimento import atencao, boas_vindas, fila_auto, gabinete_avisos, meta_service, template_config
 from apps.acolhimento.aguardando_resposta import (
 	DIAS_PESSOA_NOVA,
@@ -208,6 +209,7 @@ class PrimeiroContatoQuerysetMixin:
 		return sort_coluna, direcao
 
 	def get_filtered_queryset(self, queryset):
+		queryset = pessoas_visiveis(self.request.user, queryset)
 		busca = self.request.GET.get('q', '').strip()
 		status = self.request.GET.get('status', '').strip()
 		origem = self.request.GET.get('origem', '').strip()
@@ -313,6 +315,7 @@ class PrimeiroContatoListView(LoginRequiredMixin, PrimeiroContatoQuerysetMixin, 
 		context['janela_atual'] = self.request.GET.get('janela', '').strip()
 		context['meus_atual'] = self.request.GET.get('meus', '').strip()
 		context['atencao_atual'] = self.request.GET.get('atencao', '').strip()
+		context['ve_toda_base'] = ve_toda_base(self.request.user)
 		if context['atencao_atual'] == '1':
 			atencao.marcar(context['pessoas'])
 		context['como_conheceu_atual'] = self.request.GET.get('como_conheceu', '').strip()
@@ -1065,6 +1068,9 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 	model = PrimeiroContato
 	context_object_name = 'pessoa'
 
+	def get_queryset(self):
+		return pessoas_visiveis(self.request.user, super().get_queryset())
+
 	def get_timeline_queryset(self):
 		queryset = self.object.interacoes.all()
 		busca = self.request.GET.get('timeline_q', '').strip()
@@ -1215,7 +1221,7 @@ class RegistroGabineteCreateView(LoginRequiredMixin, GabinetePermissaoMixin, Vie
 	"""Registra um gabinete (agendado/realizado) na ficha. Fica fora da timeline geral."""
 
 	def post(self, request, pk):
-		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		pessoa = get_object_or_404(pessoas_visiveis(request.user), pk=pk)
 		form = RegistroGabineteForm(request.POST, usuario=request.user)
 		if form.is_valid():
 			registro = form.save(commit=False)
@@ -1236,7 +1242,7 @@ class RegistroGabineteCreateView(LoginRequiredMixin, GabinetePermissaoMixin, Vie
 
 class PrimeiroContatoStatusUpdateView(LoginRequiredMixin, View):
 	def post(self, request, pk, *args, **kwargs):
-		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		pessoa = get_object_or_404(pessoas_visiveis(request.user), pk=pk)
 		novo_status = (request.POST.get('status') or '').strip()
 
 		if novo_status not in PrimeiroContato.StatusAcolhimento.values:
@@ -1288,7 +1294,7 @@ class PrimeiroContatoResponsavelUpdateView(LoginRequiredMixin, AdminPermissaoMix
 		return usuario.get_full_name() or usuario.get_username()
 
 	def post(self, request, pk, *args, **kwargs):
-		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		pessoa = get_object_or_404(pessoas_visiveis(request.user), pk=pk)
 		responsavel_id = (request.POST.get('responsavel_atual') or '').strip()
 
 		if responsavel_id:
@@ -1321,6 +1327,9 @@ class PrimeiroContatoMensagensView(LoginRequiredMixin, ConversasPessoasPermissao
 	template_name = 'pessoa_mensagens.html'
 	model = PrimeiroContato
 	context_object_name = 'pessoa'
+
+	def get_queryset(self):
+		return pessoas_visiveis(self.request.user, super().get_queryset())
 	page_size = 20
 
 	def get_canal_atual(self):
@@ -1396,7 +1405,7 @@ class PrimeiroContatoMensagensMaisView(LoginRequiredMixin, ConversasPessoasPermi
 	page_size = 20
 
 	def get(self, request, pk, *args, **kwargs):
-		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		pessoa = get_object_or_404(pessoas_visiveis(request.user), pk=pk)
 		canal_atual = request.GET.get('canal', 'todos').strip()
 		canais_validos = {choice[0] for choice in MensagemContato.CanalChoices.choices}
 		if canal_atual not in canais_validos:
@@ -1449,7 +1458,7 @@ class PrimeiroContatoMensagensNovasView(LoginRequiredMixin, ConversasPessoasPerm
 	limite_versoes = 60
 
 	def get(self, request, pk, *args, **kwargs):
-		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		pessoa = get_object_or_404(pessoas_visiveis(request.user), pk=pk)
 		canal_atual = request.GET.get('canal', 'todos').strip()
 		canais_validos = {choice[0] for choice in MensagemContato.CanalChoices.choices}
 		if canal_atual not in canais_validos:
@@ -1549,7 +1558,8 @@ class AguardandoRespostaView(LoginRequiredMixin, ListView):
 		return queryset
 
 	def get_queryset(self):
-		queryset = self.filtrar(anotar_conversa(PrimeiroContato.objects.select_related('responsavel_atual')))
+		visiveis = pessoas_visiveis(self.request.user, PrimeiroContato.objects.select_related('responsavel_atual'))
+		queryset = self.filtrar(anotar_conversa(visiveis))
 		if self.get_aba() == 'respondidas':
 			return filtrar_respondidas(queryset).order_by('-ultima_resposta', '-pk')
 
@@ -1573,13 +1583,13 @@ class AguardandoRespostaView(LoginRequiredMixin, ListView):
 			pessoa.eh_nova = pessoa.data_primeiro_contato >= corte_nova
 
 		# Atalhos do topo: retrato de toda a fila, independente dos filtros.
-		context['resumo'] = filtrar_aguardando(anotar_conversa(PrimeiroContato.objects.all())).aggregate(
+		context['resumo'] = filtrar_aguardando(anotar_conversa(pessoas_visiveis(user))).aggregate(
 			total=Count('pk'),
 			sem_responsavel=Count('pk', filter=Q(responsavel_atual__isnull=True)),
 			novas=Count('pk', filter=Q(data_primeiro_contato__gte=corte_nova)),
 			meus=Count('pk', filter=Q(responsavel_atual=user)),
 		)
-		filtradas = self.filtrar(anotar_conversa(PrimeiroContato.objects.all()))
+		filtradas = self.filtrar(anotar_conversa(pessoas_visiveis(user)))
 		context['total_aguardando'] = filtrar_aguardando(filtradas).count()
 		context['total_respondidas'] = filtrar_respondidas(filtradas).count()
 
@@ -1605,6 +1615,7 @@ class AguardandoRespostaView(LoginRequiredMixin, ListView):
 		)
 		context['status_choices'] = PrimeiroContato.StatusAcolhimento.choices
 		context['pode_conversar'] = pode_conversar_pessoas(user)
+		context['ve_toda_base'] = ve_toda_base(user)
 		context['dias_pessoa_nova'] = DIAS_PESSOA_NOVA
 		context['dias_respondidas'] = DIAS_RESPONDIDAS
 		return context
@@ -1612,7 +1623,7 @@ class AguardandoRespostaView(LoginRequiredMixin, ListView):
 
 class PrimeiroContatoEnfileirarMensagemView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, View):
 	def post(self, request, pk, *args, **kwargs):
-		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		pessoa = get_object_or_404(pessoas_visiveis(request.user), pk=pk)
 		form = EnfileirarMensagemForm(request.POST)
 
 		if form.is_valid():
@@ -1647,7 +1658,7 @@ class EnviarTemplateContinuarView(LoginRequiredMixin, ConversasPessoasPermissaoM
 	"""Enfileira o template de continuacao para reabrir a janela de 24h do WhatsApp."""
 
 	def post(self, request, pk, *args, **kwargs):
-		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		pessoa = get_object_or_404(pessoas_visiveis(request.user), pk=pk)
 		tipo_template = TemplateWhatsapp.Tipo.CONTINUAR
 		usa_evolution = template_config.usando_evolution()
 		usa_meta = template_config.usando_meta()
@@ -1808,7 +1819,9 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 
 class MensagemContatoExcluirView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, View):
 	def post(self, request, pk, *args, **kwargs):
-		mensagem = get_object_or_404(MensagemContato.objects.select_related('pessoa'), pk=pk)
+		mensagem = get_object_or_404(
+			filtrar_por_pessoa(MensagemContato.objects.select_related('pessoa'), request.user), pk=pk,
+		)
 		pessoa = mensagem.pessoa
 		primeira_mensagem = (
 			MensagemContato.objects.filter(pessoa=pessoa)
@@ -2007,6 +2020,9 @@ class PrimeiroContatoUpdateView(LoginRequiredMixin, UpdateView):
 	form_class = PrimeiroContatoForm
 	success_url = reverse_lazy('pessoas-lista')
 
+	def get_queryset(self):
+		return pessoas_visiveis(self.request.user, super().get_queryset())
+
 	def form_valid(self, form):
 		response = super().form_valid(form)
 		messages.success(self.request, 'Cadastro atualizado com sucesso.')
@@ -2141,6 +2157,7 @@ class ConviteRespostasQuerysetMixin:
 			)
 		)
 
+		queryset = filtrar_por_pessoa(queryset, self.request.user)
 		busca = self.request.GET.get('q', '').strip()
 		status = self.request.GET.get('status', '').strip()
 		questionario_id = self.request.GET.get('questionario', '').strip()
@@ -2199,7 +2216,7 @@ class QuestionarioRespostasListView(ConversasPessoasPermissaoMixin, ConviteRespo
 			]
 			convite.link = self.link_convite(convite)
 
-		resumo = ConviteQuestionario.objects.aggregate(
+		resumo = filtrar_por_pessoa(ConviteQuestionario.objects.all(), self.request.user).aggregate(
 			total=Count('id'),
 			pendentes=Count(
 				'id',
@@ -2349,7 +2366,7 @@ class PerguntaMoverView(SuperAdminPermissaoMixin, View):
 
 class GerarConviteQuestionarioView(ConversasPessoasPermissaoMixin, View):
 	def post(self, request, pk):
-		pessoa = get_object_or_404(PrimeiroContato, pk=pk)
+		pessoa = get_object_or_404(pessoas_visiveis(request.user), pk=pk)
 		questionario = get_object_or_404(Questionario, pk=request.POST.get('questionario'), ativo=True)
 		bloqueio = motivo_bloqueio_convite(pessoa, questionario)
 		if bloqueio:
@@ -2407,7 +2424,8 @@ class ExcluirConviteQuestionarioView(AdminPermissaoMixin, View):
 class EnviarConviteWhatsappView(ConversasPessoasPermissaoMixin, View):
 	def post(self, request, pk):
 		convite = get_object_or_404(
-			ConviteQuestionario.objects.select_related('pessoa', 'questionario'), pk=pk
+			filtrar_por_pessoa(ConviteQuestionario.objects.select_related('pessoa', 'questionario'), request.user),
+			pk=pk,
 		)
 		pessoa = convite.pessoa
 		bloqueio = motivo_bloqueio_livre(pessoa)
@@ -2448,6 +2466,9 @@ class RespostaConviteDetailView(ConversasPessoasPermissaoMixin, DetailView):
 	template_name = 'resposta_detail.html'
 	model = ConviteQuestionario
 	context_object_name = 'convite'
+
+	def get_queryset(self):
+		return filtrar_por_pessoa(super().get_queryset(), self.request.user)
 
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)

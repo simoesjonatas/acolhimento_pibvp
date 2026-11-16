@@ -13,15 +13,19 @@
                 <a class="aguardando-atalho" href="{% url 'aguardando-resposta' %}">
                     <strong>{{ resumo.total }}</strong> aguardando
                 </a>
+{% if ve_toda_base %}
                 <a class="aguardando-atalho is-alerta" href="{% url 'aguardando-resposta' %}?responsavel=sem">
                     <strong>{{ resumo.sem_responsavel }}</strong> sem responsável
                 </a>
+                {% endif %}
                 <a class="aguardando-atalho is-nova" href="{% url 'aguardando-resposta' %}?nova=sim">
                     <strong>{{ resumo.novas }}</strong> pessoa{{ resumo.novas|pluralize }} nova{{ resumo.novas|pluralize }}
                 </a>
+{% if ve_toda_base %}
                 <a class="aguardando-atalho" href="{% url 'aguardando-resposta' %}?responsavel=meus">
                     <strong>{{ resumo.meus }}</strong> meus contatos
                 </a>
+                {% endif %}
             </nav>
         </div>
         <div class="aguardando-atualizado">
@@ -57,6 +61,7 @@
                 <label for="aguardando-q">Buscar</label>
                 <input type="search" name="q" id="aguardando-q" value="{{ busca }}" placeholder="Nome ou WhatsApp">
             </div>
+            {% if ve_toda_base %}
             <div>
                 <label for="aguardando-responsavel">Responsável</label>
                 <select name="responsavel" id="aguardando-responsavel">
@@ -68,6 +73,7 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
             <div>
                 <label for="aguardando-nova">Pessoa nova</label>
                 <select name="nova" id="aguardando-nova">

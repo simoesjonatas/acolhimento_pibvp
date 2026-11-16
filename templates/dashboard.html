@@ -124,7 +124,7 @@
     </a>
 </section>
 
-{% if meus_acolhidos_total %}
+{% if meus_acolhidos_total or not ve_toda_base %}
 <section class="dashboard-panel" id="meus-acolhidos">
     <div class="panel-header">
         <div>
@@ -133,8 +133,11 @@
                 {{ meus_acolhidos_total }} pessoa{{ meus_acolhidos_total|pluralize:'s' }} com você como responsável{% if meus_acolhidos_atrasados %} · <strong class="texto-atrasado">{{ meus_acolhidos_atrasados }} sem contato além do prazo</strong>{% endif %}.
             </p>
         </div>
+        {% if meus_acolhidos_total %}
         <a class="btn secundario" href="{% url 'pessoas-lista' %}?meus=1">Ver todos ({{ meus_acolhidos_total }})</a>
+        {% endif %}
     </div>
+    {% if meus_acolhidos %}
     <div class="table-wrap">
         <table class="atencao-table">
             <thead>
@@ -159,9 +162,13 @@
             </tbody>
         </table>
     </div>
+    {% else %}
+    <p class="empty-state">Ninguém com você como responsável ainda. Quem você cadastrar, ou quem um administrador passar para você, aparece aqui.</p>
+    {% endif %}
 </section>
 {% endif %}
 
+{% if ve_toda_base %}
 <section class="dashboard-panel" id="precisam-de-atencao">
     <div class="panel-header">
         <div>
@@ -205,6 +212,7 @@
     <p class="empty-state">Ninguém parado além do prazo. 🙌</p>
     {% endif %}
 </section>
+{% endif %}
 
 {% if gabinetes_do_pastor is not None %}
 <section class="dashboard-panel">
