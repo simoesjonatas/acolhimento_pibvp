@@ -4318,6 +4318,7 @@ a.kpi-card:hover {
 .admin-badge,
 .reply-badge,
 .retorno-badge,
+.atencao-badge,
 .iniciou-badge,
 .falar-depois-badge {
     display: inline-flex;
@@ -4368,6 +4369,7 @@ a.kpi-card:hover {
 }
 
 .retorno-badge,
+.atencao-badge,
 .iniciou-badge,
 .falar-depois-badge {
     margin-left: 8px;
@@ -5450,4 +5452,98 @@ a.kpi-card:hover {
     width: auto;
     min-height: 32px;
     padding: 5px 12px;
+}
+
+/* Painel: "Meus acolhidos" e "Precisam de atencao". */
+.panel-sub {
+    margin: 2px 0 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.texto-atrasado {
+    color: #b91c1c;
+}
+
+.atencao-contador {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    height: 22px;
+    margin-left: 4px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-size: 0.8rem;
+    font-weight: 900;
+    vertical-align: middle;
+}
+
+.atencao-table td {
+    vertical-align: middle;
+}
+
+.atencao-table .linha-atrasada td:first-child {
+    box-shadow: inset 3px 0 0 #ef4444;
+}
+
+.dias-sem-contato {
+    white-space: nowrap;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.dias-sem-contato.atrasado {
+    color: #b91c1c;
+}
+
+.tag-retorno,
+.tag-sem-responsavel {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.tag-retorno {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.tag-sem-responsavel {
+    margin-left: 0;
+    background: #f3f3f8;
+    color: #6b6d80;
+}
+
+.atencao-badge {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+/* No celular a tabela fica com 2 colunas: dias e responsavel vao embaixo do nome. */
+.atencao-table .so-celular {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    .atencao-table th:nth-child(n+3),
+    .atencao-table td:nth-child(n+3) {
+        display: none;
+    }
+
+    .atencao-table .so-celular {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 0.8rem;
+    }
 }

@@ -26,7 +26,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
-from apps.acolhimento import boas_vindas, fila_auto, gabinete_avisos, meta_service, template_config
+from apps.acolhimento import atencao, boas_vindas, fila_auto, gabinete_avisos, meta_service, template_config
 from apps.acolhimento.aguardando_resposta import (
 	DIAS_PESSOA_NOVA,
 	DIAS_RESPONDIDAS,
@@ -252,6 +252,12 @@ class PrimeiroContatoQuerysetMixin:
 		elif janela == 'fechada':
 			queryset = filtrar_janela_fechada(queryset)
 
+		if self.request.GET.get('atencao', '').strip() == '1':
+			queryset = atencao.anotar_ultimo_contato(queryset).filter(atencao.filtro_atrasados())
+			if 'sort' not in self.request.GET:
+				# Sem ordenacao escolhida: quem esta parado ha mais tempo primeiro.
+				return queryset.order_by('ultimo_contato', 'pk')
+
 		ordering = self.sort_map.get(sort_coluna, 'data_primeiro_contato')
 		if direcao == 'desc':
 			ordering = f'-{ordering}'
@@ -306,6 +312,9 @@ class PrimeiroContatoListView(LoginRequiredMixin, PrimeiroContatoQuerysetMixin, 
 		context['iniciou_interacao_atual'] = self.request.GET.get('iniciou_interacao', '').strip()
 		context['janela_atual'] = self.request.GET.get('janela', '').strip()
 		context['meus_atual'] = self.request.GET.get('meus', '').strip()
+		context['atencao_atual'] = self.request.GET.get('atencao', '').strip()
+		if context['atencao_atual'] == '1':
+			atencao.marcar(context['pessoas'])
 		context['como_conheceu_atual'] = self.request.GET.get('como_conheceu', '').strip()
 		context['como_conheceu_choices'] = como_conheceu_filtro_choices()
 		context['pastor_atual'] = self.request.GET.get('pastor', '').strip()

@@ -18,7 +18,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
 
-from apps.acolhimento import boas_vindas, template_config
+from apps.acolhimento import atencao, boas_vindas, template_config
 from apps.acolhimento.models import ConfiguracaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato, RegistroGabinete, TemplateWhatsapp
 from apps.acolhimento.whatsapp_rules import contar_pessoas_janela_aberta
 from apps.core.forms import PerfilForm, QrCodeDinamicoForm, UsuarioCreateForm, UsuarioUpdateForm, eh_pastor
@@ -128,6 +128,39 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 			messages.warning(request, template_config.mensagem_nao_configurado(TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO))
 		return redirect('dashboard')
 
+	LIMITE_PAINEL = 8
+
+	@classmethod
+	def contexto_atencao(cls, usuario):
+		"""Blocos "Precisam de atencao" (a equipe toda) e "Meus acolhidos" (do usuario)."""
+		agora = timezone.now()
+		atrasados = atencao.precisam_de_atencao().select_related('responsavel_atual')
+		atencao_total = atrasados.count()
+		atencao_lista = atencao.marcar(list(atrasados[:cls.LIMITE_PAINEL]), agora)
+
+		novo_retorno = MensagemContato.objects.filter(
+			pessoa=OuterRef('pk'),
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			visualizada_equipe_em__isnull=True,
+		)
+		meus = atencao.anotar_ultimo_contato(
+			PrimeiroContato.objects.filter(responsavel_atual=usuario, status__in=atencao.EM_ACOLHIMENTO)
+		).annotate(tem_novo_retorno=Exists(novo_retorno))
+		meus = atencao.marcar(list(meus), agora)
+		# Quem escreveu e ninguem viu vem primeiro; depois os atrasados; depois o resto,
+		# sempre do contato mais antigo para o mais recente.
+		meus.sort(key=lambda p: (not p.tem_novo_retorno, not p.atrasada, p.ultimo_contato))
+		return {
+			'atencao_total': atencao_total,
+			'atencao_lista': atencao_lista,
+			'atencao_prazos': [
+				(PrimeiroContato.StatusAcolhimento(status).label, dias) for status, dias in atencao.PRAZO_DIAS.items()
+			],
+			'meus_acolhidos': meus[:cls.LIMITE_PAINEL * 2],
+			'meus_acolhidos_total': len(meus),
+			'meus_acolhidos_atrasados': sum(1 for p in meus if p.atrasada),
+		}
+
 	@staticmethod
 	def gabinetes_do_pastor(pastor):
 		"""Pessoas com gabinete atribuido ao pastor: proximos agendados primeiro, depois os demais.
@@ -192,6 +225,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 		ultimos_passos = InteracaoAcolhimento.objects.select_related('pessoa')[:8]
 		if eh_pastor(self.request.user):
 			context['gabinetes_do_pastor'] = self.gabinetes_do_pastor(self.request.user)
+		context.update(self.contexto_atencao(self.request.user))
 
 		context.update(
 			{

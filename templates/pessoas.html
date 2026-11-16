@@ -87,6 +87,12 @@
         </select>
     </div>
     <div class="filter-check">
+        <label for="atencao">
+            <input type="checkbox" id="atencao" name="atencao" value="1" {% if atencao_atual == '1' %}checked{% endif %}>
+            Precisam de atenção
+        </label>
+    </div>
+    <div class="filter-check">
         <label for="meus">
             <input type="checkbox" id="meus" name="meus" value="1" {% if meus_atual == '1' %}checked{% endif %}>
             Somente meus contatos
@@ -144,8 +150,9 @@
         <tr>
             <td class="col-nome">
                 <strong class="table-primary-text">{{ pessoa.nome }}</strong>
-                {% if pessoa.has_novo_retorno or pessoa.iniciou_interacao %}
+                {% if pessoa.has_novo_retorno or pessoa.iniciou_interacao or pessoa.atrasada %}
                 <span class="pessoa-badges">
+                    {% if pessoa.atrasada %}<span class="atencao-badge" title="Último contato em {{ pessoa.ultimo_contato|date:'d/m/Y' }}">Sem contato há {{ pessoa.dias_sem_contato }} dias</span>{% endif %}
                     {% if pessoa.has_novo_retorno %}<span class="retorno-badge">Novo retorno</span>{% endif %}
                     {% if pessoa.iniciou_interacao %}<span class="iniciou-badge">Iniciou conversa</span>{% endif %}
                 </span>
