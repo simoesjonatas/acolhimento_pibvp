@@ -400,6 +400,33 @@ class TelaIATests(_BaseIA):
 			resp = self.client.post(self.url, {'acao': 'testar_ia', 'pergunta': 'oi'})
 		self.assertContains(resp, 'HTTP 401: unauthorized')
 
+	def _aba_aberta(self, resp):
+		html = resp.content.decode()
+		return [aba for aba in ('menu', 'textos', 'ia') if f'id="painel-{aba}" data-painel="{aba}" aria-labelledby="aba-{aba}">' in html]
+
+	def test_abre_na_aba_do_menu_por_padrao(self):
+		resp = self.client.get(self.url)
+		self.assertEqual(self._aba_aberta(resp), ['menu'])
+
+	def test_abre_na_aba_pedida_e_ignora_aba_invalida(self):
+		self.assertEqual(self._aba_aberta(self.client.get(self.url + '?aba=ia')), ['ia'])
+		self.assertEqual(self._aba_aberta(self.client.get(self.url + '?aba=xpto')), ['menu'])
+
+	def test_salvar_volta_para_a_mesma_aba(self):
+		resp = self.client.post(self.url, self._dados())
+		self.assertEqual(resp['Location'], self.url + '?aba=ia')
+		resp = self.client.post(self.url, {
+			'acao': 'textos', 'mensagem_saudacao': 'Ola!', 'mensagem_fallback': 'Nao entendi.',
+		})
+		self.assertEqual(resp['Location'], self.url + '?aba=textos')
+
+	def test_erro_e_teste_da_ia_renderizam_na_aba_ia(self):
+		resp = self.client.post(self.url, self._dados(ia_base_conhecimento=''))
+		self.assertEqual(self._aba_aberta(resp), ['ia'])
+		with patch.object(ia_service, 'chat', return_value=_chat('opcao', opcao=1)):
+			resp = self.client.post(self.url, {'acao': 'testar_ia', 'pergunta': 'que horas e o culto?'})
+		self.assertEqual(self._aba_aberta(resp), ['ia'])
+
 	def test_so_superusuario(self):
 		equipe = get_user_model().objects.create_user('equipe_ia', password='x', is_staff=True)
 		self.client.force_login(equipe)

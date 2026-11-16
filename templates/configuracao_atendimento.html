@@ -41,6 +41,16 @@
     .ia-resultado { margin-top:12px; border-radius:10px; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; }
     .ia-resultado.erro { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
     .ia-resultado small { color:#64748b; display:block; margin-top:8px; }
+    .config-tab-panel { display:grid; gap:18px; min-width:0; }
+    .config-tab-panel[hidden] { display:none; }
+    .person-tab-count.ligada { background:#dcfce7; color:#15803d; }
+    .aba-rotulo-curto { display:none; }
+    @media (max-width: 600px){
+        .aba-rotulo-longo { display:none; }
+        .aba-rotulo-curto { display:inline; }
+        .aba-status { display:none; }
+        .person-tablist .person-tab { padding:8px 10px; }
+    }
 </style>
 <div class="config-atendimento-page">
     <section class="page-hero">
@@ -93,172 +103,238 @@
         </div>
     </section>
 
-    <section class="profile-form-card" id="ia">
-        <div class="panel-header"><div>
-            <h2>Inteligencia artificial</h2>
-            <p>Quando a mensagem nao casa com numero nem palavra-chave, a IA tenta entender e responde so com a base de conhecimento e as opcoes abaixo. Se nao souber, ou se o assunto for pastoral ou sensivel, passa a conversa para a equipe. Se a IA falhar, o bot volta ao "nao entendi" + menu.</p>
-        </div></div>
-        <div class="ia-status">
-            <span class="ia-chip {% if ollama_configurada %}ok{% else %}falta{% endif %}">Ollama (texto): {% if ollama_configurada %}chave configurada{% else %}falta OLLAMA_API_KEY{% endif %}</span>
-            <span class="ia-chip {% if groq_configurada %}ok{% else %}falta{% endif %}">Groq (audio): {% if groq_configurada %}chave configurada{% else %}falta GROQ_API_KEY{% endif %}</span>
-            <span class="ia-chip {% if transcricao_local_disponivel %}ok{% endif %}">Reserva no servidor: {% if transcricao_local_disponivel %}disponivel{% else %}indisponivel{% endif %}</span>
-        </div>
-        <form method="post">
-            {% csrf_token %}
-            <input type="hidden" name="acao" value="ia">
-            <div class="ia-checks">
-                <label>{{ form_ia.ia_ativa }} {{ form_ia.ia_ativa.label }}</label>
-                <label>{{ form_ia.transcrever_audios }} {{ form_ia.transcrever_audios.label }}</label>
-            </div>
-            <div class="ia-grid">
-                <p class="builder-field">
-                    <label for="{{ form_ia.ia_modelo.id_for_label }}">{{ form_ia.ia_modelo.label }}</label>
-                    {{ form_ia.ia_modelo }}
-                    <small class="table-muted-text">Vazio usa <code>{{ modelo_padrao_ia }}</code>.</small>
-                    {% if form_ia.ia_modelo.errors %}<span class="form-errors">{{ form_ia.ia_modelo.errors.0 }}</span>{% endif %}
-                </p>
-                <p class="builder-field">
-                    <label for="{{ form_ia.ia_max_respostas_por_dia.id_for_label }}">{{ form_ia.ia_max_respostas_por_dia.label }}</label>
-                    {{ form_ia.ia_max_respostas_por_dia }}
-                    <small class="table-muted-text">{{ form_ia.ia_max_respostas_por_dia.help_text }}</small>
-                    {% if form_ia.ia_max_respostas_por_dia.errors %}<span class="form-errors">{{ form_ia.ia_max_respostas_por_dia.errors.0 }}</span>{% endif %}
-                </p>
-            </div>
-            <p class="builder-field">
-                <label for="{{ form_ia.ia_base_conhecimento.id_for_label }}">{{ form_ia.ia_base_conhecimento.label }}</label>
-                {{ form_ia.ia_base_conhecimento }}
-                <small class="table-muted-text">{{ form_ia.ia_base_conhecimento.help_text }} As respostas das opcoes do menu ja entram automaticamente.</small>
-                {% if form_ia.ia_base_conhecimento.errors %}<span class="form-errors">{{ form_ia.ia_base_conhecimento.errors.0 }}</span>{% endif %}
-            </p>
-            <p class="builder-field">
-                <label for="{{ form_ia.ia_instrucoes.id_for_label }}">{{ form_ia.ia_instrucoes.label }}</label>
-                {{ form_ia.ia_instrucoes }}
-                {% if form_ia.ia_instrucoes.errors %}<span class="form-errors">{{ form_ia.ia_instrucoes.errors.0 }}</span>{% endif %}
-            </p>
-            <div class="action-row">
-                <button type="submit">
-                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                    <span class="btn-text">Salvar IA</span>
-                </button>
-            </div>
-        </form>
+    <div class="person-tabs" data-config-tabs>
+        <nav class="person-tablist" role="tablist" aria-label="Secoes do atendimento automatico">
+            <a class="person-tab" role="tab" id="aba-menu" href="?aba=menu" data-aba="menu" aria-controls="painel-menu" aria-selected="{% if aba_ativa == 'menu' %}true{% else %}false{% endif %}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                <span class="aba-rotulo-longo">Opcoes do menu</span><span class="aba-rotulo-curto">Menu</span>
+                <span class="person-tab-count" title="Opcoes ativas">{{ total_opcoes_ativas }}</span>
+            </a>
+            <a class="person-tab" role="tab" id="aba-textos" href="?aba=textos" data-aba="textos" aria-controls="painel-textos" aria-selected="{% if aba_ativa == 'textos' %}true{% else %}false{% endif %}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                Textos
+            </a>
+            <a class="person-tab" role="tab" id="aba-ia" href="?aba=ia" data-aba="ia" aria-controls="painel-ia" aria-selected="{% if aba_ativa == 'ia' %}true{% else %}false{% endif %}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z"/></svg>
+                <span class="aba-rotulo-longo">Inteligencia artificial</span><span class="aba-rotulo-curto">IA</span>
+                <span class="person-tab-count aba-status{% if cfg.ia_ativa %} ligada{% endif %}">{% if cfg.ia_ativa %}ligada{% else %}desligada{% endif %}</span>
+            </a>
+        </nav>
 
-        <form method="post" action="{% url 'configuracao-atendimento' %}#ia" style="margin-top:18px">
-            {% csrf_token %}
-            <input type="hidden" name="acao" value="testar_ia">
-            <div class="ia-teste">
-                <p class="builder-field">
-                    <label for="{{ form_teste.pergunta.id_for_label }}">Testar a IA (nada e enviado no WhatsApp)</label>
-                    {{ form_teste.pergunta }}
-                </p>
-                <button type="submit" class="secundario">
-                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    <span class="btn-text">Testar</span>
-                </button>
-            </div>
-        </form>
-        {% if resultado_teste %}
-            {% if resultado_teste.erro %}
-            <div class="ia-resultado erro">Nao foi possivel falar com a IA: {{ resultado_teste.erro }}</div>
-            {% elif resultado_teste.decisao %}
-            <div class="ia-resultado">
-                {% if resultado_teste.decisao.acao == 'opcao' %}
-                    <strong>Escolheu a opcao "{{ resultado_teste.decisao.rotulo }}"</strong> e enviaria a resposta dela:
-                {% elif resultado_teste.decisao.acao == 'transferir' %}
-                    <strong>Passaria para a equipe</strong>, enviando:
+        <div class="config-tab-panel" role="tabpanel" id="painel-menu" data-painel="menu" aria-labelledby="aba-menu"{% if aba_ativa != 'menu' %} hidden{% endif %}>
+            <section class="profile-form-card">
+                <div class="panel-header">
+                    <div>
+                        <h2>Opcoes do menu</h2>
+                        <p>Cada opcao no menu vira um item numerado; a pessoa pode responder o numero ou uma palavra-chave. Opcoes fora do menu respondem so pelas palavras-chave.</p>
+                    </div>
+                    <a class="btn" href="{% url 'atendimento-opcao-nova' %}">
+                        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        <span class="btn-text">Adicionar opcao</span>
+                    </a>
+                </div>
+
+                {% if opcoes %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr><th>No menu</th><th>Rotulo</th><th>Acao</th><th>Palavras-chave</th><th>Ativa</th><th>Acoes</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for op in opcoes %}
+                            <tr>
+                                <td>{% if op.numero_menu %}{{ op.numero_menu }}{% elif op.ativa %}<span class="table-muted-text" title="Responde so pelas palavras-chave">fora do menu</span>{% else %}<span class="table-muted-text">&mdash;</span>{% endif %}</td>
+                                <td>{{ op.rotulo }}{% if op.midia_arquivo %} <small class="table-muted-text" title="{{ op.midia_nome_original }}">+ arquivo</small>{% endif %}</td>
+                                <td>{{ op.get_acao_display }}</td>
+                                <td class="table-muted-text">{{ op.palavras_chave|default:'-'|truncatechars:44 }}</td>
+                                <td>{% if op.ativa %}Sim{% else %}<span class="table-muted-text">Nao</span>{% endif %}</td>
+                                <td>
+                                    <div class="bot-opcoes-acoes">
+                                        <form method="post" action="{% url 'atendimento-opcao-mover' op.pk %}">{% csrf_token %}<input type="hidden" name="direcao" value="subir"><button class="bot-btn-mini" title="Subir">&uarr;</button></form>
+                                        <form method="post" action="{% url 'atendimento-opcao-mover' op.pk %}">{% csrf_token %}<input type="hidden" name="direcao" value="descer"><button class="bot-btn-mini" title="Descer">&darr;</button></form>
+                                        <a class="bot-btn-mini" href="{% url 'atendimento-opcao-editar' op.pk %}">Editar</a>
+                                        <form method="post" action="{% url 'atendimento-opcao-excluir' op.pk %}" onsubmit="return confirm('Remover esta opcao?');">{% csrf_token %}<button class="bot-btn-mini bot-btn-del">Excluir</button></form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
                 {% else %}
-                    <strong>Responderia:</strong>
+                <p class="empty-state">Nenhuma opcao cadastrada ainda. Clique em "Adicionar opcao".</p>
                 {% endif %}
-                <p style="margin:6px 0 0">{{ resultado_teste.decisao.resposta|default:'(mensagem padrao de transferencia)'|linebreaksbr }}</p>
-                <small>Modelo {{ resultado_teste.modelo }} &middot; {{ resultado_teste.tokens_entrada }} tokens de entrada, {{ resultado_teste.tokens_saida }} de saida.</small>
-            </div>
-            {% else %}
-            <div class="ia-resultado erro">
-                A IA respondeu num formato que o robo nao entende; na conversa real ele mandaria o "nao entendi" + menu.
-                <small>Resposta bruta: {{ resultado_teste.bruto|truncatechars:300 }}</small>
-            </div>
-            {% endif %}
-        {% endif %}
-    </section>
+            </section>
+        </div>
 
-    <section class="profile-form-card">
-        <div class="panel-header"><div>
-            <h2>Textos</h2>
-            <p>A saudacao e enviada junto com o menu. A mensagem de "nao entende" reaparece com o menu quando a resposta nao casa.</p>
-        </div></div>
-        <form method="post">
-            {% csrf_token %}
-            <input type="hidden" name="acao" value="textos">
-            <p class="builder-field">
-                <label for="{{ form.mensagem_saudacao.id_for_label }}">Saudacao + intro do menu</label>
-                {{ form.mensagem_saudacao }}
-                {% if form.mensagem_saudacao.errors %}<span class="form-errors">{{ form.mensagem_saudacao.errors.0 }}</span>{% endif %}
-            </p>
-            <p class="builder-field">
-                <label for="{{ form.mensagem_fallback.id_for_label }}">Quando o bot nao entende</label>
-                {{ form.mensagem_fallback }}
-                {% if form.mensagem_fallback.errors %}<span class="form-errors">{{ form.mensagem_fallback.errors.0 }}</span>{% endif %}
-            </p>
-            <div class="action-row">
-                <button type="submit">
-                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                    <span class="btn-text">Salvar textos</span>
-                </button>
-            </div>
-        </form>
+        <div class="config-tab-panel" role="tabpanel" id="painel-textos" data-painel="textos" aria-labelledby="aba-textos"{% if aba_ativa != 'textos' %} hidden{% endif %}>
+            <section class="profile-form-card">
+                <div class="panel-header"><div>
+                    <h2>Textos</h2>
+                    <p>A saudacao e enviada junto com o menu. A mensagem de "nao entende" reaparece com o menu quando a resposta nao casa.</p>
+                </div></div>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="acao" value="textos">
+                    <p class="builder-field">
+                        <label for="{{ form.mensagem_saudacao.id_for_label }}">Saudacao + intro do menu</label>
+                        {{ form.mensagem_saudacao }}
+                        {% if form.mensagem_saudacao.errors %}<span class="form-errors">{{ form.mensagem_saudacao.errors.0 }}</span>{% endif %}
+                    </p>
+                    <p class="builder-field">
+                        <label for="{{ form.mensagem_fallback.id_for_label }}">Quando o bot nao entende</label>
+                        {{ form.mensagem_fallback }}
+                        {% if form.mensagem_fallback.errors %}<span class="form-errors">{{ form.mensagem_fallback.errors.0 }}</span>{% endif %}
+                    </p>
+                    <div class="action-row">
+                        <button type="submit">
+                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                            <span class="btn-text">Salvar textos</span>
+                        </button>
+                    </div>
+                </form>
 
-        {% if menu_preview %}
-        <div style="margin-top:16px">
-            <p class="table-muted-text" style="margin:0 0 6px">Previa da 1a mensagem que a pessoa recebe:</p>
-            <pre class="bot-preview">{{ cfg.mensagem_saudacao }}
+                {% if menu_preview %}
+                <div style="margin-top:16px">
+                    <p class="table-muted-text" style="margin:0 0 6px">Previa da 1a mensagem que a pessoa recebe:</p>
+                    <pre class="bot-preview">{{ cfg.mensagem_saudacao }}
 
 {{ menu_preview }}</pre>
-        </div>
-        {% endif %}
-    </section>
-
-    <section class="profile-form-card">
-        <div class="panel-header">
-            <div>
-                <h2>Opcoes do menu</h2>
-                <p>Cada opcao no menu vira um item numerado; a pessoa pode responder o numero ou uma palavra-chave. Opcoes fora do menu respondem so pelas palavras-chave.</p>
-            </div>
-            <a class="btn" href="{% url 'atendimento-opcao-nova' %}">
-                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                <span class="btn-text">Adicionar opcao</span>
-            </a>
+                </div>
+                {% endif %}
+            </section>
         </div>
 
-        {% if opcoes %}
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr><th>No menu</th><th>Rotulo</th><th>Acao</th><th>Palavras-chave</th><th>Ativa</th><th>Acoes</th></tr>
-                </thead>
-                <tbody>
-                    {% for op in opcoes %}
-                    <tr>
-                        <td>{% if op.numero_menu %}{{ op.numero_menu }}{% elif op.ativa %}<span class="table-muted-text" title="Responde so pelas palavras-chave">fora do menu</span>{% else %}<span class="table-muted-text">&mdash;</span>{% endif %}</td>
-                        <td>{{ op.rotulo }}{% if op.midia_arquivo %} <small class="table-muted-text" title="{{ op.midia_nome_original }}">+ arquivo</small>{% endif %}</td>
-                        <td>{{ op.get_acao_display }}</td>
-                        <td class="table-muted-text">{{ op.palavras_chave|default:'-'|truncatechars:44 }}</td>
-                        <td>{% if op.ativa %}Sim{% else %}<span class="table-muted-text">Nao</span>{% endif %}</td>
-                        <td>
-                            <div class="bot-opcoes-acoes">
-                                <form method="post" action="{% url 'atendimento-opcao-mover' op.pk %}">{% csrf_token %}<input type="hidden" name="direcao" value="subir"><button class="bot-btn-mini" title="Subir">&uarr;</button></form>
-                                <form method="post" action="{% url 'atendimento-opcao-mover' op.pk %}">{% csrf_token %}<input type="hidden" name="direcao" value="descer"><button class="bot-btn-mini" title="Descer">&darr;</button></form>
-                                <a class="bot-btn-mini" href="{% url 'atendimento-opcao-editar' op.pk %}">Editar</a>
-                                <form method="post" action="{% url 'atendimento-opcao-excluir' op.pk %}" onsubmit="return confirm('Remover esta opcao?');">{% csrf_token %}<button class="bot-btn-mini bot-btn-del">Excluir</button></form>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="config-tab-panel" role="tabpanel" id="painel-ia" data-painel="ia" aria-labelledby="aba-ia"{% if aba_ativa != 'ia' %} hidden{% endif %}>
+            <section class="profile-form-card">
+                <div class="panel-header"><div>
+                    <h2>Inteligencia artificial</h2>
+                    <p>Quando a mensagem nao casa com numero nem palavra-chave, a IA tenta entender e responde so com a base de conhecimento e as opcoes abaixo. Se nao souber, ou se o assunto for pastoral ou sensivel, passa a conversa para a equipe. Se a IA falhar, o bot volta ao "nao entendi" + menu.</p>
+                </div></div>
+                <div class="ia-status">
+                    <span class="ia-chip {% if ollama_configurada %}ok{% else %}falta{% endif %}">Ollama (texto): {% if ollama_configurada %}chave configurada{% else %}falta OLLAMA_API_KEY{% endif %}</span>
+                    <span class="ia-chip {% if groq_configurada %}ok{% else %}falta{% endif %}">Groq (audio): {% if groq_configurada %}chave configurada{% else %}falta GROQ_API_KEY{% endif %}</span>
+                    <span class="ia-chip {% if transcricao_local_disponivel %}ok{% endif %}">Reserva no servidor: {% if transcricao_local_disponivel %}disponivel{% else %}indisponivel{% endif %}</span>
+                </div>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="acao" value="ia">
+                    <div class="ia-checks">
+                        <label>{{ form_ia.ia_ativa }} {{ form_ia.ia_ativa.label }}</label>
+                        <label>{{ form_ia.transcrever_audios }} {{ form_ia.transcrever_audios.label }}</label>
+                    </div>
+                    <div class="ia-grid">
+                        <p class="builder-field">
+                            <label for="{{ form_ia.ia_modelo.id_for_label }}">{{ form_ia.ia_modelo.label }}</label>
+                            {{ form_ia.ia_modelo }}
+                            <small class="table-muted-text">Vazio usa <code>{{ modelo_padrao_ia }}</code>.</small>
+                            {% if form_ia.ia_modelo.errors %}<span class="form-errors">{{ form_ia.ia_modelo.errors.0 }}</span>{% endif %}
+                        </p>
+                        <p class="builder-field">
+                            <label for="{{ form_ia.ia_max_respostas_por_dia.id_for_label }}">{{ form_ia.ia_max_respostas_por_dia.label }}</label>
+                            {{ form_ia.ia_max_respostas_por_dia }}
+                            <small class="table-muted-text">{{ form_ia.ia_max_respostas_por_dia.help_text }}</small>
+                            {% if form_ia.ia_max_respostas_por_dia.errors %}<span class="form-errors">{{ form_ia.ia_max_respostas_por_dia.errors.0 }}</span>{% endif %}
+                        </p>
+                    </div>
+                    <p class="builder-field">
+                        <label for="{{ form_ia.ia_base_conhecimento.id_for_label }}">{{ form_ia.ia_base_conhecimento.label }}</label>
+                        {{ form_ia.ia_base_conhecimento }}
+                        <small class="table-muted-text">{{ form_ia.ia_base_conhecimento.help_text }} As respostas das opcoes do menu ja entram automaticamente.</small>
+                        {% if form_ia.ia_base_conhecimento.errors %}<span class="form-errors">{{ form_ia.ia_base_conhecimento.errors.0 }}</span>{% endif %}
+                    </p>
+                    <p class="builder-field">
+                        <label for="{{ form_ia.ia_instrucoes.id_for_label }}">{{ form_ia.ia_instrucoes.label }}</label>
+                        {{ form_ia.ia_instrucoes }}
+                        {% if form_ia.ia_instrucoes.errors %}<span class="form-errors">{{ form_ia.ia_instrucoes.errors.0 }}</span>{% endif %}
+                    </p>
+                    <div class="action-row">
+                        <button type="submit">
+                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                            <span class="btn-text">Salvar IA</span>
+                        </button>
+                    </div>
+                </form>
+
+                <form method="post" action="{% url 'configuracao-atendimento' %}?aba=ia" style="margin-top:18px">
+                    {% csrf_token %}
+                    <input type="hidden" name="acao" value="testar_ia">
+                    <div class="ia-teste">
+                        <p class="builder-field">
+                            <label for="{{ form_teste.pergunta.id_for_label }}">Testar a IA (nada e enviado no WhatsApp)</label>
+                            {{ form_teste.pergunta }}
+                        </p>
+                        <button type="submit" class="secundario">
+                            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            <span class="btn-text">Testar</span>
+                        </button>
+                    </div>
+                </form>
+                {% if resultado_teste %}
+                    {% if resultado_teste.erro %}
+                    <div class="ia-resultado erro">Nao foi possivel falar com a IA: {{ resultado_teste.erro }}</div>
+                    {% elif resultado_teste.decisao %}
+                    <div class="ia-resultado">
+                        {% if resultado_teste.decisao.acao == 'opcao' %}
+                            <strong>Escolheu a opcao "{{ resultado_teste.decisao.rotulo }}"</strong> e enviaria a resposta dela:
+                        {% elif resultado_teste.decisao.acao == 'transferir' %}
+                            <strong>Passaria para a equipe</strong>, enviando:
+                        {% else %}
+                            <strong>Responderia:</strong>
+                        {% endif %}
+                        <p style="margin:6px 0 0">{{ resultado_teste.decisao.resposta|default:'(mensagem padrao de transferencia)'|linebreaksbr }}</p>
+                        <small>Modelo {{ resultado_teste.modelo }} &middot; {{ resultado_teste.tokens_entrada }} tokens de entrada, {{ resultado_teste.tokens_saida }} de saida.</small>
+                    </div>
+                    {% else %}
+                    <div class="ia-resultado erro">
+                        A IA respondeu num formato que o robo nao entende; na conversa real ele mandaria o "nao entendi" + menu.
+                        <small>Resposta bruta: {{ resultado_teste.bruto|truncatechars:300 }}</small>
+                    </div>
+                    {% endif %}
+                {% endif %}
+            </section>
         </div>
-        {% else %}
-        <p class="empty-state">Nenhuma opcao cadastrada ainda. Clique em "Adicionar opcao".</p>
-        {% endif %}
-    </section>
+    </div>
+
+    <script>
+        (function () {
+            const raiz = document.querySelector('[data-config-tabs]');
+            if (!raiz) return;
+            const abas = Array.from(raiz.querySelectorAll('[role="tab"]'));
+            const paineis = Array.from(raiz.querySelectorAll('[role="tabpanel"]'));
+
+            function ativar(aba, foco) {
+                abas.forEach((item) => {
+                    const ativa = item === aba;
+                    item.setAttribute('aria-selected', ativa ? 'true' : 'false');
+                    item.tabIndex = ativa ? 0 : -1;
+                });
+                paineis.forEach((painel) => {
+                    painel.hidden = painel.dataset.painel !== aba.dataset.aba;
+                });
+                if (foco) aba.focus();
+                // Guarda a aba na URL: o F5 e o "voltar" do navegador reabrem a mesma aba.
+                if (window.history.replaceState) {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('aba', aba.dataset.aba);
+                    window.history.replaceState(window.history.state, '', url);
+                }
+            }
+
+            abas.forEach((aba, indice) => {
+                aba.tabIndex = aba.getAttribute('aria-selected') === 'true' ? 0 : -1;
+                aba.addEventListener('click', (evento) => {
+                    evento.preventDefault();
+                    ativar(aba, false);
+                });
+                aba.addEventListener('keydown', (evento) => {
+                    const destinos = { ArrowRight: indice + 1, ArrowLeft: indice - 1, Home: 0, End: abas.length - 1 };
+                    if (!(evento.key in destinos)) return;
+                    evento.preventDefault();
+                    ativar(abas[(destinos[evento.key] + abas.length) % abas.length], true);
+                });
+            });
+        })();
+    </script>
 </div>
 {% endblock %}
