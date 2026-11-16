@@ -124,6 +124,96 @@
     </a>
 </section>
 
+{% if meus_acolhidos_total or not ve_toda_base %}
+<section class="dashboard-panel" id="meus-acolhidos">
+    <div class="panel-header">
+        <div>
+            <h2>Meus acolhidos</h2>
+            <p class="panel-sub">
+                {{ meus_acolhidos_total }} pessoa{{ meus_acolhidos_total|pluralize:'s' }} com você como responsável{% if meus_acolhidos_atrasados %} · <strong class="texto-atrasado">{{ meus_acolhidos_atrasados }} sem contato além do prazo</strong>{% endif %}.
+            </p>
+        </div>
+        {% if meus_acolhidos_total %}
+        <a class="btn secundario" href="{% url 'pessoas-lista' %}?meus=1">Ver todos ({{ meus_acolhidos_total }})</a>
+        {% endif %}
+    </div>
+    {% if meus_acolhidos %}
+    <div class="table-wrap">
+        <table class="atencao-table">
+            <thead>
+                <tr>
+                    <th>Pessoa</th>
+                    <th>Etapa</th>
+                    <th>Último contato</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pessoa in meus_acolhidos %}
+                <tr{% if pessoa.atrasada %} class="linha-atrasada"{% endif %}>
+                    <td>
+                        <a href="{% url 'pessoas-detalhe' pessoa.pk %}">{{ pessoa.nome }}</a>
+                        {% if pessoa.tem_novo_retorno %}<a class="tag-retorno" href="{% url 'pessoas-mensagens' pessoa.pk %}">mensagem nova</a>{% endif %}
+                        <span class="so-celular">{% include 'partials/dias_sem_contato.html' %}</span>
+                    </td>
+                    <td><span class="person-status person-status-{{ pessoa.status }}">{{ pessoa.get_status_display }}</span></td>
+                    <td>{% include 'partials/dias_sem_contato.html' %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">Ninguém com você como responsável ainda. Quem você cadastrar, ou quem um administrador passar para você, aparece aqui.</p>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if ve_toda_base %}
+<section class="dashboard-panel" id="precisam-de-atencao">
+    <div class="panel-header">
+        <div>
+            <h2>Precisam de atenção{% if atencao_total %} <span class="atencao-contador">{{ atencao_total }}</span>{% endif %}</h2>
+            <p class="panel-sub">
+                Sem passo registrado nem mensagem da equipe há mais de
+                {% for rotulo, dias in atencao_prazos %}{{ dias }} dias ({{ rotulo }}){% if not forloop.last %}, {% endif %}{% endfor %}.
+            </p>
+        </div>
+        {% if atencao_total %}
+        <a class="btn secundario" href="{% url 'pessoas-lista' %}?atencao=1">Ver todos ({{ atencao_total }})</a>
+        {% endif %}
+    </div>
+    {% if atencao_lista %}
+    <div class="table-wrap">
+        <table class="atencao-table">
+            <thead>
+                <tr>
+                    <th>Pessoa</th>
+                    <th>Etapa</th>
+                    <th>Último contato</th>
+                    <th>Responsável</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pessoa in atencao_lista %}
+                <tr>
+                    <td>
+                        <a href="{% url 'pessoas-detalhe' pessoa.pk %}">{{ pessoa.nome }}</a>
+                        <span class="so-celular">{% include 'partials/dias_sem_contato.html' %} · {% if pessoa.responsavel_atual %}{{ pessoa.responsavel_atual.get_full_name|default:pessoa.responsavel_atual.get_username }}{% else %}sem responsável{% endif %}</span>
+                    </td>
+                    <td><span class="person-status person-status-{{ pessoa.status }}">{{ pessoa.get_status_display }}</span></td>
+                    <td>{% include 'partials/dias_sem_contato.html' %}</td>
+                    <td>{% if pessoa.responsavel_atual %}{{ pessoa.responsavel_atual.get_full_name|default:pessoa.responsavel_atual.get_username }}{% else %}<span class="tag-sem-responsavel">sem responsável</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">Ninguém parado além do prazo. 🙌</p>
+    {% endif %}
+</section>
+{% endif %}
+
 {% if gabinetes_do_pastor is not None %}
 <section class="dashboard-panel">
     <div class="panel-header">

@@ -15,6 +15,7 @@ from django.views import View
 
 from apps.acolhimento.models import MensagemContato, OpcaoAtendimentoBot
 from apps.acolhimento.views import ConversasPessoasPermissaoMixin
+from apps.acolhimento.visibilidade import filtrar_por_pessoa
 
 # Tipos que podem abrir no navegador. O resto (inclusive SVG/HTML, que executariam
 # script) sai sempre como download.
@@ -42,7 +43,7 @@ def _ler_intervalo(arquivo, inicio: int, tamanho: int):
 class MidiaMensagemView(LoginRequiredMixin, ConversasPessoasPermissaoMixin, View):
     def get(self, request, pk, *args, **kwargs):
         mensagem = get_object_or_404(
-            MensagemContato,
+            filtrar_por_pessoa(MensagemContato.objects.all(), request.user),
             pk=pk,
             midia_status=MensagemContato.MidiaStatusChoices.BAIXADA,
         )

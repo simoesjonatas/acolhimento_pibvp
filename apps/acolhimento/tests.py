@@ -567,6 +567,7 @@ class PermissaoConversasPessoasTests(TestCase):
 		self.factory = RequestFactory()
 		self.user = get_user_model().objects.create_user(username='mensagens', password='x', is_staff=False)
 		self.pessoa = PrimeiroContato.objects.create(
+			responsavel_atual=self.user,
 			nome='Visitante',
 			telefone_whatsapp='31966666666',
 			primeira_vez=True,
@@ -1060,6 +1061,7 @@ class QuestionarioTests(TestCase):
 		operador = get_user_model().objects.create_user('operador', password='x')
 		perm = Permission.objects.get(codename='pode_conversar_pessoas', content_type__app_label='acolhimento')
 		operador.user_permissions.add(perm)
+		PrimeiroContato.objects.filter(pk=self.pessoa.pk).update(responsavel_atual=operador)
 		self.client.force_login(operador)
 
 		# Pode gerar (302, redirect sem render)
@@ -1504,6 +1506,7 @@ class PermissaoConversaTests(TestCase):
 		self.operador.user_permissions.add(perm)
 		self.sem_perm = get_user_model().objects.create_user('sem_perm_conv', password='x')
 		self.pessoa = PrimeiroContato.objects.create(
+			responsavel_atual=self.operador,
 			nome='Contato',
 			telefone_whatsapp='31955551111',
 			primeira_vez=True,
@@ -1773,8 +1776,8 @@ class ConfiguracaoTemplatesTests(TestCase):
 			'continuar_texto_evolution': 'Continuar {nome}',
 		})
 		self.assertEqual(resp.status_code, 302)
-		# Primeiro contato, continuar e os dois avisos do gabinete.
-		self.assertEqual(TemplateWhatsapp.objects.count(), 4)
+		# Primeiro contato, continuar, os dois avisos do gabinete e o aviso do rodizio.
+		self.assertEqual(TemplateWhatsapp.objects.count(), 5)
 		self.assertEqual(template_config.opt_in_sid(), 'HXoptinNOVO')
 		self.assertEqual(template_config.continuar_sid(), 'HXcontinuarNOVO')
 		self.assertEqual(template_config.opt_in_texto_evolution(), 'Boas-vindas {nome}')
@@ -2279,6 +2282,7 @@ class ResponsavelAtualTests(TestCase):
 		self.assertContains(resp, 'Responsavel atual')
 		self.assertContains(resp, 'Associar / trocar responsavel')
 
+		PrimeiroContato.objects.filter(pk=self.pessoa.pk).update(responsavel_atual=self.comum)
 		self.client.force_login(self.comum)
 		resp = self.client.get(reverse('pessoas-detalhe', args=[self.pessoa.pk]))
 		self.assertContains(resp, 'Responsavel atual')
@@ -2786,7 +2790,7 @@ class AguardandoRespostaTests(TestCase):
 		self.assertContains(resp, 'Respondida por <strong>Ana Souza</strong>')
 
 	def test_todos_logados_veem_a_lista_mas_o_texto_so_com_permissao(self):
-		maria = self._pessoa('Maria', '31911110001')
+		maria = self._pessoa('Maria', '31911110001', responsavel_atual=self.voluntario)
 		self._entrada(maria, 10, 'Mensagem pessoal da Maria')
 
 		self.client.force_login(self.voluntario)
@@ -3107,6 +3111,7 @@ class GabinetePastoralTests(TestCase):
 		self.equipe = usuarios.objects.create_user('equipe_gabinete', password='x')
 		self.equipe.user_permissions.add(Permission.objects.get(codename='pode_conversar_pessoas'))
 		self.pessoa = PrimeiroContato.objects.create(
+			responsavel_atual=self.equipe,
 			nome='Marcos',
 			telefone_whatsapp='31944440001',
 			primeira_vez=True,
@@ -3203,6 +3208,7 @@ class FichaAbasTests(TestCase):
 		self.admin = usuarios.objects.create_user('adm_abas', password='x', is_staff=True)
 		self.comum = usuarios.objects.create_user('comum_abas', password='x')
 		self.pessoa = PrimeiroContato.objects.create(
+			responsavel_atual=self.comum,
 			nome='Lucia',
 			telefone_whatsapp='31955550101',
 			primeira_vez=True,

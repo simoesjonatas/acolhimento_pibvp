@@ -4318,6 +4318,7 @@ a.kpi-card:hover {
 .admin-badge,
 .reply-badge,
 .retorno-badge,
+.atencao-badge,
 .iniciou-badge,
 .falar-depois-badge {
     display: inline-flex;
@@ -4368,6 +4369,7 @@ a.kpi-card:hover {
 }
 
 .retorno-badge,
+.atencao-badge,
 .iniciou-badge,
 .falar-depois-badge {
     margin-left: 8px;
@@ -5450,4 +5452,287 @@ a.kpi-card:hover {
     width: auto;
     min-height: 32px;
     padding: 5px 12px;
+}
+
+/* Painel: "Meus acolhidos" e "Precisam de atencao". */
+.panel-sub {
+    margin: 2px 0 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.texto-atrasado {
+    color: #b91c1c;
+}
+
+.atencao-contador {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    height: 22px;
+    margin-left: 4px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-size: 0.8rem;
+    font-weight: 900;
+    vertical-align: middle;
+}
+
+.atencao-table td {
+    vertical-align: middle;
+}
+
+.atencao-table .linha-atrasada td:first-child {
+    box-shadow: inset 3px 0 0 #ef4444;
+}
+
+.dias-sem-contato {
+    white-space: nowrap;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.dias-sem-contato.atrasado {
+    color: #b91c1c;
+}
+
+.tag-retorno,
+.tag-sem-responsavel {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.tag-retorno {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.tag-sem-responsavel {
+    margin-left: 0;
+    background: #f3f3f8;
+    color: #6b6d80;
+}
+
+.atencao-badge {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+/* No celular a tabela fica com 2 colunas: dias e responsavel vao embaixo do nome. */
+.atencao-table .so-celular {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    .atencao-table th:nth-child(n+3),
+    .atencao-table td:nth-child(n+3) {
+        display: none;
+    }
+
+    .atencao-table .so-celular {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 0.8rem;
+    }
+}
+
+/* Gestao de usuarios: rodizio de novos contatos. */
+.rodizio-card {
+    margin-bottom: 14px;
+}
+
+.rodizio-card .panel-header form {
+    margin: 0;
+}
+
+.rodizio-fila {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 4px 0 8px;
+    padding: 0;
+    list-style: none;
+    counter-reset: rodizio;
+}
+
+.rodizio-fila li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #ffffff;
+    font-size: 0.85rem;
+    counter-increment: rodizio;
+}
+
+.rodizio-fila li::before {
+    content: counter(rodizio) ".";
+    color: var(--muted);
+    font-weight: 800;
+}
+
+.rodizio-proximo,
+.rodizio-sem-telefone {
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.rodizio-proximo {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.rodizio-sem-telefone {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+/* Mensagens do WhatsApp: abas, status na Meta e previa do texto. */
+.config-templates-page .config-tab-panel {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+}
+
+.config-templates-page .config-tab-panel[hidden] {
+    display: none;
+}
+
+.config-templates-page .aba-rotulo-curto {
+    display: none;
+}
+
+.tpl-aba-erro {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.tpl-cabecalho {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 10px;
+}
+
+.tpl-cabecalho h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.tpl-descricao {
+    margin: 4px 0 12px;
+    color: var(--muted);
+    font-size: 0.86rem;
+}
+
+.tpl-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border: 1px solid #d8d9e5;
+    border-radius: 999px;
+    background: #f3f3f8;
+    color: #525465;
+    font-size: 0.74rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.tpl-status.is-ok { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.tpl-status.is-espera { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.tpl-status.is-erro { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+
+.tpl-linha {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 110px;
+    gap: 10px;
+    /* Sem isto o campo Idioma estica ate a altura da dica embaixo do nome. */
+    align-items: start;
+}
+
+.tpl-linha input,
+.config-template-card textarea {
+    width: 100%;
+}
+
+.tpl-previa {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border-radius: 10px 10px 10px 2px;
+    background: #e7fbe9;
+    border: 1px solid #c4ecc9;
+}
+
+.tpl-previa-rotulo {
+    display: block;
+    margin-bottom: 4px;
+    color: #3f6b46;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.tpl-previa p {
+    margin: 0;
+    white-space: pre-wrap;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.tpl-aviso {
+    margin: -6px 0 14px;
+    color: #b91c1c;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.tpl-avancado {
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+}
+
+.tpl-avancado summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.84rem;
+    font-weight: 800;
+}
+
+.tpl-avancado[open] summary {
+    margin-bottom: 8px;
+}
+
+.tpl-salvar {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    padding: 10px 0;
+    background: linear-gradient(180deg, rgba(247, 247, 250, 0) 0%, var(--bg, #f7f7fa) 35%);
+}
+
+@media (max-width: 600px) {
+    .config-templates-page .aba-rotulo-longo { display: none; }
+    .config-templates-page .aba-rotulo-curto { display: inline; }
+    .tpl-linha { grid-template-columns: minmax(0, 1fr); }
 }

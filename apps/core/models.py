@@ -104,6 +104,10 @@ class PerfilUsuario(models.Model):
 		related_name='perfil',
 	)
 	telefone = models.CharField('telefone', max_length=20, blank=True, validators=[telefone_validator])
+	# Rodizio: quem esta marcado recebe as pessoas sem responsavel que escrevem no WhatsApp.
+	recebe_novos_contatos = models.BooleanField('recebe novos contatos (rodizio)', default=False)
+	# Vez no rodizio: recebe primeiro quem esta ha mais tempo sem receber ninguem.
+	ultima_atribuicao_em = models.DateTimeField('ultima pessoa recebida em', null=True, blank=True)
 	atualizado_em = models.DateTimeField('atualizado em', auto_now=True)
 
 	class Meta:
@@ -120,6 +124,10 @@ def telefone_do_usuario(usuario):
 		PerfilUsuario.objects.filter(usuario=usuario).values_list('telefone', flat=True).first()
 		or ''
 	)
+
+
+def recebe_novos_contatos(usuario) -> bool:
+	return PerfilUsuario.objects.filter(usuario=usuario, recebe_novos_contatos=True).exists()
 
 
 def salvar_telefone_do_usuario(usuario, telefone):

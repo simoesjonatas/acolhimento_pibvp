@@ -1,0 +1,4 @@
+{# Espera `pessoa` marcada por atencao.marcar (dias_sem_contato, atrasada, ultimo_contato). #}
+<span class="dias-sem-contato{% if pessoa.atrasada %} atrasado{% endif %}" title="{{ pessoa.ultimo_contato|date:'d/m/Y H:i' }}">
+    {% if pessoa.dias_sem_contato == 0 %}hoje{% elif pessoa.dias_sem_contato == 1 %}há 1 dia{% else %}há {{ pessoa.dias_sem_contato }} dias{% endif %}
+</span>

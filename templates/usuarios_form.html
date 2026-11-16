@@ -166,6 +166,13 @@
                                 <small>Ve e registra o gabinete pastoral na ficha das pessoas</small>
                             </span>
                         </label>
+                        <label class="permission-toggle" for="{{ form.recebe_novos_contatos.id_for_label }}">
+                            {{ form.recebe_novos_contatos }}
+                            <span>
+                                <strong>Recebe novos contatos (rodízio)</strong>
+                                <small>Quem escrever sem responsável vai para quem está no rodízio, com aviso no WhatsApp do perfil</small>
+                            </span>
+                        </label>
                         <label class="permission-toggle" for="{{ form.is_staff.id_for_label }}">
                             {{ form.is_staff }}
                             <span>
@@ -177,6 +184,7 @@
                     {{ form.is_active.errors }}
                     {{ form.pode_conversar_pessoas.errors }}
                     {{ form.perfil_pastor.errors }}
+                    {{ form.recebe_novos_contatos.errors }}
                     {{ form.is_staff.errors }}
                 </div>
 

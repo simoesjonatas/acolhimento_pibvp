@@ -11,6 +11,40 @@
     </a>
 </div>
 
+<section class="dashboard-panel rodizio-card" id="rodizio">
+    <div class="panel-header">
+        <div>
+            <h2>Rodízio de novos contatos</h2>
+            <p class="panel-sub">Quem escreve no WhatsApp sem ter responsável vai para o próximo da fila abaixo, com aviso no WhatsApp do perfil. Para entrar ou sair, edite o usuário e marque "Recebe novos contatos".</p>
+        </div>
+        {% if rodizio_atrasados %}
+        <form method="post" action="{% url 'rodizio-distribuir' %}" onsubmit="return confirm('Distribuir {{ rodizio_atrasados }} pessoa(s) entre quem está no rodízio?');">
+            {% csrf_token %}
+            <button type="submit"{% if not rodizio_equipe %} disabled title="Ninguém no rodízio"{% endif %}>
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="M4 4l5 5"/></svg>
+                <span class="btn-text">Distribuir {{ rodizio_atrasados }} sem responsável</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    {% if rodizio_equipe %}
+    <ol class="rodizio-fila">
+        {% for membro in rodizio_equipe %}
+        <li>
+            <strong>{{ membro.get_full_name|default:membro.username }}</strong>
+            {% if forloop.first %}<span class="rodizio-proximo">próximo</span>{% endif %}
+            {% if not membro.telefone_perfil %}<span class="rodizio-sem-telefone" title="Recebe as pessoas, mas não recebe o aviso no WhatsApp">sem telefone: não recebe aviso</span>{% endif %}
+        </li>
+        {% endfor %}
+    </ol>
+    {% else %}
+    <p class="empty-state">Ninguém no rodízio ainda: quem escreve sem responsável continua sem dono.</p>
+    {% endif %}
+    {% if rodizio_atrasados %}
+    <p class="panel-sub">{{ rodizio_atrasados }} pessoa{{ rodizio_atrasados|pluralize:'s' }} sem responsável escreve{{ rodizio_atrasados|pluralize:'u,ram' }} nos últimos {{ rodizio_dias }} dias.</p>
+    {% endif %}
+</section>
+
 <form method="get" class="filters-form">
     <div>
         <label for="q">Busca</label>
@@ -40,6 +74,7 @@
             <th>Ativo</th>
             <th>Staff</th>
             <th>Pastor</th>
+            <th>Rodízio</th>
             <th>Acoes</th>
         </tr>
     </thead>
@@ -53,6 +88,7 @@
             <td>{% if usuario.is_active %}Sim{% else %}Nao{% endif %}</td>
             <td>{% if usuario.is_staff %}Sim{% else %}Nao{% endif %}</td>
             <td>{% if usuario.eh_pastor %}Sim{% else %}Nao{% endif %}</td>
+            <td>{% if usuario.no_rodizio %}Sim{% else %}Nao{% endif %}</td>
             <td class="row-actions">
                 <a class="btn" href="{% url 'usuarios-editar' usuario.pk %}">
                     <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>

@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.acolhimento.models import MensagemContato
+from apps.acolhimento.models import MensagemContato, PrimeiroContato
 from apps.acolhimento.tests_meta import _pessoa
 
 
@@ -27,6 +27,7 @@ class MensagensNovasViewTests(TestCase):
 		self.user.user_permissions.add(Permission.objects.get(codename='pode_conversar_pessoas'))
 		self.client.force_login(self.user)
 		self.pessoa = _pessoa()
+		PrimeiroContato.objects.filter(pk=self.pessoa.pk).update(responsavel_atual=self.user)
 		self.url = reverse('pessoas-mensagens-novas', args=[self.pessoa.pk])
 
 	def test_sem_permissao_bloqueado(self):

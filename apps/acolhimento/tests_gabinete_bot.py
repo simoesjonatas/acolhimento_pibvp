@@ -187,6 +187,7 @@ class PastorFiltroPainelTests(TestCase):
 		self.assertContains(resp, 'Pastor do gabinete')
 
 	def test_filtro_pastor_ignorado_para_quem_nao_ve_gabinete(self):
+		PrimeiroContato.objects.filter(pk__in=[self.ana.pk, self.bia.pk]).update(responsavel_atual=self.equipe)
 		self.client.force_login(self.equipe)
 		resp = self.client.get(reverse('pessoas-lista'), {'pastor': self.pastor.pk})
 		self.assertEqual(resp.context['total_filtrado'], 2)

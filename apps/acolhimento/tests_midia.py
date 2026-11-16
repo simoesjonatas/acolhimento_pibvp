@@ -349,6 +349,8 @@ class MidiaViewTests(_PastaMidiaTemporaria, TestCase):
 		user = get_user_model().objects.create_user(nome, password='x')
 		if com_permissao:
 			user.user_permissions.add(Permission.objects.get(codename='pode_conversar_pessoas'))
+			# Usuario comum so ve os proprios acolhidos.
+			PrimeiroContato.objects.filter(pk=self.pessoa.pk).update(responsavel_atual=user)
 		return user
 
 	def test_anonimo_bloqueado(self):

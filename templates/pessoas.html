@@ -7,7 +7,7 @@
     <div>
         <span class="section-eyebrow">Acolhimento</span>
         <h1>Primeiros contatos</h1>
-        <p>Visualize cadastros, retornos pendentes e pessoas que ja iniciaram conversa.</p>
+        <p>Visualize cadastros, retornos pendentes e pessoas que ja iniciaram conversa.{% if not ve_toda_base %} Aqui aparecem só as pessoas com você como responsável.{% endif %}</p>
     </div>
     <div class="hero-actions">
         {% if request.user.is_staff or request.user.is_superuser %}
@@ -87,11 +87,19 @@
         </select>
     </div>
     <div class="filter-check">
+        <label for="atencao">
+            <input type="checkbox" id="atencao" name="atencao" value="1" {% if atencao_atual == '1' %}checked{% endif %}>
+            Precisam de atenção
+        </label>
+    </div>
+    {% if ve_toda_base %}
+    <div class="filter-check">
         <label for="meus">
             <input type="checkbox" id="meus" name="meus" value="1" {% if meus_atual == '1' %}checked{% endif %}>
             Somente meus contatos
         </label>
     </div>
+    {% endif %}
     <button type="submit">
         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="3 4 21 4 14 12 14 19 10 21 10 12 3 4"/></svg>
         <span class="btn-text">Filtrar</span>
@@ -144,8 +152,9 @@
         <tr>
             <td class="col-nome">
                 <strong class="table-primary-text">{{ pessoa.nome }}</strong>
-                {% if pessoa.has_novo_retorno or pessoa.iniciou_interacao %}
+                {% if pessoa.has_novo_retorno or pessoa.iniciou_interacao or pessoa.atrasada %}
                 <span class="pessoa-badges">
+                    {% if pessoa.atrasada %}<span class="atencao-badge" title="Último contato em {{ pessoa.ultimo_contato|date:'d/m/Y' }}">Sem contato há {{ pessoa.dias_sem_contato }} dias</span>{% endif %}
                     {% if pessoa.has_novo_retorno %}<span class="retorno-badge">Novo retorno</span>{% endif %}
                     {% if pessoa.iniciou_interacao %}<span class="iniciou-badge">Iniciou conversa</span>{% endif %}
                 </span>

@@ -16,11 +16,13 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
 
-from apps.acolhimento import boas_vindas, template_config
+from apps.acolhimento import atencao, boas_vindas, rodizio, template_config
 from apps.acolhimento.models import ConfiguracaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PrimeiroContato, RegistroGabinete, TemplateWhatsapp
-from apps.acolhimento.whatsapp_rules import contar_pessoas_janela_aberta
+from apps.acolhimento.visibilidade import filtrar_por_pessoa, pessoas_visiveis, ve_toda_base
+from apps.acolhimento.whatsapp_rules import filtrar_janela_aberta
 from apps.core.forms import PerfilForm, QrCodeDinamicoForm, UsuarioCreateForm, UsuarioUpdateForm, eh_pastor
 from apps.core.models import QrCodeDinamico, telefone_do_usuario
 from apps.core.qrcode_utils import gerar_qrcode_png, gerar_qrcode_svg
@@ -128,6 +130,40 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 			messages.warning(request, template_config.mensagem_nao_configurado(TemplateWhatsapp.Tipo.PRIMEIRO_CONTATO))
 		return redirect('dashboard')
 
+	LIMITE_PAINEL = 8
+
+	@classmethod
+	def contexto_atencao(cls, usuario):
+		"""Blocos "Precisam de atencao" (a equipe toda) e "Meus acolhidos" (do usuario)."""
+		agora = timezone.now()
+		atrasados = atencao.precisam_de_atencao(pessoas_visiveis(usuario)).select_related('responsavel_atual')
+		atencao_total = atrasados.count()
+		atencao_lista = atencao.marcar(list(atrasados[:cls.LIMITE_PAINEL]), agora)
+
+		novo_retorno = MensagemContato.objects.filter(
+			pessoa=OuterRef('pk'),
+			direcao=MensagemContato.DirecaoChoices.ENTRADA,
+			visualizada_equipe_em__isnull=True,
+		)
+		meus = atencao.anotar_ultimo_contato(
+			PrimeiroContato.objects.filter(responsavel_atual=usuario, status__in=atencao.EM_ACOLHIMENTO)
+		).annotate(tem_novo_retorno=Exists(novo_retorno))
+		meus = atencao.marcar(list(meus), agora)
+		# Quem escreveu e ninguem viu vem primeiro; depois os atrasados; depois o resto,
+		# sempre do contato mais antigo para o mais recente.
+		meus.sort(key=lambda p: (not p.tem_novo_retorno, not p.atrasada, p.ultimo_contato))
+		return {
+			'atencao_total': atencao_total,
+			'atencao_lista': atencao_lista,
+			'atencao_prazos': [
+				(PrimeiroContato.StatusAcolhimento(status).label, dias) for status, dias in atencao.PRAZO_DIAS.items()
+			],
+			'meus_acolhidos': meus[:cls.LIMITE_PAINEL * 2],
+			'meus_acolhidos_total': len(meus),
+			'meus_acolhidos_atrasados': sum(1 for p in meus if p.atrasada),
+			've_toda_base': ve_toda_base(usuario),
+		}
+
 	@staticmethod
 	def gabinetes_do_pastor(pastor):
 		"""Pessoas com gabinete atribuido ao pastor: proximos agendados primeiro, depois os demais.
@@ -162,36 +198,39 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
 
-		total_pessoas = PrimeiroContato.objects.count()
+		# Usuario comum ve so os proprios acolhidos: os numeros do painel seguem a mesma regra.
+		visiveis = pessoas_visiveis(self.request.user)
+		total_pessoas = visiveis.count()
 		# KPI do card = todo mundo no status (bate com o filtro ?status=primeiro_contato).
 		# O badge do botao usa total_boas_vindas, que e o subconjunto elegivel ao disparo.
-		total_primeiro_contato = PrimeiroContato.objects.filter(
+		total_primeiro_contato = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.PRIMEIRO_CONTATO
 		).count()
 		total_boas_vindas = self.get_pessoas_boas_vindas_queryset().count()
-		total_robo = PrimeiroContato.objects.filter(
+		total_robo = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.ROBO
 		).count()
-		total_acompanhamento = PrimeiroContato.objects.filter(
+		total_acompanhamento = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
 		).count()
-		total_participante = PrimeiroContato.objects.filter(
+		total_participante = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.PARTICIPANTE
 		).count()
-		total_em_gabinete = PrimeiroContato.objects.filter(
+		total_em_gabinete = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.EM_GABINETE
 		).count()
-		total_aprovado = PrimeiroContato.objects.filter(
+		total_aprovado = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.APROVADO
 		).count()
-		total_membros = PrimeiroContato.objects.filter(
+		total_membros = visiveis.filter(
 			status=PrimeiroContato.StatusAcolhimento.MEMBRO
 		).count()
-		total_janela_aberta = contar_pessoas_janela_aberta()
+		total_janela_aberta = filtrar_janela_aberta(visiveis).count()
 
-		ultimos_passos = InteracaoAcolhimento.objects.select_related('pessoa')[:8]
+		ultimos_passos = filtrar_por_pessoa(InteracaoAcolhimento.objects.select_related('pessoa'), self.request.user)[:8]
 		if eh_pastor(self.request.user):
 			context['gabinetes_do_pastor'] = self.gabinetes_do_pastor(self.request.user)
+		context.update(self.contexto_atencao(self.request.user))
 
 		context.update(
 			{
@@ -292,6 +331,7 @@ class UsuarioListView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, ListView)
 		return queryset.annotate(
 			eh_pastor=Exists(pastor),
 			telefone=F('perfil__telefone'),
+			no_rodizio=F('perfil__recebe_novos_contatos'),
 		).order_by('username')
 
 	def get_context_data(self, **kwargs):
@@ -301,7 +341,33 @@ class UsuarioListView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, ListView)
 		context['filtro_query'] = query_params.urlencode()
 		context['busca'] = self.request.GET.get('q', '').strip()
 		context['total_filtrado'] = context['paginator'].count
+		equipe = rodizio.equipe()
+		for usuario in equipe:
+			usuario.telefone_perfil = telefone_do_usuario(usuario)
+		context['rodizio_equipe'] = equipe
+		context['rodizio_atrasados'] = rodizio.sem_responsavel_que_escreveram().count()
+		context['rodizio_dias'] = rodizio.DIAS_ATRASADOS
 		return context
+
+
+class RodizioDistribuirView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, View):
+	"""Passa de uma vez quem escreveu nos ultimos dias e esta sem responsavel."""
+
+	def post(self, request, *args, **kwargs):
+		if not rodizio.equipe():
+			messages.error(request, 'Ninguém está no rodízio. Marque "Recebe novos contatos" em quem vai atender.')
+			return redirect('usuarios-lista')
+		resultado = rodizio.distribuir_atrasados()
+		if not resultado:
+			messages.info(request, 'Não há pessoas sem responsável que escreveram nos últimos dias.')
+		else:
+			partes = ', '.join(f'{nome}: {quantas}' for nome, quantas in sorted(resultado.items()))
+			messages.success(
+				request,
+				f'{sum(resultado.values())} pessoa(s) distribuída(s) ({partes}). '
+				'Nessa distribuição não vai aviso no WhatsApp: avise a equipe para olhar "Meus acolhidos".',
+			)
+		return redirect('usuarios-lista')
 
 
 class UsuarioCreateView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, CreateView):

@@ -811,6 +811,7 @@ class TemplateWhatsapp(models.Model):
 		CONTINUAR = 'continuar_conversa', 'Continuar conversa'
 		GABINETE_PESSOA = 'gabinete_agendado_pessoa', 'Gabinete agendado (para a pessoa)'
 		GABINETE_PASTOR = 'gabinete_agendado_pastor', 'Gabinete agendado (aviso ao pastor)'
+		RESPONSAVEL_ATRIBUIDO = 'responsavel_atribuido', 'Nova pessoa no rodizio (aviso ao responsavel)'
 
 	tipo = models.CharField(max_length=40, choices=Tipo.choices, unique=True)
 	content_sid = models.CharField('Content Template SID', max_length=64, blank=True)
