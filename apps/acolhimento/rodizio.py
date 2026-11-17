@@ -41,6 +41,21 @@ VARIAVEIS_AVISO_PADRAO = {'1': '{voluntario}', '2': '{pessoa}', '3': '{link}'}
 PERMISSOES_ATENDIMENTO = ('pode_conversar_pessoas', 'pode_ver_gabinete')
 
 
+def atende_mensagens(usuario) -> bool:
+    """Pode ser responsavel: conversa com as pessoas (perfil de mensagens, pastor ou admin).
+
+    Quem so cadastra (sem esse perfil) nao pode ficar com a pessoa: ela ficaria presa
+    com alguem que nao consegue responder.
+    """
+    if usuario is None or not usuario.is_active:
+        return False
+    return bool(
+        usuario.is_staff
+        or usuario.is_superuser
+        or any(usuario.has_perm(f'acolhimento.{perm}') for perm in PERMISSOES_ATENDIMENTO)
+    )
+
+
 def _perfis_no_rodizio():
     from apps.core.models import PerfilUsuario
 
@@ -110,6 +125,16 @@ def ao_receber_mensagem(pessoa: PrimeiroContato):
     """Gancho do webhook: a pessoa escreveu. Nunca levanta excecao (o webhook segue)."""
     try:
         return atribuir(pessoa, 'mandou mensagem no WhatsApp')
+    except Exception:  # noqa: BLE001
+        logger.exception('Rodizio: falha ao atribuir a pessoa %s.', pessoa.pk)
+        return None
+
+
+def ao_cadastrar_pela_equipe(pessoa: PrimeiroContato, quem_cadastrou):
+    """Cadastro feito por quem nao atende mensagens: a pessoa vai para o rodizio."""
+    nome = quem_cadastrou.get_full_name() or quem_cadastrou.get_username()
+    try:
+        return atribuir(pessoa, f'cadastrada por {nome}, que não atende mensagens')
     except Exception:  # noqa: BLE001
         logger.exception('Rodizio: falha ao atribuir a pessoa %s.', pessoa.pk)
         return None

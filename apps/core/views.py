@@ -397,6 +397,15 @@ class UsuarioUpdateView(LoginRequiredMixin, UsuarioGestaoPermissaoMixin, UpdateV
 	def form_valid(self, form):
 		response = super().form_valid(form)
 		messages.success(self.request, 'Usuario atualizado com sucesso.')
+		usuario = get_user_model().objects.get(pk=self.object.pk)  # sem o cache de permissoes antigo
+		if not rodizio.atende_mensagens(usuario):
+			presas = PrimeiroContato.objects.filter(responsavel_atual=usuario, status__in=atencao.EM_ACOLHIMENTO).count()
+			if presas:
+				messages.warning(
+					self.request,
+					f'{usuario.get_full_name() or usuario.get_username()} é responsável por {presas} pessoa(s) em acolhimento, '
+					'mas não atende mensagens: passe essas pessoas para outra pessoa da equipe.',
+				)
 		return response
 
 	def form_invalid(self, form):
