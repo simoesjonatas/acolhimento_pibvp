@@ -50,11 +50,6 @@
             <strong class="kpi-value">{{ resumo.falhas }}</strong>
             <span class="kpi-hint">o robô mandou o menu no lugar</span>
         </a>
-        <div class="kpi-card">
-            <span class="kpi-label">Tokens gastos</span>
-            <strong class="kpi-value">{{ resumo.tokens_entrada|add:resumo.tokens_saida }}</strong>
-            <span class="kpi-hint">{% if resumo.tokens_por_resposta %}~{{ resumo.tokens_por_resposta }} por resposta{% else %}—{% endif %}</span>
-        </div>
     </section>
 
     <form method="get" class="filters-form conversas-ia-filtros">
@@ -102,7 +97,6 @@
             <footer class="ia-atendimento-rodape">
                 {% if a.ia.erro %}<span class="texto-atrasado">Erro: {{ a.ia.erro }}</span>{% endif %}
                 {% if a.ia.modelo %}<span>{{ a.ia.modelo }}</span>{% endif %}
-                {% if a.tokens %}<span>{{ a.tokens }} tokens</span>{% endif %}
                 <a href="{% url 'pessoas-mensagens' a.pessoa.pk %}">Abrir conversa</a>
             </footer>
         </article>
