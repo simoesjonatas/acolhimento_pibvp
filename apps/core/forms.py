@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import Permission
+from django.db import models
 
 from apps.core.models import (
     PerfilUsuario,
@@ -215,11 +216,19 @@ class PerfilForm(TelefoneUsuarioFormMixin, forms.ModelForm):
         return user
 
 
+def _campo_link_https(campo_modelo, **kwargs):
+    """Link digitado sem esquema (ex.: pibvp.org.br) vira https:// (padrao do Django 6)."""
+    if isinstance(campo_modelo, models.URLField):
+        kwargs.setdefault('assume_scheme', 'https')
+    return campo_modelo.formfield(**kwargs)
+
+
 class QrCodeDinamicoForm(forms.ModelForm):
     """Cadastro/edicao de um QR Code dinamico (link fixo, destino reconfiguravel)."""
 
     class Meta:
         model = QrCodeDinamico
+        formfield_callback = _campo_link_https
         fields = ['nome', 'destino', 'ativo', 'descricao']
         widgets = {
             'nome': forms.TextInput(attrs={

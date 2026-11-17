@@ -407,3 +407,21 @@ class MarcaDoTopoTests(TestCase):
 		resp = self.client.get(reverse('perfil'))
 
 		self.assertContains(resp, f'<a class="brand-wrap" href="{reverse("dashboard")}" title="Ir para o Painel">')
+
+
+class LinkDoQrCodeTests(TestCase):
+	"""Django 5.2: link sem esquema vira https:// (o padrao que chega no Django 6)."""
+
+	def test_link_sem_esquema_vira_https(self):
+		from apps.core.forms import QrCodeDinamicoForm
+
+		form = QrCodeDinamicoForm(data={'nome': 'Cartaz', 'destino': 'pibvp.org.br/cultos', 'ativo': 'on'})
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertEqual(form.cleaned_data['destino'], 'https://pibvp.org.br/cultos')
+
+	def test_link_com_esquema_fica_como_esta(self):
+		from apps.core.forms import QrCodeDinamicoForm
+
+		form = QrCodeDinamicoForm(data={'nome': 'Cartaz', 'destino': 'http://exemplo.org', 'ativo': 'on'})
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertEqual(form.cleaned_data['destino'], 'http://exemplo.org')
