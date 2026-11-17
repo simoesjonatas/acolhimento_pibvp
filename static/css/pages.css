@@ -5736,3 +5736,83 @@ a.kpi-card:hover {
     .config-templates-page .aba-rotulo-curto { display: inline; }
     .tpl-linha { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Painel da equipe (lider). */
+.equipe-periodo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+
+.equipe-periodo a {
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #ffffff;
+    color: inherit;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.equipe-periodo a.is-ativo {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: #ffffff;
+}
+
+.equipe-cards {
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.kpi-card.kpi-alerta .kpi-value {
+    color: #b91c1c;
+}
+
+.equipe-table th.num,
+.equipe-table td.num {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.equipe-table td {
+    vertical-align: top;
+}
+
+.equipe-table .linha-atrasada td:first-child {
+    box-shadow: inset 3px 0 0 #ef4444;
+}
+
+.equipe-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 3px;
+}
+
+.tag-rodizio {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: #dcfce7;
+    color: #15803d;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.equipe-detalhe {
+    display: block;
+    color: var(--muted);
+    font-size: 0.74rem;
+    font-weight: 600;
+    white-space: normal;
+}
+
+.filtro-responsavel {
+    margin-left: 6px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--surface-tint);
+    font-weight: 800;
+}

@@ -27,7 +27,7 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento.visibilidade import filtrar_por_pessoa, pessoas_visiveis, ve_toda_base
-from apps.acolhimento import atencao, boas_vindas, fila_auto, gabinete_avisos, meta_service, rodizio, template_config, templates_tela
+from apps.acolhimento import atencao, boas_vindas, fila_auto, gabinete_avisos, meta_service, painel_equipe, rodizio, template_config, templates_tela
 from apps.acolhimento.aguardando_resposta import (
 	DIAS_PESSOA_NOVA,
 	DIAS_RESPONDIDAS,
@@ -223,6 +223,14 @@ class PrimeiroContatoQuerysetMixin:
 		if meus == '1':
 			queryset = queryset.filter(responsavel_atual=self.request.user)
 
+		# Links do painel da equipe: as pessoas de um voluntario (ou sem responsavel).
+		responsavel = self.request.GET.get('responsavel', '').strip()
+		if ve_toda_base(self.request.user):
+			if responsavel == 'sem':
+				queryset = queryset.filter(responsavel_atual__isnull=True)
+			elif responsavel.isdigit():
+				queryset = queryset.filter(responsavel_atual_id=int(responsavel))
+
 		if como_conheceu:
 			queryset = queryset.filter(como_conheceu=como_conheceu)
 
@@ -316,6 +324,11 @@ class PrimeiroContatoListView(LoginRequiredMixin, PrimeiroContatoQuerysetMixin, 
 		context['meus_atual'] = self.request.GET.get('meus', '').strip()
 		context['atencao_atual'] = self.request.GET.get('atencao', '').strip()
 		context['ve_toda_base'] = ve_toda_base(self.request.user)
+		responsavel = self.request.GET.get('responsavel', '').strip()
+		if context['ve_toda_base'] and responsavel.isdigit():
+			context['responsavel_filtrado'] = get_user_model().objects.filter(pk=int(responsavel)).first()
+		elif context['ve_toda_base'] and responsavel == 'sem':
+			context['responsavel_filtrado'] = 'sem'
 		if context['atencao_atual'] == '1':
 			atencao.marcar(context['pessoas'])
 		context['como_conheceu_atual'] = self.request.GET.get('como_conheceu', '').strip()
@@ -1860,6 +1873,27 @@ class ConfiguracaoTemplatesView(LoginRequiredMixin, SuperAdminPermissaoMixin, Fo
 	def form_invalid(self, form):
 		messages.error(self.request, 'Nao foi possivel salvar. Verifique os campos destacados.')
 		return super().form_invalid(form)
+
+
+class PainelEquipeView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+	"""Painel do lider: acolhidos, atrasos e tempo de resposta de cada voluntario."""
+
+	template_name = 'painel_equipe.html'
+	raise_exception = True
+
+	def test_func(self):
+		return ve_toda_base(self.request.user)
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		dias = self.request.GET.get('dias', '')
+		dias = int(dias) if dias.isdigit() and int(dias) in painel_equipe.PERIODOS else painel_equipe.PERIODO_PADRAO
+		context['painel'] = painel_equipe.resumo(dias)
+		context['periodos'] = painel_equipe.PERIODOS
+		context['prazos'] = [
+			(PrimeiroContato.StatusAcolhimento(status).label, prazo) for status, prazo in atencao.PRAZO_DIAS.items()
+		]
+		return context
 
 
 class ConfiguracaoTemplatesStatusView(LoginRequiredMixin, SuperAdminPermissaoMixin, View):

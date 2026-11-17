@@ -77,6 +77,14 @@
                     Respostas
                 </a>
                 {% endif %}
+                {% if user.is_staff or user.is_superuser or perms.acolhimento.pode_ver_gabinete %}
+                <a
+                    href="{% url 'painel-equipe' %}"
+                    class="nav-link {% if request.resolver_match.url_name == 'painel-equipe' %}active{% endif %}"
+                >
+                    Equipe
+                </a>
+                {% endif %}
                 {% if user.is_staff or user.is_superuser %}
                 <a
                     href="{% url 'mensagens-fila' %}"
