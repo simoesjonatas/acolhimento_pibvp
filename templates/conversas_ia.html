@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block title %}Conversas da IA{% endblock %}
+
+{% block content %}
+<div class="conversas-ia-page">
+    <section class="page-hero">
+        <div>
+            <span class="section-eyebrow">Atendimento automático</span>
+            <h1>Conversas da IA</h1>
+            <p>O que a IA fez com cada mensagem que recebeu: respondeu, mandou uma opção do menu, passou para a equipe ou falhou. Use para conferir as respostas e completar a base de conhecimento.</p>
+        </div>
+        <div class="conversas-ia-acoes">
+            {% if user.is_superuser %}
+            <a class="btn secundario" href="{% url 'configuracao-atendimento' %}?aba=ia">Configurar a IA</a>
+            {% endif %}
+        </div>
+    </section>
+
+    {% if not ia_ligada %}
+    <div class="config-alert">A IA está <b>desligada</b> agora: a lista mostra só o que ela fez quando estava ligada.</div>
+    {% endif %}
+
+    <nav class="equipe-periodo" aria-label="Período">
+        <span>Período:</span>
+        {% for p in periodos %}
+        <a class="{% if dias_atual == p %}is-ativo{% endif %}" href="?dias={{ p }}{% if filtro_atual %}&filtro={{ filtro_atual }}{% endif %}">{% if p == 1 %}24 horas{% else %}{{ p }} dias{% endif %}</a>
+        {% endfor %}
+        <a class="{% if dias_atual == 'todos' %}is-ativo{% endif %}" href="?dias=todos{% if filtro_atual %}&filtro={{ filtro_atual }}{% endif %}">Tudo</a>
+    </nav>
+
+    <section class="dashboard-cards equipe-cards">
+        <a class="kpi-card" href="?dias={{ dias_atual }}">
+            <span class="kpi-label">Mensagens atendidas</span>
+            <strong class="kpi-value">{{ resumo.total }}</strong>
+            <span class="kpi-hint">{{ resumo.audios }} áudio{{ resumo.audios|pluralize }} transcrito{{ resumo.audios|pluralize }}</span>
+        </a>
+        <a class="kpi-card" href="?dias={{ dias_atual }}&filtro=resolvidas">
+            <span class="kpi-label">Resolvidas pela IA</span>
+            <strong class="kpi-value">{% if resumo.pct_resolvidas is not None %}{{ resumo.pct_resolvidas }}%{% else %}—{% endif %}</strong>
+            <span class="kpi-hint">{{ resumo.resolvidas }} sem precisar da equipe</span>
+        </a>
+        <a class="kpi-card" href="?dias={{ dias_atual }}&filtro=equipe">
+            <span class="kpi-label">Passadas para a equipe</span>
+            <strong class="kpi-value">{{ resumo.equipe }}</strong>
+            <span class="kpi-hint">pastoral, pedido de ajuda ou não sabia</span>
+        </a>
+        <a class="kpi-card{% if resumo.falhas %} kpi-alerta{% endif %}" href="?dias={{ dias_atual }}&filtro=falhas">
+            <span class="kpi-label">Falhas</span>
+            <strong class="kpi-value">{{ resumo.falhas }}</strong>
+            <span class="kpi-hint">o robô mandou o menu no lugar</span>
+        </a>
+        <div class="kpi-card">
+            <span class="kpi-label">Tokens gastos</span>
+            <strong class="kpi-value">{{ resumo.tokens_entrada|add:resumo.tokens_saida }}</strong>
+            <span class="kpi-hint">{% if resumo.tokens_por_resposta %}~{{ resumo.tokens_por_resposta }} por resposta{% else %}—{% endif %}</span>
+        </div>
+    </section>
+
+    <form method="get" class="filters-form conversas-ia-filtros">
+        <input type="hidden" name="dias" value="{{ dias_atual }}">
+        <div>
+            <label for="filtro">Mostrar</label>
+            <select id="filtro" name="filtro">
+                <option value="">Todas</option>
+                {% for chave, rotulo in filtros %}
+                <option value="{{ chave }}" {% if filtro_atual == chave %}selected{% endif %}>{{ rotulo }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="q">Busca</label>
+            <input id="q" name="q" type="search" value="{{ busca }}" placeholder="Nome ou texto da mensagem">
+        </div>
+        <button type="submit">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="3 4 21 4 14 12 14 19 10 21 10 12 3 4"/></svg>
+            <span class="btn-text">Filtrar</span>
+        </button>
+    </form>
+
+    <p class="result-count">{{ paginator.count }} atendimento{{ paginator.count|pluralize }}.</p>
+
+    {% if atendimentos %}
+    <div class="ia-lista">
+        {% for a in atendimentos %}
+        <article class="ia-atendimento">
+            <header class="ia-atendimento-topo">
+                <a class="ia-pessoa" href="{% url 'pessoas-mensagens' a.pessoa.pk %}">{{ a.pessoa.nome }}</a>
+                <span class="ia-quando" title="{{ a.enfileirada_em|date:'d/m/Y H:i' }}">{{ a.enfileirada_em|date:'d/m H:i' }}</span>
+                <span class="ia-acao is-{{ a.classe_acao }}">{{ a.rotulo_acao }}{% if a.ia.opcao %}: {{ a.ia.opcao }}{% endif %}</span>
+                {% if a.ia.primeira %}<span class="ia-tag">1ª mensagem</span>{% endif %}
+            </header>
+            <div class="ia-balao ia-balao-pessoa">
+                {% if a.eh_audio %}<span class="ia-audio">🎤 Áudio{% if a.transcricao %} transcrito{% endif %}</span>{% endif %}
+                {{ a.pergunta|default:'(sem texto)'|linebreaksbr }}
+            </div>
+            {% if a.resposta %}
+            <div class="ia-balao ia-balao-robo">{{ a.resposta.conteudo|linebreaksbr }}</div>
+            {% elif a.ia.caminho %}
+            <div class="ia-balao ia-balao-robo ia-balao-menu">O robô mandou {% if a.ia.caminho == 'fallback_opcao' %}a opção que casou pela palavra-chave{% else %}o menu{% endif %}.</div>
+            {% endif %}
+            <footer class="ia-atendimento-rodape">
+                {% if a.ia.erro %}<span class="texto-atrasado">Erro: {{ a.ia.erro }}</span>{% endif %}
+                {% if a.ia.modelo %}<span>{{ a.ia.modelo }}</span>{% endif %}
+                {% if a.tokens %}<span>{{ a.tokens }} tokens</span>{% endif %}
+                <a href="{% url 'pessoas-mensagens' a.pessoa.pk %}">Abrir conversa</a>
+            </footer>
+        </article>
+        {% endfor %}
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        {% if page_obj.has_previous %}<a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ page_obj.previous_page_number }}"><span class="btn-text">Anterior</span></a>{% endif %}
+        <span>Página {{ page_obj.number }} de {{ paginator.num_pages }}</span>
+        {% if page_obj.has_next %}<a class="btn secundario" href="?{% if filtro_query %}{{ filtro_query }}&{% endif %}page={{ page_obj.next_page_number }}"><span class="btn-text">Próxima</span></a>{% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="empty-state">Nenhum atendimento da IA neste período{% if filtro_atual or busca %} com esse filtro{% endif %}.</p>
+    {% endif %}
+</div>
+{% endblock %}

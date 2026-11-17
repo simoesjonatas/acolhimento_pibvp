@@ -5816,3 +5816,93 @@ a.kpi-card:hover {
     background: var(--surface-tint);
     font-weight: 800;
 }
+
+/* Conversas da IA. */
+.conversas-ia-page {
+    display: grid;
+    gap: 14px;
+}
+
+.ia-lista {
+    display: grid;
+    gap: 12px;
+}
+
+.ia-atendimento {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: var(--shadow-soft);
+}
+
+.ia-atendimento-topo,
+.ia-atendimento-rodape {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+}
+
+.ia-pessoa {
+    font-weight: 900;
+}
+
+.ia-quando,
+.ia-atendimento-rodape {
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.ia-acao,
+.ia-tag {
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 800;
+}
+
+.ia-acao.is-ok { background: #ecfdf5; color: #047857; }
+.ia-acao.is-equipe { background: #eef2ff; color: #3730a3; }
+.ia-acao.is-erro { background: #fef2f2; color: #b91c1c; }
+.ia-tag { background: #f3f3f8; color: #525465; }
+
+.ia-balao {
+    max-width: min(560px, 92%);
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.ia-balao-pessoa {
+    justify-self: start;
+    border-top-left-radius: 2px;
+    background: #f1f2f6;
+}
+
+.ia-balao-robo {
+    justify-self: end;
+    border-top-right-radius: 2px;
+    background: #e7fbe9;
+}
+
+.ia-balao-menu {
+    color: var(--muted);
+    font-style: italic;
+}
+
+.ia-audio {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 800;
+}
+
+.ia-atendimento-rodape {
+    justify-content: flex-end;
+}
