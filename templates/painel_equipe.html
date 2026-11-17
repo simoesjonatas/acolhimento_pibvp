@@ -56,7 +56,10 @@
                 <h2>Por voluntário</h2>
                 <p class="panel-sub">Quem tem gente esperando há mais tempo aparece primeiro. O tempo de resposta conta a resposta de qualquer pessoa da equipe nas pessoas do voluntário. Respostas do robô não contam.</p>
             </div>
-            <a class="btn secundario" href="{% url 'usuarios-lista' %}#rodizio">Rodízio</a>
+            <span class="inline-actions">
+                {% if user.is_staff or user.is_superuser %}<a class="btn secundario" href="{% url 'conversas-ia' %}">Conversas da IA</a>{% endif %}
+                {% if user.is_superuser %}<a class="btn secundario" href="{% url 'usuarios-lista' %}#rodizio">Rodízio</a>{% endif %}
+            </span>
         </div>
         {% if painel.linhas %}
         <div class="table-wrap">

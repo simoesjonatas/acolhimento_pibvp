@@ -27,7 +27,7 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from apps.acolhimento.visibilidade import filtrar_por_pessoa, pessoas_visiveis, ve_toda_base
-from apps.acolhimento import atencao, boas_vindas, fila_auto, gabinete_avisos, meta_service, painel_equipe, rodizio, template_config, templates_tela
+from apps.acolhimento import atencao, boas_vindas, conversas_ia, fila_auto, gabinete_avisos, meta_service, painel_equipe, rodizio, template_config, templates_tela
 from apps.acolhimento.aguardando_resposta import (
 	DIAS_PESSOA_NOVA,
 	DIAS_RESPONDIDAS,
@@ -42,7 +42,7 @@ from apps.acolhimento.aguardando_resposta import (
 from apps.acolhimento.fila_metrics import metricas_entrega
 from apps.acolhimento.fila_processor import ritmo_anti_bloqueio_ativo
 from apps.acolhimento.forms import AutoCadastroPrimeiroContatoForm, DisparoMensagemMassaForm, EnfileirarMensagemForm, InteracaoAcolhimentoForm, PerguntaForm, PrimeiroContatoForm, QuestionarioForm, RegistroGabineteForm, RelatorioPessoasForm, ResponderQuestionarioForm, TemplatesWhatsappForm, pastores_queryset, responsaveis_queryset, rotulo_usuario
-from apps.acolhimento.models import ConfiguracaoProcessamentoFila, ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, OpcaoComoConheceu, PrimeiroContato, Questionario, RegistroGabinete, RespostaPergunta, TemplateWhatsapp
+from apps.acolhimento.models import ConfiguracaoAtendimentoBot, ConfiguracaoProcessamentoFila, ConviteQuestionario, ExecucaoProcessamentoFila, InteracaoAcolhimento, MensagemContato, PerguntaQuestionario, OpcaoComoConheceu, PrimeiroContato, Questionario, RegistroGabinete, RespostaPergunta, TemplateWhatsapp
 from apps.acolhimento.phone_utils import build_auto_nome_from_phone, find_pessoa_by_phone, phone_for_cadastro
 from apps.acolhimento.reports import filtrar_pessoas, gerar_exportacao_respostas, gerar_relatorio, resumo_filtros, resumo_pessoas
 from apps.acolhimento.whatsapp_rules import (
@@ -1902,6 +1902,46 @@ class PainelEquipeView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
 		context['prazos'] = [
 			(PrimeiroContato.StatusAcolhimento(status).label, prazo) for status, prazo in atencao.PRAZO_DIAS.items()
 		]
+		return context
+
+
+class ConversasIAView(LoginRequiredMixin, AdminPermissaoMixin, ListView):
+	"""O que a IA fez com cada mensagem: pergunta, decisao, resposta e gasto."""
+
+	template_name = 'conversas_ia.html'
+	context_object_name = 'atendimentos'
+	paginate_by = 25
+	raise_exception = True
+
+	def _dias(self):
+		dias = self.request.GET.get('dias', '')
+		if dias == 'todos':
+			return None
+		return int(dias) if dias.isdigit() and int(dias) in conversas_ia.PERIODOS else conversas_ia.PERIODO_PADRAO
+
+	def get_queryset(self):
+		return conversas_ia.atendimentos(
+			dias=self._dias(),
+			filtro=self.request.GET.get('filtro', ''),
+			busca=self.request.GET.get('q', ''),
+		)
+
+	def get_context_data(self, **kwargs):
+		context = super().get_context_data(**kwargs)
+		conversas_ia.detalhar(context['atendimentos'])
+		# Os numeros do topo seguem o periodo, mas nao o filtro (mostram o retrato todo).
+		context['resumo'] = conversas_ia.resumo(conversas_ia.atendimentos(dias=self._dias()))
+		dias = self._dias()
+		context['dias_atual'] = 'todos' if dias is None else dias
+		context['periodos'] = conversas_ia.PERIODOS
+		context['filtros'] = [(chave, rotulo) for chave, (rotulo, _) in conversas_ia.FILTROS.items()]
+		context['filtro_atual'] = self.request.GET.get('filtro', '')
+		context['busca'] = self.request.GET.get('q', '').strip()
+		params = self.request.GET.copy()
+		params.pop('page', None)
+		context['filtro_query'] = params.urlencode()
+		cfg = ConfiguracaoAtendimentoBot.carregar()
+		context['ia_ligada'] = cfg.ia_ativa
 		return context
 
 

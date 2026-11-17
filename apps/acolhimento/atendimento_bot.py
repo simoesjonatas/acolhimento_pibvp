@@ -142,9 +142,12 @@ def transferir_para_equipe(pessoa, motivo: str, agora=None) -> None:
     _log(pessoa, f'Atendimento automatico: {motivo} -> transferido para atendente.', agora)
 
 
-def aplicar_opcao(pessoa, opcao, agora=None, *, origem: str = 'bot_atendimento') -> None:
-    """Responde a opcao (texto + arquivo) e, se for o caso, transfere para a equipe."""
-    enfileirar_resposta(pessoa, opcao.resposta, origem=origem)
+def aplicar_opcao(pessoa, opcao, agora=None, *, origem: str = 'bot_atendimento', extra: dict | None = None):
+    """Responde a opcao (texto + arquivo) e, se for o caso, transfere para a equipe.
+
+    Devolve a mensagem de texto enfileirada (None se a opcao nao tem texto).
+    """
+    mensagem = enfileirar_resposta(pessoa, opcao.resposta, origem=origem, extra=extra)
     # Arquivo da opcao (imagem/PDF/audio/video): so pela API oficial, logo apos o texto.
     if opcao.midia_arquivo and usando_meta():
         from apps.acolhimento import bot_midia
@@ -154,6 +157,7 @@ def aplicar_opcao(pessoa, opcao, agora=None, *, origem: str = 'bot_atendimento')
         transferir_para_equipe(pessoa, f'opcao "{opcao.rotulo}"', agora)
     else:
         _log(pessoa, f'Atendimento automatico: respondeu a opcao "{opcao.rotulo}".', agora)
+    return mensagem
 
 
 def processar_entrada(pessoa, texto: str, mensagem=None, *, em_segundo_plano: bool = False) -> bool:

@@ -186,6 +186,12 @@
                         Atendimento automatico
                     </a>
                     <a
+                        href="{% url 'conversas-ia' %}"
+                        class="nav-dropdown-link {% if request.resolver_match.url_name == 'conversas-ia' %}active{% endif %}"
+                    >
+                        Conversas da IA
+                    </a>
+                    <a
                         href="{% url 'configuracao-como-conheceu' %}"
                         class="nav-dropdown-link {% if request.resolver_match.url_name == 'configuracao-como-conheceu' or request.resolver_match.url_name == 'como-conheceu-opcao-nova' or request.resolver_match.url_name == 'como-conheceu-opcao-editar' %}active{% endif %}"
                     >

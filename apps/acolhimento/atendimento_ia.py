@@ -197,6 +197,26 @@ def _tem_entrada_mais_nova(pessoa, mensagem_id: int) -> bool:
     ).exists()
 
 
+def registrar(mensagem, acao: str, resposta=None, **dados) -> None:
+    """Grava na mensagem da pessoa o que a IA fez com ela (base da tela Conversas da IA).
+
+    Fica em metadata_resposta['ia']: acao, resposta_id (o que saiu), modelo, tokens,
+    opcao escolhida, erro. Le de novo do banco antes: a transcricao tambem escreve ali.
+    """
+    try:
+        atual = MensagemContato.objects.filter(pk=mensagem.pk).values_list('metadata_resposta', flat=True).first()
+        metadata = dict(atual or {})
+        metadata['ia'] = {
+            'acao': acao,
+            'resposta_id': getattr(resposta, 'pk', None),
+            'em': timezone.now().isoformat(),
+            **{chave: valor for chave, valor in dados.items() if valor not in (None, '')},
+        }
+        MensagemContato.objects.filter(pk=mensagem.pk).update(metadata_resposta=metadata)
+    except Exception:  # noqa: BLE001 - registro e acessorio: nunca derruba a resposta.
+        logger.exception('Falha ao registrar a decisao da IA (mensagem %s).', mensagem.pk)
+
+
 def _sem_ia(pessoa, cfg, opcoes, texto: str, agora, *, primeira: bool = False) -> str:
     """IA falhou: tenta a palavra-chave (frase longa pulou essa etapa) e, sem ela, o menu."""
     if primeira:
@@ -230,8 +250,11 @@ def responder(pessoa_id: int, mensagem_id: int, *, esperar: bool = True, primeir
     opcoes = atendimento_bot.opcoes_ativas()
     agora = timezone.now()
     if _respostas_ia_hoje(pessoa) >= max(int(cfg.ia_max_respostas_por_dia or 0), 1):
-        atendimento_bot.enfileirar_resposta(pessoa, MENSAGEM_TRANSFERENCIA, origem=ORIGEM_IA, extra={'ia': {'acao': 'limite'}})
+        saida = atendimento_bot.enfileirar_resposta(
+            pessoa, MENSAGEM_TRANSFERENCIA, origem=ORIGEM_IA, extra={'ia': {'acao': 'limite', 'entrada_id': mensagem.pk}},
+        )
         atendimento_bot.transferir_para_equipe(pessoa, 'IA atingiu o limite de respostas do dia', agora)
+        registrar(mensagem, 'limite', saida)
         return 'limite'
 
     texto = (mensagem.transcricao or mensagem.conteudo or '').strip()
@@ -239,7 +262,9 @@ def responder(pessoa_id: int, mensagem_id: int, *, esperar: bool = True, primeir
         resultado = consultar(cfg, opcoes, _historico(pessoa), _primeiro_nome(pessoa), primeira=primeira)
     except ia_service.IAError as exc:
         logger.warning('IA do robo indisponivel (pessoa=%s, http=%s): %s', pessoa.pk, exc.http_status, exc)
-        return _sem_ia(pessoa, cfg, opcoes, texto, agora, primeira=primeira)
+        caminho = _sem_ia(pessoa, cfg, opcoes, texto, agora, primeira=primeira)
+        registrar(mensagem, 'falha', erro=str(exc)[:200], caminho=caminho, primeira=primeira or None)
+        return caminho
 
     decisao = resultado['decisao']
     meta_ia = {
@@ -250,28 +275,39 @@ def responder(pessoa_id: int, mensagem_id: int, *, esperar: bool = True, primeir
         'entrada_id': mensagem.pk,
         'primeira': primeira,
     }
+    gasto = {
+        'modelo': resultado['modelo'],
+        'tokens_entrada': resultado['tokens_entrada'],
+        'tokens_saida': resultado['tokens_saida'],
+        'primeira': primeira or None,
+    }
     if decisao is None:
         logger.warning('IA do robo devolveu resposta ilegivel (pessoa=%s).', pessoa.pk)
-        return _sem_ia(pessoa, cfg, opcoes, texto, agora, primeira=primeira)
+        caminho = _sem_ia(pessoa, cfg, opcoes, texto, agora, primeira=primeira)
+        registrar(mensagem, 'ilegivel', caminho=caminho, bruto=(resultado.get('texto') or '')[:300], **gasto)
+        return caminho
 
     if decisao['acao'] == 'opcao':
         opcao = opcoes[decisao['opcao'] - 1]
-        atendimento_bot.aplicar_opcao(pessoa, opcao, agora, origem=ORIGEM_IA)
+        saida = atendimento_bot.aplicar_opcao(pessoa, opcao, agora, origem=ORIGEM_IA, extra={'ia': meta_ia})
+        registrar(mensagem, 'opcao', saida, opcao=opcao.rotulo, **gasto)
         return 'opcao'
 
     if decisao['acao'] == 'transferir':
-        atendimento_bot.enfileirar_resposta(
+        saida = atendimento_bot.enfileirar_resposta(
             pessoa, decisao['resposta'] or MENSAGEM_TRANSFERENCIA, origem=ORIGEM_IA, extra={'ia': meta_ia},
         )
         atendimento_bot.transferir_para_equipe(pessoa, 'a IA pediu ajuda da equipe', agora)
+        registrar(mensagem, 'transferir', saida, **gasto)
         return 'transferir'
 
     resposta = decisao['resposta']
     if primeira:
         # Na primeira resposta o menu vai junto, como na saudacao fixa.
         resposta = atendimento_bot._com_menu(resposta, opcoes)
-    atendimento_bot.enfileirar_resposta(pessoa, resposta, origem=ORIGEM_IA, extra={'ia': meta_ia})
+    saida = atendimento_bot.enfileirar_resposta(pessoa, resposta, origem=ORIGEM_IA, extra={'ia': meta_ia})
     atendimento_bot._log(pessoa, f'Atendimento automatico: IA respondeu "{texto[:60]}".', agora)
+    registrar(mensagem, 'responder', saida, **gasto)
     return 'responder'
 
 
