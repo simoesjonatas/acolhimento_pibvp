@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+
+{% block title %}Painel da equipe{% endblock %}
+
+{% block content %}
+<div class="painel-equipe-page">
+    <section class="page-hero">
+        <div>
+            <span class="section-eyebrow">Liderança</span>
+            <h1>Painel da equipe</h1>
+            <p>Como está cada voluntário com os próprios acolhidos: quem espera resposta, quem está atrasado na etapa e quanto a equipe leva para responder.</p>
+        </div>
+        <nav class="equipe-periodo" aria-label="Período do tempo de resposta">
+            <span>Tempo de resposta:</span>
+            {% for p in periodos %}
+            <a class="{% if p == painel.dias %}is-ativo{% endif %}" href="?dias={{ p }}"{% if p == painel.dias %} aria-current="true"{% endif %}>{{ p }} dias</a>
+            {% endfor %}
+        </nav>
+    </section>
+
+    {% with t=painel.totais %}
+    <section class="dashboard-cards equipe-cards">
+        <a class="kpi-card{% if t.aguardando_24h %} kpi-alerta{% endif %}" href="{% url 'aguardando-resposta' %}?ordem=espera">
+            <span class="kpi-label">Esperando há mais de 24h</span>
+            <strong class="kpi-value">{{ t.aguardando_24h }}</strong>
+            <span class="kpi-hint">de {{ t.aguardando }} aguardando resposta</span>
+        </a>
+        <a class="kpi-card" href="{% url 'pessoas-lista' %}?atencao=1">
+            <span class="kpi-label">Atrasados na etapa</span>
+            <strong class="kpi-value">{{ t.atrasados }}</strong>
+            <span class="kpi-hint">de {{ t.acolhidos }} em acolhimento</span>
+        </a>
+        <div class="kpi-card">
+            <span class="kpi-label">Respondidas em até 24h</span>
+            <strong class="kpi-value">{% if t.pct_24h is not None %}{{ t.pct_24h }}%{% else %}—{% endif %}</strong>
+            <span class="kpi-hint">{{ t.em_24h }} de {{ t.pendencias }} nos últimos {{ painel.dias }} dias</span>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-label">Tempo de resposta (mediana)</span>
+            <strong class="kpi-value">{{ t.mediana_texto }}</strong>
+            <span class="kpi-hint">metade das respostas sai antes disso</span>
+        </div>
+        {% if painel.sem_responsavel %}
+        <a class="kpi-card{% if painel.sem_responsavel.aguardando %} kpi-alerta{% endif %}" href="{% url 'aguardando-resposta' %}?responsavel=sem">
+            <span class="kpi-label">Sem responsável</span>
+            <strong class="kpi-value">{{ painel.sem_responsavel.acolhidos }}</strong>
+            <span class="kpi-hint">{{ painel.sem_responsavel.aguardando }} esperando resposta</span>
+        </a>
+        {% endif %}
+    </section>
+    {% endwith %}
+
+    <section class="dashboard-panel">
+        <div class="panel-header">
+            <div>
+                <h2>Por voluntário</h2>
+                <p class="panel-sub">Quem tem gente esperando há mais tempo aparece primeiro. O tempo de resposta conta a resposta de qualquer pessoa da equipe nas pessoas do voluntário. Respostas do robô não contam.</p>
+            </div>
+            <a class="btn secundario" href="{% url 'usuarios-lista' %}#rodizio">Rodízio</a>
+        </div>
+        {% if painel.linhas %}
+        <div class="table-wrap">
+            <table class="equipe-table">
+                <thead>
+                    <tr>
+                        <th>Voluntário</th>
+                        <th class="num">Acolhidos</th>
+                        <th class="num">Aguardando</th>
+                        <th class="num">Atrasados</th>
+                        <th class="num">Em até 24h</th>
+                        <th class="num">Resposta</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in painel.linhas %}
+                    <tr{% if l.aguardando_24h %} class="linha-atrasada"{% endif %}>
+                        <td>
+                            <strong>{{ l.nome }}</strong>
+                            <span class="equipe-tags">
+                                {% if l.no_rodizio %}<span class="tag-rodizio">no rodízio</span>{% endif %}
+                                {% if l.no_rodizio and not l.tem_telefone %}<span class="tag-sem-responsavel">sem telefone</span>{% endif %}
+                                {% if not l.ativo %}<span class="tag-sem-responsavel">inativo</span>{% endif %}
+                            </span>
+                            <small class="equipe-detalhe">{% if l.ultimo_acesso %}entrou há {{ l.ultimo_acesso|timesince }}{% else %}nunca entrou no sistema{% endif %}</small>
+                        </td>
+                        <td class="num"><a href="{% url 'pessoas-lista' %}?responsavel={{ l.usuario.pk }}">{{ l.acolhidos }}</a></td>
+                        <td class="num">
+                            {% if l.aguardando %}
+                            <a class="{% if l.aguardando_24h %}texto-atrasado{% endif %}" href="{% url 'aguardando-resposta' %}?responsavel={{ l.usuario.pk }}&ordem=espera">{{ l.aguardando }}</a>
+                            {% if l.aguardando_24h %}<small class="equipe-detalhe texto-atrasado">{{ l.aguardando_24h }} há +24h · a mais antiga há {{ l.espera_texto }}</small>
+                            {% else %}<small class="equipe-detalhe">a mais antiga há {{ l.espera_texto }}</small>{% endif %}
+                            {% else %}0{% endif %}
+                        </td>
+                        <td class="num">{% if l.atrasados %}<a href="{% url 'pessoas-lista' %}?atencao=1&responsavel={{ l.usuario.pk }}">{{ l.atrasados }}</a>{% else %}0{% endif %}</td>
+                        <td class="num">{% if l.pct_24h is not None %}<span class="{% if l.pct_24h < 70 %}texto-atrasado{% endif %}">{{ l.pct_24h }}%</span><small class="equipe-detalhe">{{ l.em_24h }} de {{ l.pendencias }}</small>{% else %}<span class="table-muted-text">—</span>{% endif %}</td>
+                        <td class="num">{{ l.mediana_texto }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="empty-state">Ninguém é responsável por pessoas ainda e o rodízio está vazio.</p>
+        {% endif %}
+        <p class="panel-sub">
+            Atrasado = sem passo na ficha nem mensagem da equipe há mais de
+            {% for rotulo, dias in prazos %}{{ dias }} dias ({{ rotulo }}){% if not forloop.last %}, {% endif %}{% endfor %}.
+        </p>
+    </section>
+</div>
+{% endblock %}

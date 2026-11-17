@@ -100,6 +100,7 @@
         </label>
     </div>
     {% endif %}
+    {% if responsavel_filtrado %}<input type="hidden" name="responsavel" value="{{ request.GET.responsavel }}">{% endif %}
     <button type="submit">
         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="3 4 21 4 14 12 14 19 10 21 10 12 3 4"/></svg>
         <span class="btn-text">Filtrar</span>
@@ -110,7 +111,7 @@
     </a>
 </form>
 
-<p class="result-count">{{ total_filtrado }} registro(s) encontrado(s).</p>
+<p class="result-count">{{ total_filtrado }} registro(s) encontrado(s).{% if responsavel_filtrado == 'sem' %} <span class="filtro-responsavel">Sem responsável · <a href="?{% for chave, valor in request.GET.items %}{% if chave != 'responsavel' and chave != 'page' %}{{ chave }}={{ valor|urlencode }}&amp;{% endif %}{% endfor %}">limpar</a></span>{% elif responsavel_filtrado %} <span class="filtro-responsavel">Pessoas de {{ responsavel_filtrado.get_full_name|default:responsavel_filtrado.username }} · <a href="?{% for chave, valor in request.GET.items %}{% if chave != 'responsavel' and chave != 'page' %}{{ chave }}={{ valor|urlencode }}&amp;{% endif %}{% endfor %}">limpar</a></span>{% endif %}</p>
 
 {% comment %} <p class="inline-actions">
     <a class="btn secundario" href="{% url 'pessoas-exportar-csv' %}?{% if filtro_query %}{{ filtro_query }}{% endif %}">
