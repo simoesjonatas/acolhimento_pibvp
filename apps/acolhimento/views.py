@@ -1033,13 +1033,22 @@ class PrimeiroContatoCreateView(LoginRequiredMixin, CreateView):
 	def form_valid(self, form):
 		form.instance.origem_cadastro = PrimeiroContato.OrigemCadastroChoices.EQUIPE
 		form.instance.criado_por = self.request.user
-		if not form.instance.responsavel_atual_id:
+		# So vira responsavel quem conversa com as pessoas; quem so cadastra passa para o
+		# rodizio (senao a pessoa fica presa com alguem que nao consegue responder).
+		atende = rodizio.atende_mensagens(self.request.user)
+		if not form.instance.responsavel_atual_id and atende:
 			form.instance.responsavel_atual = self.request.user
 		response = super().form_valid(form)
+		textos = ['Pessoa cadastrada com sucesso.']
+		if not atende:
+			recebeu = rodizio.ao_cadastrar_pela_equipe(self.object, self.request.user)
+			if recebeu:
+				textos.append(f'Ela foi encaminhada para {recebeu.get_full_name() or recebeu.get_username()}, pelo rodízio.')
+			else:
+				textos.append('Ela ficou sem responsável: um administrador vai encaminhar.')
 		if boas_vindas.ao_cadastrar(self.object, self.request.user):
-			messages.success(self.request, 'Pessoa cadastrada com sucesso. Boas-vindas enviadas para a fila do WhatsApp.')
-		else:
-			messages.success(self.request, 'Pessoa cadastrada com sucesso.')
+			textos.append('Boas-vindas enviadas para a fila do WhatsApp.')
+		messages.success(self.request, ' '.join(textos))
 		return response
 
 	def form_invalid(self, form):
