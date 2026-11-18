@@ -2,9 +2,11 @@
 
 - Quem entra: usuarios ativos com "Recebe novos contatos" ligado no cadastro de
   usuarios (PerfilUsuario.recebe_novos_contatos) e com o perfil de mensagens.
-- Quando: a pessoa sem responsavel manda mensagem no WhatsApp (nao conta reacao nem
-  o botao "Agora nao") ou se cadastra pelo QR code. No cadastro feito pela equipe,
-  quem cadastra continua sendo o responsavel.
+- Quando: a pessoa sem responsavel precisa de alguem da equipe. Com o robo/IA ligado,
+  so quando ele transfere (pediu para falar com alguem, assunto pastoral, a IA nao
+  sabia, limite do dia); com o robo desligado (ou a pessoa ja com a equipe), na
+  mensagem dela. Tambem no cadastro pelo QR code e no cadastro feito por quem nao
+  atende mensagens. Reacao e o botao "Agora nao" nunca contam.
 - Quem recebe: quem esta ha mais tempo sem receber ninguem (rodizio equilibrado).
 - Aviso: WhatsApp no telefone do perfil do voluntario, com o nome da pessoa e o link
   da conversa. Na Meta vai pelo template RESPONSAVEL_ATRIBUIDO; sem template, so chega
@@ -135,6 +137,15 @@ def ao_cadastrar_pela_equipe(pessoa: PrimeiroContato, quem_cadastrou):
     nome = quem_cadastrou.get_full_name() or quem_cadastrou.get_username()
     try:
         return atribuir(pessoa, f'cadastrada por {nome}, que não atende mensagens')
+    except Exception:  # noqa: BLE001
+        logger.exception('Rodizio: falha ao atribuir a pessoa %s.', pessoa.pk)
+        return None
+
+
+def ao_transferir(pessoa: PrimeiroContato, motivo: str):
+    """O robo/IA passou a pessoa para a equipe: entra no rodizio se nao tem responsavel."""
+    try:
+        return atribuir(pessoa, f'o atendimento automático transferiu: {motivo}')
     except Exception:  # noqa: BLE001
         logger.exception('Rodizio: falha ao atribuir a pessoa %s.', pessoa.pk)
         return None
