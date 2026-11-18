@@ -23,6 +23,7 @@ from apps.acolhimento.models import (
 	ConfiguracaoProcessamentoFila,
 	InteracaoAcolhimento,
 	MensagemContato,
+	OpcaoAtendimentoBot,
 	PrimeiroContato,
 	TemplateWhatsapp,
 )
@@ -532,8 +533,31 @@ class MetaWebhookTests(TestCase):
 			metadata_envio__origem='bot_atendimento',
 		)
 
-	def test_botao_sim_poe_em_acompanhamento_sem_acionar_bot(self):
+	def test_botao_sim_com_robo_ligado_o_robo_assume(self):
 		self._ligar_bot()
+		OpcaoAtendimentoBot.objects.get_or_create(ordem=1, rotulo='Horario', defaults={'resposta': '9h'})
+		pessoa = _pessoa(nome='Maria', iniciou_interacao=False, status=PrimeiroContato.StatusAcolhimento.ROBO)
+		_saida(pessoa, status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
+			metadata_envio={'tipo_template': 'primeiro_contato_opt_in'})
+
+		resp = self._postar(self._botao('Sim, podemos'))
+		self.assertEqual(resp.status_code, 200)
+
+		pessoa.refresh_from_db()
+		# Sem IA: o robo responde com a saudacao + menu e a pessoa segue com ele.
+		self.assertEqual(pessoa.status, PrimeiroContato.StatusAcolhimento.ROBO)
+		self.assertTrue(pessoa.iniciou_interacao)
+		self.assertEqual(pessoa.bot_etapa, PrimeiroContato.BotEtapaChoices.MENU)
+		self.assertEqual(self._saidas_do_bot(pessoa).count(), 1)
+		self.assertIsNone(pessoa.responsavel_atual)
+
+		entrada = MensagemContato.objects.get(direcao=MensagemContato.DirecaoChoices.ENTRADA)
+		self.assertEqual(entrada.metadata_resposta['meta_botao'], 'sim')
+		self.assertTrue(InteracaoAcolhimento.objects.filter(
+			pessoa=pessoa, descricao__contains='o atendimento automatico assumiu',
+		).exists())
+
+	def test_botao_sim_com_robo_desligado_vai_para_a_equipe(self):
 		pessoa = _pessoa(nome='Maria', iniciou_interacao=False)
 		_saida(pessoa, status_fila=MensagemContato.StatusFilaChoices.ENVIADA,
 			metadata_envio={'tipo_template': 'primeiro_contato_opt_in'})
@@ -543,14 +567,9 @@ class MetaWebhookTests(TestCase):
 
 		pessoa.refresh_from_db()
 		self.assertEqual(pessoa.status, PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO)
-		self.assertTrue(pessoa.iniciou_interacao)
 		self.assertEqual(self._saidas_do_bot(pessoa).count(), 0)
-		self.assertEqual(pessoa.bot_etapa, PrimeiroContato.BotEtapaChoices.INATIVO)
-
 		entrada = MensagemContato.objects.get(direcao=MensagemContato.DirecaoChoices.ENTRADA)
 		self.assertEqual(entrada.conteudo, 'Sim, podemos')
-		self.assertEqual(entrada.metadata_resposta['meta_botao'], 'sim')
-		self.assertEqual(entrada.metadata_resposta['meta_botao_texto'], 'Sim, podemos')
 		# A equipe precisa dar sequencia: continua na fila de retorno pendente.
 		self.assertIsNone(entrada.visualizada_equipe_em)
 		self.assertTrue(InteracaoAcolhimento.objects.filter(

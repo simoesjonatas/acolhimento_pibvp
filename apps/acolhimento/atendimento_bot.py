@@ -140,6 +140,10 @@ def transferir_para_equipe(pessoa, motivo: str, agora=None) -> None:
     pessoa.bot_etapa = PrimeiroContato.BotEtapaChoices.INATIVO
     pessoa.save(update_fields=['status', 'bot_etapa', 'atualizado_em'])
     _log(pessoa, f'Atendimento automatico: {motivo} -> transferido para atendente.', agora)
+    # Sem responsavel, quem recebe e o proximo do rodizio (com aviso no WhatsApp dele).
+    from apps.acolhimento import rodizio
+
+    rodizio.ao_transferir(pessoa, motivo)
 
 
 def aplicar_opcao(pessoa, opcao, agora=None, *, origem: str = 'bot_atendimento', extra: dict | None = None):

@@ -371,17 +371,20 @@ class MetaWebhookView(View):
                 ]
             )
 
-        # Sem responsavel: o rodizio ja passa a pessoa para alguem da equipe e avisa no
-        # WhatsApp dele (reacao e "Agora nao" nao pedem resposta, entao nao contam).
-        if message.get('type') != 'reaction' and marcador_botao != BOTAO_AGORA_NAO:
-            rodizio.ao_receber_mensagem(pessoa)
-
-        # Botoes do template ("Sim, podemos" / "Agora nao") ja dizem o que a pessoa quer:
-        # o bot de menu nao entra, senao ele responderia o clique com o menu numerado.
-        if marcador_botao in (BOTAO_SIM, BOTAO_AGORA_NAO):
+        # "Agora nao": a pessoa pediu para falar depois. Fica so registrado: ninguem
+        # responde (nem o robo nem a IA) e ela nao vai para o rodizio.
+        if marcador_botao == BOTAO_AGORA_NAO:
             self._resposta_botao(pessoa, marcador_botao, botao[1], agora)
             _marcar_como_lida(msg_id)
-            logger.info('Webhook Meta: entrada de botao registrada (pessoa=%s, botao=%s).', pessoa.id, marcador_botao)
+            logger.info('Webhook Meta: "Agora nao" registrado (pessoa=%s).', pessoa.id)
+            return True
+
+        # "Sim, podemos": com o robo ligado, a IA (ou o menu) conversa com a pessoa e so
+        # passa para a equipe (rodizio) se precisar. Com o robo desligado, vai direto.
+        if marcador_botao == BOTAO_SIM:
+            handled = self._resposta_sim(pessoa, botao[1], entrada, agora)
+            _marcar_como_lida(msg_id, digitando=handled and ConfiguracaoProcessamentoFila.auto_ligado())
+            logger.info('Webhook Meta: "Sim" registrado (pessoa=%s, bot_atendeu=%s).', pessoa.id, handled)
             return True
 
         # Reacao (curtir com emoji) nao e mensagem: fica registrada na conversa, mas nem
@@ -397,6 +400,10 @@ class MetaWebhookView(View):
         if not handled and flip_legado_pendente and pessoa.status in _STATUS_ANTES_DO_ACOMPANHAMENTO:
             pessoa.status = PrimeiroContato.StatusAcolhimento.EM_ACOMPANHAMENTO
             pessoa.save(update_fields=['status', 'atualizado_em'])
+        # Rodizio so quando ninguem automatico vai responder (robo desligado ou pessoa ja
+        # com a equipe). Enquanto o robo/IA atende, ela entra no rodizio na transferencia.
+        if not handled:
+            rodizio.ao_receber_mensagem(pessoa)
 
         # Com o bot respondendo e a fila saindo sozinha, mostra "digitando..." ate a resposta.
         _marcar_como_lida(msg_id, digitando=handled and ConfiguracaoProcessamentoFila.auto_ligado())
@@ -404,6 +411,26 @@ class MetaWebhookView(View):
         # LGPD: nao logamos telefone nem conteudo da mensagem, apenas identificadores.
         logger.info('Webhook Meta: entrada registrada (pessoa=%s, bot_atendeu=%s).', pessoa.id, handled)
         return True
+
+    def _resposta_sim(self, pessoa: PrimeiroContato, texto_botao: str, entrada, agora) -> bool:
+        """Clique em "Sim, podemos". True se o robo/IA assumiu a conversa."""
+        if atendimento_bot.bot_pode_atender(pessoa):
+            InteracaoAcolhimento.objects.create(
+                pessoa=pessoa,
+                tipo=InteracaoAcolhimento.TipoInteracao.RESPOSTA_RECEBIDA,
+                descricao=f'Pessoa respondeu "{texto_botao}" pelo botao do WhatsApp; o atendimento automatico assumiu.',
+                data_interacao=agora.date(),
+            )
+            # O "Sim" abre a conversa: trata como primeira mensagem (a IA responde ao
+            # convite do template e manda o menu junto; sem IA, saudacao + menu).
+            pessoa.bot_etapa = PrimeiroContato.BotEtapaChoices.INATIVO
+            pessoa.save(update_fields=['bot_etapa', 'atualizado_em'])
+            if atendimento_bot.processar_entrada(pessoa, texto_botao, entrada):
+                return True
+        # Robo desligado (ou sem opcoes): como antes, vai para a equipe pelo rodizio.
+        self._resposta_botao(pessoa, BOTAO_SIM, texto_botao, agora)
+        rodizio.ao_receber_mensagem(pessoa)
+        return False
 
     def _resposta_botao(self, pessoa: PrimeiroContato, marcador: str, texto_botao: str, agora) -> None:
         """Aplica o clique em "Sim, podemos" / "Agora nao" e registra na linha do tempo."""

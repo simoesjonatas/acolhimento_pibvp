@@ -241,3 +241,89 @@ class TelasRodizioTests(TestCase):
 		staff = get_user_model().objects.create_user('staff_rod', password='x', is_staff=True)
 		self.client.force_login(staff)
 		self.assertEqual(self.client.post(reverse('rodizio-distribuir')).status_code, 403)
+
+
+@override_settings(**META_OK, DEBUG=False)
+class IAAntesDoRodizioTests(TestCase):
+	"""Com o robo ligado, a pessoa so entra no rodizio quando ele transfere."""
+
+	def setUp(self):
+		from apps.acolhimento.models import ConfiguracaoAtendimentoBot, OpcaoAtendimentoBot
+
+		self.ana = _voluntario('ana')
+		for alvo in ('apps.acolhimento.meta_service.marcar_como_lida', 'apps.acolhimento.rodizio._avisar_em_thread'):
+			patcher = patch(alvo)
+			patcher.start()
+			self.addCleanup(patcher.stop)
+		OpcaoAtendimentoBot.objects.all().delete()  # tira as opcoes padrao da migracao
+		OpcaoAtendimentoBot.objects.create(ordem=1, rotulo='Horario dos cultos', palavras_chave='horario', resposta='9h.')
+		OpcaoAtendimentoBot.objects.create(
+			ordem=2, rotulo='Falar com alguem', palavras_chave='atendente', resposta='Ja chamo alguem.',
+			acao=OpcaoAtendimentoBot.Acao.TRANSFERIR_HUMANO,
+		)
+		cfg = ConfiguracaoAtendimentoBot.carregar()
+		cfg.ativo = True
+		cfg.save()
+
+	def _postar(self, message, wamid):
+		corpo = json.dumps({
+			'object': 'whatsapp_business_account',
+			'entry': [{'id': '9876543210', 'changes': [{'field': 'messages', 'value': {
+				'messaging_product': 'whatsapp',
+				'metadata': {'display_phone_number': '5521900000000', 'phone_number_id': '1234567890'},
+				'contacts': [{'profile': {'name': 'Joana'}, 'wa_id': '5521971347985'}],
+				'messages': [{'from': '5521971347985', 'id': wamid, 'timestamp': '1700000000', **message}],
+			}}]}],
+		}).encode('utf-8')
+		assinatura = 'sha256=' + hmac.new(b'app-secret-teste', corpo, hashlib.sha256).hexdigest()
+		return self.client.post(
+			reverse('mensagens-webhook-meta'), data=corpo, content_type='application/json',
+			HTTP_X_HUB_SIGNATURE_256=assinatura,
+		)
+
+	def _botao(self, texto, wamid):
+		return self._postar({'type': 'button', 'button': {'text': texto, 'payload': texto}}, wamid)
+
+	def _pessoa(self):
+		return PrimeiroContato.objects.get()
+
+	def test_mensagem_com_robo_ligado_nao_entra_no_rodizio(self):
+		self._postar({'type': 'text', 'text': {'body': 'oi'}}, 'wamid.A1')
+		self.assertIsNone(self._pessoa().responsavel_atual)
+
+	def test_quando_o_robo_transfere_entra_no_rodizio(self):
+		self._postar({'type': 'text', 'text': {'body': 'oi'}}, 'wamid.A1')
+		self._postar({'type': 'text', 'text': {'body': '2'}}, 'wamid.A2')  # "Falar com alguem"
+		pessoa = self._pessoa()
+		self.assertEqual(pessoa.status, Status.EM_ACOMPANHAMENTO)
+		self.assertEqual(pessoa.responsavel_atual, self.ana)
+		self.assertTrue(InteracaoAcolhimento.objects.filter(
+			pessoa=pessoa, descricao__contains='o atendimento automático transferiu: opcao "Falar com alguem"',
+		).exists())
+
+	def test_sim_podemos_o_robo_atende_e_nao_entra_no_rodizio(self):
+		self._botao('Sim, podemos', 'wamid.B1')
+		pessoa = self._pessoa()
+		self.assertEqual(pessoa.status, Status.ROBO)
+		self.assertIsNone(pessoa.responsavel_atual)
+		self.assertTrue(MensagemContato.objects.filter(pessoa=pessoa, direcao='saida').exists())
+
+	def test_sim_podemos_com_ia_vai_para_a_ia_como_primeira_mensagem(self):
+		from apps.acolhimento import atendimento_ia
+		from apps.acolhimento.models import ConfiguracaoAtendimentoBot
+
+		cfg = ConfiguracaoAtendimentoBot.carregar()
+		cfg.ia_ativa = True
+		cfg.ia_base_conhecimento = 'Cultos domingo 9h.'
+		cfg.save()
+		with override_settings(OLLAMA_API_KEY='chave-teste'), patch.object(atendimento_ia, 'agendar') as agendar:
+			self._botao('Sim, podemos', 'wamid.B1')
+		self.assertTrue(agendar.call_args.kwargs['primeira'])
+		self.assertIsNone(self._pessoa().responsavel_atual)
+
+	def test_agora_nao_fica_em_silencio(self):
+		self._botao('Agora não', 'wamid.C1')
+		pessoa = self._pessoa()
+		self.assertFalse(MensagemContato.objects.filter(pessoa=pessoa, direcao='saida').exists())
+		self.assertIsNone(pessoa.responsavel_atual)
+		self.assertTrue(InteracaoAcolhimento.objects.filter(pessoa=pessoa, descricao__contains='pediu para falar depois').exists())
