@@ -1216,15 +1216,32 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 			context['questionarios_ativos'] = Questionario.objects.none()
 
 		# `?membresia=<pk>` chega do redirect da troca de status: abre o pop-up
-		# perguntando se a equipe quer preencher agora ou enviar o link.
+		# perguntando se a equipe quer preencher agora ou enviar o link. Nao depende do
+		# perfil de questionarios: quem mudou para Ingressante precisa do link.
 		convite_destacado = (self.request.GET.get('membresia') or '').strip()
-		context['membresia_convite'] = next(
-			(
-				convite for convite in convites
-				if str(convite.pk) == convite_destacado and not convite.respondido
-			),
-			None,
-		)
+		membresia_convite = None
+		if convite_destacado.isdigit():
+			membresia_convite = (
+				self.object.convites_questionario.select_related('questionario')
+				.filter(pk=int(convite_destacado)).first()
+			)
+			if membresia_convite is not None and membresia_convite.respondido:
+				membresia_convite = None
+		if membresia_convite is not None:
+			membresia_convite.link = self.request.build_absolute_uri(
+				reverse('responder-questionario', kwargs={'token': membresia_convite.token})
+			)
+		context['membresia_convite'] = membresia_convite
+		# Sem a aba Questionarios (sem o perfil): botao para reabrir o link pendente.
+		context['membresia_pendente'] = None
+		if not ver_questionario and self.object.status == PrimeiroContato.StatusAcolhimento.PARTICIPANTE:
+			membresia = Questionario.membresia()
+			if membresia is not None:
+				context['membresia_pendente'] = (
+					self.object.convites_questionario.filter(
+						questionario=membresia, status=ConviteQuestionario.StatusConvite.PENDENTE,
+					).order_by('-criado_em').first()
+				)
 
 		# Aba aberta: vem do ?aba= (redirects e F5) e so vale se o usuario pode ver a aba.
 		abas = {'timeline', 'dados'}
@@ -1302,19 +1319,20 @@ class PrimeiroContatoStatusUpdateView(LoginRequiredMixin, View):
 
 		# Participante e o gatilho da membresia: ja deixa o link pronto e abre o
 		# pop-up para a equipe escolher entre preencher na hora ou enviar.
+		# Vale para quem mudou o status, com ou sem o perfil de mensagens: quem esta na
+		# recepcao preenche com a pessoa na hora (o envio pelo WhatsApp pede o perfil).
 		if novo_status == PrimeiroContato.StatusAcolhimento.PARTICIPANTE:
 			convite, criado = convite_membresia(pessoa, request.user)
-			if pode_ver_questionario(request.user):
-				if convite is None:
-					messages.warning(
-						request,
-						'Nenhum questionario de membresia ativo com perguntas: o link nao foi gerado.',
-					)
-				elif not convite.respondido:
-					if criado:
-						messages.success(request, 'Link do questionario de membresia gerado.')
-					url = reverse('pessoas-detalhe', kwargs={'pk': pessoa.pk})
-					return redirect(f'{url}?membresia={convite.pk}')
+			if convite is None:
+				messages.warning(
+					request,
+					'Nenhum questionario de membresia ativo com perguntas: o link nao foi gerado.',
+				)
+			elif not convite.respondido:
+				if criado:
+					messages.success(request, 'Link do questionario de membresia gerado.')
+				url = reverse('pessoas-detalhe', kwargs={'pk': pessoa.pk})
+				return redirect(f'{url}?membresia={convite.pk}')
 
 		return redirect('pessoas-detalhe', pk=pessoa.pk)
 
