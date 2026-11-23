@@ -7,7 +7,7 @@
     <div>
         <span class="section-eyebrow">Acolhimento</span>
         <h1>Primeiros contatos</h1>
-        <p>Visualize cadastros, retornos pendentes e pessoas que ja iniciaram conversa.{% if not ve_toda_base %} Aqui aparecem só as pessoas com você como responsável.{% endif %}</p>
+        <p>Visualize cadastros, retornos pendentes e pessoas que ja iniciaram conversa.{% if not ve_toda_base %} Aqui aparecem as pessoas com você como responsável. Para achar outra pessoa, busque pelo telefone completo dela, com DDD.{% endif %}</p>
     </div>
     <div class="hero-actions">
         {% if request.user.is_staff or request.user.is_superuser %}
@@ -111,6 +111,9 @@
     </a>
 </form>
 
+{% if liberadas_pela_busca %}
+<div class="config-alert">Encontrada pelo telefone: você pode abrir a ficha e a conversa dessa pessoa até sair do sistema. O responsável por ela continua o mesmo.</div>
+{% endif %}
 <p class="result-count">{{ total_filtrado }} registro(s) encontrado(s).{% if responsavel_filtrado == 'sem' %} <span class="filtro-responsavel">Sem responsável · <a href="?{% for chave, valor in request.GET.items %}{% if chave != 'responsavel' and chave != 'page' %}{{ chave }}={{ valor|urlencode }}&amp;{% endif %}{% endfor %}">limpar</a></span>{% elif responsavel_filtrado %} <span class="filtro-responsavel">Pessoas de {{ responsavel_filtrado.get_full_name|default:responsavel_filtrado.username }} · <a href="?{% for chave, valor in request.GET.items %}{% if chave != 'responsavel' and chave != 'page' %}{{ chave }}={{ valor|urlencode }}&amp;{% endif %}{% endfor %}">limpar</a></span>{% endif %}</p>
 
 {% comment %} <p class="inline-actions">

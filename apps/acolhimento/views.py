@@ -26,7 +26,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView
 
-from apps.acolhimento.visibilidade import filtrar_por_pessoa, pessoas_visiveis, ve_toda_base
+from apps.acolhimento import visibilidade
+from apps.acolhimento.visibilidade import eh_lideranca, filtrar_por_pessoa, pessoas_visiveis, ve_toda_base
 from apps.acolhimento import atencao, boas_vindas, conversas_ia, fila_auto, gabinete_avisos, meta_service, painel_equipe, rodizio, template_config, templates_tela
 from apps.acolhimento.aguardando_resposta import (
 	DIAS_PESSOA_NOVA,
@@ -209,8 +210,16 @@ class PrimeiroContatoQuerysetMixin:
 		return sort_coluna, direcao
 
 	def get_filtered_queryset(self, queryset):
-		queryset = pessoas_visiveis(self.request.user, queryset)
 		busca = self.request.GET.get('q', '').strip()
+		# Telefone completo na busca: acha a pessoa mesmo que seja de outro voluntario
+		# (se ela passou o numero, quem busca esta com ela) e libera ate sair do sistema.
+		ids_telefone = visibilidade.ids_por_telefone(busca) if busca else []
+		self.liberadas_pela_busca = []
+		if ids_telefone and not ve_toda_base(self.request.user):
+			proprias = set(pessoas_visiveis(self.request.user).filter(pk__in=ids_telefone).values_list('pk', flat=True))
+			self.liberadas_pela_busca = [pk for pk in ids_telefone if pk not in proprias]
+			visibilidade.liberar(self.request, self.liberadas_pela_busca)
+		queryset = pessoas_visiveis(self.request.user, queryset)
 		status = self.request.GET.get('status', '').strip()
 		origem = self.request.GET.get('origem', '').strip()
 		iniciou_interacao = self.request.GET.get('iniciou_interacao', '').strip()
@@ -239,11 +248,13 @@ class PrimeiroContatoQuerysetMixin:
 			queryset = queryset.filter(registros_gabinete__pastor_id=int(pastor)).distinct()
 
 		if busca:
+			# O telefone tambem casa formatado ("(21) 97155-9396", com 55, sem o 9).
 			queryset = queryset.filter(
 				Q(nome__icontains=busca)
 				| Q(telefone_whatsapp__icontains=busca)
 				| Q(email__icontains=busca)
 				| Q(religiao__icontains=busca)
+				| Q(pk__in=ids_telefone)
 			)
 
 		if status in PrimeiroContato.StatusAcolhimento.values:
@@ -324,6 +335,7 @@ class PrimeiroContatoListView(LoginRequiredMixin, PrimeiroContatoQuerysetMixin, 
 		context['meus_atual'] = self.request.GET.get('meus', '').strip()
 		context['atencao_atual'] = self.request.GET.get('atencao', '').strip()
 		context['ve_toda_base'] = ve_toda_base(self.request.user)
+		context['liberadas_pela_busca'] = len(getattr(self, 'liberadas_pela_busca', []))
 		responsavel = self.request.GET.get('responsavel', '').strip()
 		if context['ve_toda_base'] and responsavel.isdigit():
 			context['responsavel_filtrado'] = get_user_model().objects.filter(pk=int(responsavel)).first()
@@ -1891,7 +1903,7 @@ class PainelEquipeView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
 	raise_exception = True
 
 	def test_func(self):
-		return ve_toda_base(self.request.user)
+		return eh_lideranca(self.request.user)
 
 	def get_context_data(self, **kwargs):
 		context = super().get_context_data(**kwargs)
