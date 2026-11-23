@@ -74,7 +74,7 @@ class VoluntarioTests(_PastaMidiaTemporaria, TestCase):
 	def test_lista_so_mostra_os_acolhidos_dela(self):
 		resp = self.client.get(reverse('pessoas-lista'))
 		self.assertEqual([p.nome for p in resp.context['pessoas']], ['Minha Pessoa'])
-		self.assertContains(resp, 'só as pessoas com você como responsável')
+		self.assertContains(resp, 'busque pelo telefone completo dela')
 		self.assertNotContains(resp, 'Somente meus contatos')
 		# Busca tambem nao acha quem e de outro voluntario.
 		resp = self.client.get(reverse('pessoas-lista'), {'q': 'Alheia'})
@@ -175,3 +175,91 @@ class AdminEPastorVeemTudoTests(TestCase):
 				resp = self.client.get(reverse('pessoas-lista'))
 				self.assertEqual(resp.context['total_filtrado'], 2)
 				self.assertContains(self.client.get(reverse('dashboard')), 'id="precisam-de-atencao"')
+
+
+@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+class RodizioVeTudoTests(TestCase):
+	def setUp(self):
+		from apps.core.models import PerfilUsuario
+
+		indicador = patch('apps.acolhimento.meta_service.get_phone_number_info', return_value={})
+		indicador.start()
+		self.addCleanup(indicador.stop)
+		self.no_rodizio = _usuario('rod', 'pode_conversar_pessoas')
+		PerfilUsuario.objects.create(usuario=self.no_rodizio, recebe_novos_contatos=True)
+		self.outro = _usuario('outro_rod', 'pode_conversar_pessoas')
+		self.alheia = _pessoa('Pessoa Alheia', '21933334444', self.outro)
+		_pessoa('Sem Dono', '21955556666')
+
+	def test_quem_esta_no_rodizio_ve_a_base_toda(self):
+		self.client.force_login(self.no_rodizio)
+		resp = self.client.get(reverse('pessoas-lista'))
+		self.assertEqual(resp.context['total_filtrado'], 2)
+		self.assertEqual(self.client.get(reverse('pessoas-detalhe', args=[self.alheia.pk])).status_code, 200)
+		self.assertEqual(self.client.get(reverse('pessoas-mensagens', args=[self.alheia.pk])).status_code, 200)
+
+	def test_mas_nao_ve_o_painel_da_lideranca(self):
+		self.client.force_login(self.no_rodizio)
+		self.assertEqual(self.client.get(reverse('painel-equipe')).status_code, 403)
+
+	def test_saiu_do_rodizio_volta_a_ver_so_os_seus(self):
+		from apps.core.models import PerfilUsuario
+
+		PerfilUsuario.objects.filter(usuario=self.no_rodizio).update(recebe_novos_contatos=False)
+		self.client.force_login(self.no_rodizio)
+		self.assertEqual(self.client.get(reverse('pessoas-lista')).context['total_filtrado'], 0)
+		self.assertEqual(self.client.get(reverse('pessoas-detalhe', args=[self.alheia.pk])).status_code, 404)
+
+
+@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+class BuscaPorTelefoneTests(TestCase):
+	def setUp(self):
+		indicador = patch('apps.acolhimento.meta_service.get_phone_number_info', return_value={})
+		indicador.start()
+		self.addCleanup(indicador.stop)
+		self.vol = _usuario('vol_tel', 'pode_conversar_pessoas')
+		self.outro = _usuario('outro_tel', 'pode_conversar_pessoas')
+		self.alheia = _pessoa('Pessoa Alheia', '21971559396', self.outro)
+		_entrada(self.alheia, 'segredo da alheia')
+		self.client.force_login(self.vol)
+		self.lista = reverse('pessoas-lista')
+		self.ficha = reverse('pessoas-detalhe', args=[self.alheia.pk])
+
+	def test_telefone_completo_mostra_e_libera_a_pessoa(self):
+		self.assertEqual(self.client.get(self.ficha).status_code, 404)
+		resp = self.client.get(self.lista, {'q': '(21) 97155-9396'})
+		self.assertEqual([p.nome for p in resp.context['pessoas']], ['Pessoa Alheia'])
+		self.assertContains(resp, 'Encontrada pelo telefone')
+		# Liberada ate sair do sistema: ficha, conversa e o que as permissoes deixarem.
+		self.assertEqual(self.client.get(self.ficha).status_code, 200)
+		self.assertContains(self.client.get(reverse('pessoas-mensagens', args=[self.alheia.pk])), 'segredo da alheia')
+		self.assertEqual(self.client.get(self.lista).context['total_filtrado'], 1)
+		# O responsavel nao muda.
+		self.alheia.refresh_from_db()
+		self.assertEqual(self.alheia.responsavel_atual, self.outro)
+
+	def test_aceita_com_55_e_sem_o_nono_digito(self):
+		for busca in ('5521971559396', '2171559396', '+55 21 7155-9396'):
+			with self.subTest(busca=busca):
+				resp = self.client.get(self.lista, {'q': busca})
+				self.assertEqual([p.nome for p in resp.context['pessoas']], ['Pessoa Alheia'])
+
+	def test_pedaco_do_numero_nao_libera(self):
+		for busca in ('9715', '21971', '971559396'):
+			with self.subTest(busca=busca):
+				self.assertEqual(self.client.get(self.lista, {'q': busca}).context['total_filtrado'], 0)
+		self.assertEqual(self.client.get(self.ficha).status_code, 404)
+
+	def test_liberacao_acaba_ao_sair_do_sistema(self):
+		self.client.get(self.lista, {'q': '21971559396'})
+		self.assertEqual(self.client.get(self.ficha).status_code, 200)
+		self.client.logout()
+		self.client.force_login(self.vol)
+		self.assertEqual(self.client.get(self.ficha).status_code, 404)
+
+	def test_sem_permissao_de_mensagens_ve_a_ficha_mas_nao_a_conversa(self):
+		so_cadastra = _usuario('so_cadastra_tel')
+		self.client.force_login(so_cadastra)
+		self.client.get(self.lista, {'q': '21971559396'})
+		self.assertEqual(self.client.get(self.ficha).status_code, 200)
+		self.assertEqual(self.client.get(reverse('pessoas-mensagens', args=[self.alheia.pk])).status_code, 403)
