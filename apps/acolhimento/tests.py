@@ -1301,6 +1301,40 @@ class MembresiaAutomaticaTests(TestCase):
 		self.assertIn(reverse('convite-enviar-whatsapp', args=[convite.pk]), conteudo)
 
 	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_sem_perfil_de_mensagens_tambem_abre_o_popup_sem_o_envio(self):
+		# Caso de producao: usuario so com acesso a ficha mudou para Ingressante e o
+		# link era gerado em silencio, sem o pop-up.
+		recepcao = get_user_model().objects.create_user('recepcao_membresia', password='x')
+		self.pessoa.responsavel_atual = recepcao
+		self.pessoa.save(update_fields=['responsavel_atual'])
+		self.client.force_login(recepcao)
+		resp = self._virar_participante()
+		convite = ConviteQuestionario.objects.get(pessoa=self.pessoa, questionario=self.membresia)
+		self.assertEqual(resp['Location'], f"{reverse('pessoas-detalhe', args=[self.pessoa.pk])}?membresia={convite.pk}")
+		resp = self.client.get(resp['Location'])
+		conteudo = resp.content.decode()
+		self.assertIn('data-membresia-modal', conteudo)
+		self.assertIn('Preencher agora', conteudo)
+		self.assertIn(reverse('responder-questionario', kwargs={'token': convite.token}), conteudo)
+		self.assertNotIn(reverse('convite-enviar-whatsapp', args=[convite.pk]), conteudo)
+		self.assertIn('Enviar pelo WhatsApp é só para quem tem acesso às mensagens', conteudo)
+		# Sem a aba Questionarios: botao para reabrir o link enquanto estiver pendente.
+		resp = self.client.get(reverse('pessoas-detalhe', args=[self.pessoa.pk]))
+		self.assertEqual(resp.context['membresia_pendente'], convite)
+		self.assertContains(resp, f'?membresia={convite.pk}')
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
+	def test_convite_de_outra_pessoa_nao_abre_pelo_parametro(self):
+		outra = PrimeiroContato.objects.create(
+			nome='Outra', telefone_whatsapp='31988880002', primeira_vez=True,
+			como_conheceu=PrimeiroContato.ComoConheceuChoices.INSTAGRAM,
+			status=PrimeiroContato.StatusAcolhimento.PARTICIPANTE,
+		)
+		convite_outra = ConviteQuestionario.objects.create(questionario=self.membresia, pessoa=outra)
+		resp = self.client.get(reverse('pessoas-detalhe', args=[self.pessoa.pk]), {'membresia': convite_outra.pk})
+		self.assertIsNone(resp.context['membresia_convite'])
+
+	@override_settings(STORAGES=SIMPLE_STATIC_STORAGES)
 	def test_detalhe_sem_parametro_nao_abre_o_popup(self):
 		self._virar_participante()
 		resp = self.client.get(reverse('pessoas-detalhe', args=[self.pessoa.pk]))
