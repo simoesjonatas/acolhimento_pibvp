@@ -47,17 +47,13 @@ class CadastroTests(TestCase):
 		resp = self.client.post(reverse('pessoas-novo'), _dados_form('21977776666', nome='Joana'), follow=True)
 		return PrimeiroContato.objects.get(nome='Joana Silva'), resp
 
-	def test_quem_nao_atende_cadastra_e_a_pessoa_vai_para_o_rodizio(self):
-		ana = _usuario('ana', 'pode_conversar_pessoas', rodizio_ligado=True)
-		pessoa, resp = self._cadastrar(self.recepcao)
-		self.assertEqual(pessoa.responsavel_atual, ana)
-		self.assertEqual(pessoa.criado_por, self.recepcao)
-		self.assertContains(resp, 'encaminhada para Ana, pelo rodízio')
-
-	def test_sem_rodizio_fica_sem_responsavel(self):
+	def test_quem_nao_atende_cadastra_e_a_pessoa_fica_sem_responsavel(self):
+		# Nem com gente no rodizio: ela so entra no rodizio quando interagir e pedir alguem.
+		_usuario('ana', 'pode_conversar_pessoas', rodizio_ligado=True)
 		pessoa, resp = self._cadastrar(self.recepcao)
 		self.assertIsNone(pessoa.responsavel_atual)
-		self.assertContains(resp, 'ficou sem responsável')
+		self.assertEqual(pessoa.criado_por, self.recepcao)
+		self.assertContains(resp, 'fica sem responsável até falar com o atendimento')
 
 	def test_quem_atende_continua_responsavel(self):
 		_usuario('ana', 'pode_conversar_pessoas', rodizio_ligado=True)

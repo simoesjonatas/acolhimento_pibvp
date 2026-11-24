@@ -5,8 +5,9 @@
 - Quando: a pessoa sem responsavel precisa de alguem da equipe. Com o robo/IA ligado,
   so quando ele transfere (pediu para falar com alguem, assunto pastoral, a IA nao
   sabia, limite do dia); com o robo desligado (ou a pessoa ja com a equipe), na
-  mensagem dela. Tambem no cadastro pelo QR code e no cadastro feito por quem nao
-  atende mensagens. Reacao e o botao "Agora nao" nunca contam.
+  mensagem dela. Cadastro (pelo QR code ou por quem nao atende mensagens) NAO entra:
+  a pessoa fica sem responsavel ate interagir e pedir alguem. Reacao e o botao "Agora
+  nao" nunca contam.
 - Quem recebe: quem esta ha mais tempo sem receber ninguem (rodizio equilibrado).
 - Aviso: WhatsApp no telefone do perfil do voluntario, com o nome da pessoa e o link
   da conversa. Na Meta vai pelo template RESPONSAVEL_ATRIBUIDO; sem template, so chega
@@ -132,28 +133,10 @@ def ao_receber_mensagem(pessoa: PrimeiroContato):
         return None
 
 
-def ao_cadastrar_pela_equipe(pessoa: PrimeiroContato, quem_cadastrou):
-    """Cadastro feito por quem nao atende mensagens: a pessoa vai para o rodizio."""
-    nome = quem_cadastrou.get_full_name() or quem_cadastrou.get_username()
-    try:
-        return atribuir(pessoa, f'cadastrada por {nome}, que não atende mensagens')
-    except Exception:  # noqa: BLE001
-        logger.exception('Rodizio: falha ao atribuir a pessoa %s.', pessoa.pk)
-        return None
-
-
 def ao_transferir(pessoa: PrimeiroContato, motivo: str):
     """O robo/IA passou a pessoa para a equipe: entra no rodizio se nao tem responsavel."""
     try:
         return atribuir(pessoa, f'o atendimento automático transferiu: {motivo}')
-    except Exception:  # noqa: BLE001
-        logger.exception('Rodizio: falha ao atribuir a pessoa %s.', pessoa.pk)
-        return None
-
-
-def ao_auto_cadastro(pessoa: PrimeiroContato):
-    try:
-        return atribuir(pessoa, 'se cadastrou pelo QR code')
     except Exception:  # noqa: BLE001
         logger.exception('Rodizio: falha ao atribuir a pessoa %s.', pessoa.pk)
         return None
