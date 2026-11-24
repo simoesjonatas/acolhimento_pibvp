@@ -165,11 +165,14 @@ class CadastroTests(TestCase):
 	def setUp(self):
 		self.ana = _voluntario('ana')
 
-	def test_auto_cadastro_vai_para_o_rodizio(self):
-		with patch.object(rodizio, '_avisar_em_thread'):
+	def test_auto_cadastro_nao_entra_no_rodizio(self):
+		# Reclamacao da equipe: quem se cadastrava pelo QR ja caia para alguem antes de
+		# interagir. Agora fica sem responsavel ate a IA/menu transferir.
+		with self.captureOnCommitCallbacks() as callbacks:
 			resp = self.client.post(reverse('auto-cadastro'), _dados_form('21977776666', nome='Pedro'))
 		self.assertEqual(resp.status_code, 302)
-		self.assertEqual(PrimeiroContato.objects.get(nome='Pedro Silva').responsavel_atual, self.ana)
+		self.assertIsNone(PrimeiroContato.objects.get(nome='Pedro Silva').responsavel_atual)
+		self.assertEqual(callbacks, [])  # nenhum aviso de rodizio
 
 	def test_cadastro_da_equipe_fica_com_quem_cadastrou(self):
 		bia = _voluntario('bia', rodizio_ligado=False)

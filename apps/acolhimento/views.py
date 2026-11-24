@@ -1045,19 +1045,16 @@ class PrimeiroContatoCreateView(LoginRequiredMixin, CreateView):
 	def form_valid(self, form):
 		form.instance.origem_cadastro = PrimeiroContato.OrigemCadastroChoices.EQUIPE
 		form.instance.criado_por = self.request.user
-		# So vira responsavel quem conversa com as pessoas; quem so cadastra passa para o
-		# rodizio (senao a pessoa fica presa com alguem que nao consegue responder).
+		# So vira responsavel quem conversa com as pessoas. Quem so cadastra deixa a pessoa
+		# sem responsavel (senao ela ficaria presa com alguem que nao consegue responder):
+		# ela vai para a equipe pelo rodizio quando interagir e pedir alguem.
 		atende = rodizio.atende_mensagens(self.request.user)
 		if not form.instance.responsavel_atual_id and atende:
 			form.instance.responsavel_atual = self.request.user
 		response = super().form_valid(form)
 		textos = ['Pessoa cadastrada com sucesso.']
 		if not atende:
-			recebeu = rodizio.ao_cadastrar_pela_equipe(self.object, self.request.user)
-			if recebeu:
-				textos.append(f'Ela foi encaminhada para {recebeu.get_full_name() or recebeu.get_username()}, pelo rodízio.')
-			else:
-				textos.append('Ela ficou sem responsável: um administrador vai encaminhar.')
+			textos.append('Ela fica sem responsável até falar com o atendimento e pedir alguém da equipe.')
 		if boas_vindas.ao_cadastrar(self.object, self.request.user):
 			textos.append('Boas-vindas enviadas para a fila do WhatsApp.')
 		messages.success(self.request, ' '.join(textos))
@@ -1077,7 +1074,7 @@ class AutoCadastroCreateView(CreateView):
 		form.instance.origem_cadastro = PrimeiroContato.OrigemCadastroChoices.AUTO_CADASTRO
 		form.instance.criado_por = None
 		response = super().form_valid(form)
-		rodizio.ao_auto_cadastro(self.object)
+		# Sem rodizio aqui: a pessoa so ganha responsavel quando interagir e pedir alguem.
 		boas_vindas.ao_cadastrar(self.object)
 		return response
 
