@@ -1,0 +1,9 @@
+# Acolhimento PIBVP (instalar com: crontab deploy/crontab). Horarios em UTC.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Fila de mensagens a cada minuto (respeita o switch "Processamento automatico").
+# Tambem reprocessa midias e transcricoes pendentes. As linhas de "nada a fazer" nao vao para o log.
+* * * * * flock -n /tmp/acolhimento-fila.lock docker exec pibvp-acolhimento-web python manage.py processar_fila --limit 100 2>&1 | grep -v -e 'Nenhuma mensagem pendente' -e 'Processamento automatico desligado' -e 'Ja existe uma execucao ativa' >> /var/log/acolhimento/fila.log
+
+# Backup diario do banco as 03:00 de Brasilia (06:00 UTC), guarda 14 dias.
+0 6 * * * /root/projetos/acolhimento_pibvp/deploy/backup_banco.sh >> /var/log/acolhimento/backup.log 2>&1

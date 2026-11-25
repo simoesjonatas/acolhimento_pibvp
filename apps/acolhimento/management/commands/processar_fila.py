@@ -10,6 +10,10 @@ processador), este:
 O claim atomico em `fila_processor` garante que, mesmo se este comando rodar junto
 com o modo automatico (thread) ou com outro cron, cada mensagem e enviada uma vez.
 
+O cron respeita o switch "Processamento automatico" da tela (desligado = nao
+envia; midias e transcricoes pendentes continuam sendo reprocessadas). Para enviar
+mesmo assim: --ignorar-switch.
+
 Uso via cron e OPCIONAL: a fila tambem e drenada pelo modo automatico (thread) ou
 manualmente pela tela de processamento. Exemplos (a cada minuto):
     bare-metal:  * * * * * cd /app && /app/.venv/bin/python manage.py processar_fila --limit 100
@@ -18,7 +22,7 @@ manualmente pela tela de processamento. Exemplos (a cada minuto):
 from django.core.management.base import BaseCommand
 
 from apps.acolhimento import fila_auto, midia_whatsapp, transcricao
-from apps.acolhimento.models import ExecucaoProcessamentoFila
+from apps.acolhimento.models import ConfiguracaoProcessamentoFila, ExecucaoProcessamentoFila
 
 
 class Command(BaseCommand):
@@ -31,6 +35,11 @@ class Command(BaseCommand):
             '--force',
             action='store_true',
             help='Roda mesmo se houver uma execucao marcada como ativa.',
+        )
+        parser.add_argument(
+            '--ignorar-switch',
+            action='store_true',
+            help='Envia mesmo com o "Processamento automatico" desligado na tela.',
         )
 
     def handle(self, *args, **options):
@@ -51,6 +60,12 @@ class Command(BaseCommand):
         recuperadas = fila_auto.recuperar_execucoes_presas()
         if recuperadas:
             self.stdout.write(self.style.WARNING(f'{recuperadas} execucao(oes) presa(s) recuperada(s).'))
+
+        # O switch "Processamento automatico" da tela vale tambem para o cron:
+        # desligado, a fila so anda quando alguem processa manualmente.
+        if not dry_run and not options.get('ignorar_switch') and not ConfiguracaoProcessamentoFila.auto_ligado():
+            self.stdout.write('Processamento automatico desligado; nada a enviar.')
+            return
 
         if not force and fila_auto.ha_execucao_ativa():
             self.stdout.write('Ja existe uma execucao ativa; nada a fazer.')
