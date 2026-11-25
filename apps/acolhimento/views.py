@@ -28,7 +28,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, FormView, L
 
 from apps.acolhimento import visibilidade
 from apps.acolhimento.visibilidade import eh_lideranca, filtrar_por_pessoa, pessoas_visiveis, ve_toda_base
-from apps.acolhimento import atencao, boas_vindas, conversas_ia, fila_auto, gabinete_avisos, meta_service, painel_equipe, rodizio, template_config, templates_tela
+from apps.acolhimento import atencao, boas_vindas, conversas_ia, fila_auto, gabinete_avisos, meta_service, numero_whatsapp, painel_equipe, rodizio, template_config, templates_tela
 from apps.acolhimento.aguardando_resposta import (
 	DIAS_PESSOA_NOVA,
 	DIAS_RESPONDIDAS,
@@ -343,6 +343,9 @@ class PrimeiroContatoListView(LoginRequiredMixin, PrimeiroContatoQuerysetMixin, 
 			context['responsavel_filtrado'] = 'sem'
 		if context['atencao_atual'] == '1':
 			atencao.marcar(context['pessoas'])
+		sem_whatsapp = numero_whatsapp.falhas_por_pessoa([p.pk for p in context['pessoas']])
+		for pessoa in context['pessoas']:
+			pessoa.numero_nao_recebe = pessoa.pk in sem_whatsapp
 		context['como_conheceu_atual'] = self.request.GET.get('como_conheceu', '').strip()
 		context['como_conheceu_choices'] = como_conheceu_filtro_choices()
 		context['pastor_atual'] = self.request.GET.get('pastor', '').strip()
@@ -1174,6 +1177,7 @@ class PrimeiroContatoDetailView(LoginRequiredMixin, DetailView):
 		context['status_choices'] = PrimeiroContato.StatusAcolhimento.choices
 		context['status_atual'] = self.object.status
 		context['status_fluxo'] = status_fluxo
+		context['falha_numero'] = numero_whatsapp.falha_do_numero(self.object)
 
 		user = self.request.user
 		ver_questionario = pode_ver_questionario(user)
@@ -1402,6 +1406,7 @@ class PrimeiroContatoMensagensView(LoginRequiredMixin, ConversasPessoasPermissao
 			direcao=MensagemContato.DirecaoChoices.ENTRADA,
 			visualizada_equipe_em__isnull=True,
 		).update(visualizada_equipe_em=agora)
+		context['falha_numero'] = numero_whatsapp.falha_do_numero(self.object)
 
 		canal_atual = self.get_canal_atual()
 		mensagens_queryset = self.get_mensagens_queryset(canal_atual)
@@ -2186,8 +2191,12 @@ class PrimeiroContatoUpdateView(LoginRequiredMixin, UpdateView):
 		return pessoas_visiveis(self.request.user, super().get_queryset())
 
 	def form_valid(self, form):
+		telefone_mudou = 'telefone_whatsapp' in form.changed_data
 		response = super().form_valid(form)
 		messages.success(self.request, 'Cadastro atualizado com sucesso.')
+		# Telefone corrigido: o aviso de "numero nao recebe" deixa de valer.
+		if telefone_mudou:
+			numero_whatsapp.marcar_numero_corrigido(self.object)
 		return response
 
 	def form_invalid(self, form):

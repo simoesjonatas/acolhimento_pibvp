@@ -156,8 +156,9 @@
         <tr>
             <td class="col-nome">
                 <strong class="table-primary-text">{{ pessoa.nome }}</strong>
-                {% if pessoa.has_novo_retorno or pessoa.iniciou_interacao or pessoa.atrasada %}
+                {% if pessoa.has_novo_retorno or pessoa.iniciou_interacao or pessoa.atrasada or pessoa.numero_nao_recebe %}
                 <span class="pessoa-badges">
+                    {% if pessoa.numero_nao_recebe %}<span class="atencao-badge" title="O WhatsApp não entregou mensagens para este número: confira o telefone">WhatsApp não recebe</span>{% endif %}
                     {% if pessoa.atrasada %}<span class="atencao-badge" title="Último contato em {{ pessoa.ultimo_contato|date:'d/m/Y' }}">Sem contato há {{ pessoa.dias_sem_contato }} dias</span>{% endif %}
                     {% if pessoa.has_novo_retorno %}<span class="retorno-badge">Novo retorno</span>{% endif %}
                     {% if pessoa.iniciou_interacao %}<span class="iniciou-badge">Iniciou conversa</span>{% endif %}
