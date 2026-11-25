@@ -37,11 +37,20 @@
             >
         </div>
         <div>
-            <label for="respostas-status">Status</label>
+            <label for="respostas-status">Resposta</label>
             <select name="status" id="respostas-status">
                 <option value="">Todos</option>
                 {% for valor, rotulo in status_choices %}
                 <option value="{{ valor }}" {% if valor == status_atual %}selected{% endif %}>{{ rotulo }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="respostas-status-pessoa">Status da pessoa</label>
+            <select name="status_pessoa" id="respostas-status-pessoa">
+                <option value="">Todos</option>
+                {% for valor, rotulo in status_pessoa_choices %}
+                <option value="{{ valor }}" {% if valor == status_pessoa_atual %}selected{% endif %}>{{ rotulo }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -99,7 +108,7 @@
                     <span class="section-eyebrow">{{ convite.questionario.titulo }}</span>
                     <h2>{{ convite.pessoa.nome }}</h2>
                     <p>
-                        {{ convite.pessoa.telefone_whatsapp }}
+                        {{ convite.pessoa.telefone_whatsapp }} - {{ convite.pessoa.get_status_display }}
                         {% if convite.respondente_nome %} - preenchido por {{ convite.respondente_nome }}{% endif %}
                     </p>
                 </div>

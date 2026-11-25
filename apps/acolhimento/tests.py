@@ -979,6 +979,26 @@ class QuestionarioTests(TestCase):
 		self.assertEqual([linha[0] for linha in linhas], ['Ana'])
 		self.assertEqual(dict(zip(cabecalho, linhas[0]))['Link para responder'], '')
 
+	def test_filtro_por_status_da_pessoa_na_tela_e_na_exportacao(self):
+		self._convite_respondido()
+		pendente = self._convite_pendente()
+		PrimeiroContato.objects.filter(pk=pendente.pessoa_id).update(status=PrimeiroContato.StatusAcolhimento.EM_GABINETE)
+
+		self.client.force_login(self.staff_admin)
+		tela = self.client.get(reverse('questionarios-respostas'), {'status_pessoa': 'em_gabinete'})
+		self.assertContains(tela, 'Carla Pendente')
+		self.assertNotContains(tela, 'Ana Maria')
+		self.assertContains(tela, '1 convite(s) encontrado(s)')
+		self.assertContains(tela, '<option value="em_gabinete" selected>', html=False)
+
+		cabecalho, *linhas = self._linhas_csv(self._exportar(formato='csv', status_pessoa='em_gabinete'))
+		self.assertEqual([linha[0] for linha in linhas], ['Carla Pendente'])
+		self.assertEqual(dict(zip(cabecalho, linhas[0]))['Status da pessoa'], 'Em gabinete')
+
+		# Valor desconhecido nao filtra nada.
+		todos = self.client.get(reverse('questionarios-respostas'), {'status_pessoa': 'xyz'})
+		self.assertContains(todos, '2 convite(s) encontrado(s)')
+
 	def test_exportar_varios_questionarios_separa_perguntas(self):
 		self._convite_respondido()
 		batismo = Questionario.objects.create(titulo='Batismo', ativo=True)
