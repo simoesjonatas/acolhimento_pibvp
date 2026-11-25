@@ -887,7 +887,7 @@
 }
 
 .questionario-respostas-filters {
-    grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(150px, 1fr)) auto;
+    grid-template-columns: minmax(200px, 1.4fr) repeat(4, minmax(130px, 1fr)) auto;
 }
 
 .filter-actions {

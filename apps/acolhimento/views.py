@@ -2332,6 +2332,7 @@ class ConviteRespostasQuerysetMixin:
 		busca = self.request.GET.get('q', '').strip()
 		status = self.request.GET.get('status', '').strip()
 		questionario_id = self.request.GET.get('questionario', '').strip()
+		status_pessoa = self.request.GET.get('status_pessoa', '').strip()
 		ordem = self.request.GET.get('ordem', 'recentes').strip()
 
 		if busca:
@@ -2349,6 +2350,10 @@ class ConviteRespostasQuerysetMixin:
 
 		if questionario_id.isdigit():
 			queryset = queryset.filter(questionario_id=int(questionario_id))
+
+		# Status atual da pessoa (ex.: todos que estao Em gabinete).
+		if status_pessoa in PrimeiroContato.StatusAcolhimento.values:
+			queryset = queryset.filter(pessoa__status=status_pessoa)
 
 		if ordem == 'antigos':
 			queryset = queryset.order_by('criado_em', 'id')
@@ -2402,6 +2407,8 @@ class QuestionarioRespostasListView(ConversasPessoasPermissaoMixin, ConviteRespo
 		context['busca'] = self.request.GET.get('q', '').strip()
 		context['status_atual'] = self.request.GET.get('status', '').strip()
 		context['questionario_atual'] = self.request.GET.get('questionario', '').strip()
+		context['status_pessoa_atual'] = self.request.GET.get('status_pessoa', '').strip()
+		context['status_pessoa_choices'] = PrimeiroContato.StatusAcolhimento.choices
 		context['ordem_atual'] = self.request.GET.get('ordem', 'recentes').strip()
 		context['status_choices'] = ConviteQuestionario.StatusConvite.choices
 		context['questionarios'] = Questionario.objects.order_by('titulo')

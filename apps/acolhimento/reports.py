@@ -344,6 +344,7 @@ def gerar_relatorio(queryset, colunas, formato, resumo=''):
 CABECALHO_CONVITE = [
 	'Pessoa',
 	'WhatsApp',
+	'Status da pessoa',
 	'Questionario',
 	'Status',
 	'Preenchido por',
@@ -373,6 +374,7 @@ def _matriz_respostas(convites, colunas_perguntas, link_convite):
 		linhas.append([
 			convite.pessoa.nome,
 			convite.pessoa.telefone_whatsapp,
+			convite.pessoa.get_status_display(),
 			convite.questionario.titulo,
 			convite.get_status_display(),
 			convite.respondente_nome,
